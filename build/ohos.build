@@ -1,0 +1,10 @@
+{
+    "subsystem": "kaihong_products",
+    "parts": {
+        "kaihong_products": {
+            "module_list": [
+                "//device/board/kaihong/build:products_group"
+            ]
+        }
+    }
+}
