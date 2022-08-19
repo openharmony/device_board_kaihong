@@ -1982,4 +1982,484 @@
 #define TRF_FILTER_DWM                   0x0008 /* L3 filter use DSCP for filtering */
 #define TRF_FILTER_FAVORED               0x0010 /* Tag the packet FAVORED */
 
+/* WNM/NPS subfeatures mask */
+#define WL_WNM_BSSTRANS		0x00000001
+#define WL_WNM_PROXYARP		0x00000002
+#define WL_WNM_MAXIDLE		0x00000004
+#define WL_WNM_TIMBC		0x00000008
+#define WL_WNM_TFS		0x00000010
+#define WL_WNM_SLEEP		0x00000020
+#define WL_WNM_DMS		0x00000040
+#define WL_WNM_FMS		0x00000080
+#define WL_WNM_NOTIF		0x00000100
+#define WL_WNM_WBTEXT	0x00000200
+#define WL_WNM_ESTM		0x00000400
+#define WL_WNM_MAX		0x00000800
+#ifdef WLWNM_BRCM
+#define BRCM_WNM_FEATURE_SET\
+					(WL_WNM_PROXYARP | \
+					WL_WNM_SLEEP | \
+					WL_WNM_FMS | \
+					WL_WNM_TFS | \
+					WL_WNM_TIMBC | \
+					WL_WNM_BSSTRANS | \
+					WL_WNM_DMS | \
+					WL_WNM_NOTIF | \
+					0)
+#endif /* WLWNM_BRCM */
+#ifndef ETHER_MAX_DATA
+#define ETHER_MAX_DATA	1500
+#endif /* ETHER_MAX_DATA */
+
+/* Different discovery modes for dpt */
+#define	DPT_DISCOVERY_MANUAL	0x01	/* manual discovery mode */
+#define	DPT_DISCOVERY_AUTO	0x02	/* auto discovery mode */
+#define	DPT_DISCOVERY_SCAN	0x04	/* scan-based discovery mode */
+
+/* different path selection values */
+#define DPT_PATHSEL_AUTO	0	/* auto mode for path selection */
+#define DPT_PATHSEL_DIRECT	1	/* always use direct DPT path */
+#define DPT_PATHSEL_APPATH	2	/* always use AP path */
+
+/* different ops for deny list */
+#define DPT_DENY_LIST_ADD	1	/* add to dpt deny list */
+#define DPT_DENY_LIST_REMOVE	2	/* remove from dpt deny list */
+
+/* different ops for manual end point */
+#define DPT_MANUAL_EP_CREATE	1	/* create manual dpt endpoint */
+#define DPT_MANUAL_EP_MODIFY	2	/* modify manual dpt endpoint */
+#define DPT_MANUAL_EP_DELETE	3	/* delete manual dpt endpoint */
+
+/* flags to indicate DPT status */
+#define	DPT_STATUS_ACTIVE	0x01	/* link active (though may be suspended) */
+#define	DPT_STATUS_AES		0x02	/* link secured through AES encryption */
+#define	DPT_STATUS_FAILED	0x04	/* DPT link failed */
+
+#ifdef WLTDLS
+/* different ops for manual end point */
+#define TDLS_MANUAL_EP_CREATE	1	/* create manual dpt endpoint */
+#define TDLS_MANUAL_EP_MODIFY	2	/* modify manual dpt endpoint */
+#define TDLS_MANUAL_EP_DELETE	3	/* delete manual dpt endpoint */
+#define TDLS_MANUAL_EP_PM		4	/*  put dpt endpoint in PM mode */
+#define TDLS_MANUAL_EP_WAKE		5	/* wake up dpt endpoint from PM */
+#define TDLS_MANUAL_EP_DISCOVERY	6	/* discover if endpoint is TDLS capable */
+#define TDLS_MANUAL_EP_CHSW		7	/* channel switch */
+#define TDLS_MANUAL_EP_WFD_TPQ	8	/* WiFi-Display Tunneled Probe reQuest */
+
+/* modes */
+#define TDLS_WFD_IE_TX			0
+#define TDLS_WFD_IE_RX			1
+#define TDLS_WFD_PROBE_IE_TX	2
+#define TDLS_WFD_PROBE_IE_RX	3
+#endif /* WLTDLS */
+
+/* define for flag */
+#define TSPEC_PENDING		0	/* TSPEC pending */
+#define TSPEC_ACCEPTED		1	/* TSPEC accepted */
+#define TSPEC_REJECTED		2	/* TSPEC rejected */
+#define TSPEC_UNKNOWN		3	/* TSPEC unknown */
+#define TSPEC_STATUS_MASK	7	/* TSPEC status mask */
+
+#ifdef BCMCCX
+/* "wlan_reason" iovar interface */
+#define WL_WLAN_ASSOC_REASON_NORMAL_NETWORK	0 /* normal WLAN network setup */
+#define WL_WLAN_ASSOC_REASON_ROAM_FROM_CELLULAR_NETWORK	1 /* roam from Cellular network */
+#define WL_WLAN_ASSOC_REASON_ROAM_FROM_LAN	2 /* roam from LAN */
+#define WL_WLAN_ASSOC_REASON_MAX		2 /* largest value allowed */
+#endif /* BCMCCX */
+
+/* Software feature flag defines used by wlfeatureflag */
+#ifdef WLAFTERBURNER
+#define WL_SWFL_ABBFL       0x0001 /* Allow Afterburner on systems w/o hardware BFL */
+#define WL_SWFL_ABENCORE    0x0002 /* Allow AB on non-4318E chips */
+#endif /* WLAFTERBURNER */
+#define WL_SWFL_NOHWRADIO	0x0004 /* Disable HW Radio monitor (e.g., Cust Spec) */
+#define WL_SWFL_FLOWCONTROL     0x0008 /* Enable backpressure to OS stack */
+#define WL_SWFL_WLBSSSORT	0x0010 /* Per-port supports sorting of BSS */
+
+#define WL_LIFETIME_MAX 0xFFFF /* Max value in ms */
+
+#define CSA_BROADCAST_ACTION_FRAME	0	/* csa broadcast action frame */
+#define CSA_UNICAST_ACTION_FRAME	  1 /* csa unicast action frame */
+
+/* Roaming trigger definitions for WLC_SET_ROAM_TRIGGER.
+ *
+ * (-100 < value < 0)   value is used directly as a roaming trigger in dBm
+ * (0 <= value) value specifies a logical roaming trigger level from
+ *                      the list below
+ *
+ * WLC_GET_ROAM_TRIGGER always returns roaming trigger value in dBm, never
+ * the logical roam trigger value.
+ */
+#define WLC_ROAM_TRIGGER_DEFAULT	0 /* default roaming trigger */
+#define WLC_ROAM_TRIGGER_BANDWIDTH	1 /* optimize for bandwidth roaming trigger */
+#define WLC_ROAM_TRIGGER_DISTANCE	2 /* optimize for distance roaming trigger */
+#define WLC_ROAM_TRIGGER_AUTO		3 /* auto-detect environment */
+#define WLC_ROAM_TRIGGER_MAX_VALUE	3 /* max. valid value */
+
+#define WLC_ROAM_NEVER_ROAM_TRIGGER	(-100) /* Avoid Roaming by setting a large value */
+
+/* Preferred Network Offload (PNO, formerly PFN) defines */
+#define WPA_AUTH_PFN_ANY	0xffffffff	/* for PFN, match only ssid */
+
+#define SORT_CRITERIA_BIT		0
+#define AUTO_NET_SWITCH_BIT		1
+#define ENABLE_BKGRD_SCAN_BIT		2
+#define IMMEDIATE_SCAN_BIT		3
+#define	AUTO_CONNECT_BIT		4
+#define	ENABLE_BD_SCAN_BIT		5
+#define ENABLE_ADAPTSCAN_BIT		6
+#define IMMEDIATE_EVENT_BIT		8
+#define SUPPRESS_SSID_BIT		9
+#define ENABLE_NET_OFFLOAD_BIT		10
+/* report found/lost events for SSID and BSSID networks seperately */
+#define REPORT_SEPERATELY_BIT		11
+#define BESTN_BSSID_ONLY_BIT		12
+
+#define SORT_CRITERIA_MASK		0x0001
+#define AUTO_NET_SWITCH_MASK		0x0002
+#define ENABLE_BKGRD_SCAN_MASK		0x0004
+#define IMMEDIATE_SCAN_MASK		0x0008
+#define	AUTO_CONNECT_MASK		0x0010
+
+#define ENABLE_BD_SCAN_MASK		0x0020
+#define ENABLE_ADAPTSCAN_MASK		0x00c0
+#define IMMEDIATE_EVENT_MASK		0x0100
+#define SUPPRESS_SSID_MASK		0x0200
+#define ENABLE_NET_OFFLOAD_MASK		0x0400
+/* report found/lost events for SSID and BSSID networks seperately */
+#define REPORT_SEPERATELY_MASK		0x0800
+#define BESTN_BSSID_ONLY_MASK		0x1000
+
+#define PFN_VERSION			2
+#ifdef PFN_SCANRESULT_2
+#define PFN_SCANRESULT_VERSION		2
+#else
+#define PFN_SCANRESULT_VERSION		1
+#endif /* PFN_SCANRESULT_2 */
+#ifndef MAX_PFN_LIST_COUNT
+#define MAX_PFN_LIST_COUNT		16
+#endif /* MAX_PFN_LIST_COUNT */
+
+#define PFN_COMPLETE			1
+#define PFN_INCOMPLETE			0
+
+#define DEFAULT_BESTN			2
+#define DEFAULT_MSCAN			0
+#define DEFAULT_REPEAT			10
+#define DEFAULT_EXP				2
+
+#define PFN_PARTIAL_SCAN_BIT		0
+#define PFN_PARTIAL_SCAN_MASK		1
+
+#define WL_PFN_SUPPRESSFOUND_MASK	0x08
+#define WL_PFN_SUPPRESSLOST_MASK	0x10
+#define WL_PFN_SSID_A_BAND_TRIG		0x20
+#define WL_PFN_SSID_BG_BAND_TRIG	0x40
+#define WL_PFN_SSID_IMPRECISE_MATCH	0x80
+#define WL_PFN_SSID_SAME_NETWORK	0x10000
+#define WL_PFN_SUPPRESS_AGING_MASK	0x20000
+#define WL_PFN_FLUSH_ALL_SSIDS		0x40000
+#define WL_PFN_RSSI_MASK		0xff00
+#define WL_PFN_RSSI_SHIFT		8
+
+#define WL_PFN_REPORT_ALLNET    0
+#define WL_PFN_REPORT_SSIDNET   1
+#define WL_PFN_REPORT_BSSIDNET  2
+
+#define WL_PFN_CFG_FLAGS_PROHIBITED	0x00000001	/* Accept and use prohibited channels */
+#define WL_PFN_CFG_FLAGS_HISTORY_OFF	0x00000002	/* Scan history suppressed */
+
+#define WL_PFN_HIDDEN_BIT		2
+#define PNO_SCAN_MAX_FW			508*1000	/* max time scan time in msec */
+#define PNO_SCAN_MAX_FW_SEC		PNO_SCAN_MAX_FW/1000 /* max time scan time in SEC */
+#define PNO_SCAN_MIN_FW_SEC		10			/* min time scan time in SEC */
+#define WL_PFN_HIDDEN_MASK		0x4
+#define MAX_SSID_WHITELIST_NUM         4
+#define MAX_BSSID_PREF_LIST_NUM        32
+#define MAX_BSSID_BLACKLIST_NUM        32
+
+#ifndef BESTN_MAX
+#define BESTN_MAX			10
+#endif // endif
+
+#ifndef MSCAN_MAX
+#define MSCAN_MAX			32
+#endif // endif
+
+/* TCP Checksum Offload error injection for testing */
+#define TOE_ERRTEST_TX_CSUM	0x00000001
+#define TOE_ERRTEST_RX_CSUM	0x00000002
+#define TOE_ERRTEST_RX_CSUM2	0x00000004
+
+/* ARP Offload feature flags for arp_ol iovar */
+#define ARP_OL_AGENT			0x00000001
+#define ARP_OL_SNOOP			0x00000002
+#define ARP_OL_HOST_AUTO_REPLY		0x00000004
+#define ARP_OL_PEER_AUTO_REPLY		0x00000008
+#define ARP_OL_UPDATE_HOST_CACHE	0x00000010
+
+/* ARP Offload error injection */
+#define ARP_ERRTEST_REPLY_PEER	0x1
+#define ARP_ERRTEST_REPLY_HOST	0x2
+
+#define ARP_MULTIHOMING_MAX	8	/* Maximum local host IP addresses */
+#if defined(WL_PKT_FLTR_EXT) && !defined(WL_PKT_FLTR_EXT_DISABLED)
+#define ND_MULTIHOMING_MAX 32	/* Maximum local host IP addresses */
+#else
+#define ND_MULTIHOMING_MAX 10	/* Maximum local host IP addresses */
+#endif /* WL_PKT_FLTR_EXT && !WL_PKT_FLTR_EXT_DISABLED */
+#define ND_REQUEST_MAX		5	/* Max set of offload params */
+/* AOAC wake event flag */
+#define WAKE_EVENT_NLO_DISCOVERY_BIT		1
+#define WAKE_EVENT_AP_ASSOCIATION_LOST_BIT	2
+#define WAKE_EVENT_GTK_HANDSHAKE_ERROR_BIT 4
+#define WAKE_EVENT_4WAY_HANDSHAKE_REQUEST_BIT 8
+#define WAKE_EVENT_NET_PACKET_BIT 0x10
+
+#define MAX_NUM_WOL_PATTERN	22 /* LOGO requirements min 22 */
+
+/* Packet filter operation mode */
+/* True: 1; False: 0 */
+#define PKT_FILTER_MODE_FORWARD_ON_MATCH		1
+/* Enable and disable pkt_filter as a whole */
+#define PKT_FILTER_MODE_DISABLE					2
+/* Cache first matched rx pkt(be queried by host later) */
+#define PKT_FILTER_MODE_PKT_CACHE_ON_MATCH		4
+/* If pkt_filter is enabled and no filter is set, don't forward anything */
+#define PKT_FILTER_MODE_PKT_FORWARD_OFF_DEFAULT 8
+
+#ifdef DONGLEOVERLAYS
+#define OVERLAY_IDX_MASK		0x000000ff
+#define OVERLAY_IDX_SHIFT		0
+#define OVERLAY_FLAGS_MASK		0xffffff00
+#define OVERLAY_FLAGS_SHIFT		8
+/* overlay written to device memory immediately after loading the base image */
+#define OVERLAY_FLAG_POSTLOAD	0x100
+/* defer overlay download until the device responds w/WLC_E_OVL_DOWNLOAD event */
+#define OVERLAY_FLAG_DEFER_DL	0x200
+/* overlay downloaded prior to the host going to sleep */
+#define OVERLAY_FLAG_PRESLEEP	0x400
+#define OVERLAY_DOWNLOAD_CHUNKSIZE	1024
+#endif /* DONGLEOVERLAYS */
+
+/* reuse two number in the sc/rc space */
+#define	SMFS_CODE_MALFORMED 0xFFFE
+#define SMFS_CODE_IGNORED	0xFFFD
+
+/* RFAWARE def */
+#define BCM_ACTION_RFAWARE		0x77
+#define BCM_ACTION_RFAWARE_DCS  0x01
+
+/* DCS reason code define */
+#define BCM_DCS_IOVAR		0x1
+#define BCM_DCS_UNKNOWN		0xFF
+
+#ifdef PROP_TXSTATUS
+/* Bit definitions for tlv iovar */
+/*
+ * enable RSSI signals:
+ * WLFC_CTL_TYPE_RSSI
+ */
+#define WLFC_FLAGS_RSSI_SIGNALS			0x0001
+
+/* enable (if/mac_open, if/mac_close,, mac_add, mac_del) signals:
+ *
+ * WLFC_CTL_TYPE_MAC_OPEN
+ * WLFC_CTL_TYPE_MAC_CLOSE
+ *
+ * WLFC_CTL_TYPE_INTERFACE_OPEN
+ * WLFC_CTL_TYPE_INTERFACE_CLOSE
+ *
+ * WLFC_CTL_TYPE_MACDESC_ADD
+ * WLFC_CTL_TYPE_MACDESC_DEL
+ *
+ */
+#define WLFC_FLAGS_XONXOFF_SIGNALS		0x0002
+
+/* enable (status, fifo_credit, mac_credit) signals
+ * WLFC_CTL_TYPE_MAC_REQUEST_CREDIT
+ * WLFC_CTL_TYPE_TXSTATUS
+ * WLFC_CTL_TYPE_FIFO_CREDITBACK
+ */
+#define WLFC_FLAGS_CREDIT_STATUS_SIGNALS	0x0004
+
+#define WLFC_FLAGS_HOST_PROPTXSTATUS_ACTIVE	0x0008
+#define WLFC_FLAGS_PSQ_GENERATIONFSM_ENABLE	0x0010
+#define WLFC_FLAGS_PSQ_ZERO_BUFFER_ENABLE	0x0020
+#define WLFC_FLAGS_HOST_RXRERODER_ACTIVE	0x0040
+#define WLFC_FLAGS_PKT_STAMP_SIGNALS		0x0080
+
+#endif /* PROP_TXSTATUS */
+
+#define WL_TIMBC_STATUS_AP_UNKNOWN	255	/* AP status for internal use only */
+
+#define WL_DFRTS_LOGIC_OFF	0	/* Feature is disabled */
+#define WL_DFRTS_LOGIC_OR	1	/* OR all non-zero threshold conditions */
+#define WL_DFRTS_LOGIC_AND	2	/* AND all non-zero threshold conditions */
+
+/* Definitions for Reliable Multicast */
+#define WL_RELMCAST_MAX_CLIENT		32
+#define WL_RELMCAST_FLAG_INBLACKLIST	1
+#define WL_RELMCAST_FLAG_ACTIVEACKER	2
+#define WL_RELMCAST_FLAG_RELMCAST	4
+
+/* structures for proximity detection device role */
+#define WL_PROXD_MODE_DISABLE	0
+#define WL_PROXD_MODE_NEUTRAL	1
+#define WL_PROXD_MODE_INITIATOR	2
+#define WL_PROXD_MODE_TARGET	3
+#define WL_PROXD_RANDOM_WAKEUP	0x8000
+
+#ifdef NET_DETECT
+#define NET_DETECT_MAX_WAKE_DATA_SIZE	2048
+#define NET_DETECT_MAX_PROFILES		16
+#define NET_DETECT_MAX_CHANNELS		50
+#endif /* NET_DETECT */
+
+/* Bit masks for radio disabled status - returned by WL_GET_RADIO */
+#define WL_RADIO_SW_DISABLE		(1<<0)
+#define WL_RADIO_HW_DISABLE		(1<<1)
+#define WL_RADIO_MPC_DISABLE		(1<<2)
+#define WL_RADIO_COUNTRY_DISABLE	(1<<3)	/* some countries don't support any channel */
+#define WL_RADIO_PERCORE_DISABLE	(1<<4)	/* Radio diable per core for DVT */
+#define WL_RADIO_TSYNC_PWRSAVE_DISABLE  (1<<5)  /* Disable Radio in tsync mode for power saving */
+
+#define	WL_SPURAVOID_OFF	0
+#define	WL_SPURAVOID_ON1	1
+#define	WL_SPURAVOID_ON2	2
+
+#define WL_4335_SPURAVOID_ON1	1
+#define WL_4335_SPURAVOID_ON2	2
+#define WL_4335_SPURAVOID_ON3	3
+#define WL_4335_SPURAVOID_ON4	4
+#define WL_4335_SPURAVOID_ON5	5
+#define WL_4335_SPURAVOID_ON6	6
+#define WL_4335_SPURAVOID_ON7	7
+#define WL_4335_SPURAVOID_ON8	8
+#define WL_4335_SPURAVOID_ON9	9
+
+/* Override bit for WLC_SET_TXPWR.  if set, ignore other level limits */
+#define WL_TXPWR_OVERRIDE	(1U<<31)
+#define WL_TXPWR_2G		(1U<<30)
+#define WL_TXPWR_5G		(1U<<29)
+#define WL_TXPWR_NEG   (1U<<28)
+
+#define WL_TXPWR_MASK		(~(0x7<<29))
+#define WL_TXPWR_CORE_MAX	(3)
+#define WL_TXPWR_CORE0_MASK	(0x000000FF)
+#define WL_TXPWR_CORE0_SHIFT	(0)
+#define WL_TXPWR_CORE1_MASK	(0x0000FF00)
+#define WL_TXPWR_CORE1_SHIFT	(8)
+#define WL_TXPWR_CORE2_MASK	(0x00FF0000)
+#define WL_TXPWR_CORE2_SHIFT	(16)
+
+/* phy types (returned by WLC_GET_PHYTPE) */
+#define	WLC_PHY_TYPE_A		0
+#define	WLC_PHY_TYPE_B		1
+#define	WLC_PHY_TYPE_G		2
+#define	WLC_PHY_TYPE_N		4
+#define	WLC_PHY_TYPE_LP		5
+#define	WLC_PHY_TYPE_SSN	6
+#define	WLC_PHY_TYPE_HT		7
+#define	WLC_PHY_TYPE_LCN	8
+#define	WLC_PHY_TYPE_LCN40	10
+#define WLC_PHY_TYPE_AC		11
+#define	WLC_PHY_TYPE_LCN20	12
+#define	WLC_PHY_TYPE_NULL	0xf
+
+/* Values for PM */
+#define PM_OFF	0
+#define PM_MAX	1
+#define PM_FAST 2
+#define PM_FORCE_OFF 3		/* use this bit to force PM off even bt is active */
+
+#define WL_WME_CNT_VERSION	1	/* current version of wl_wme_cnt_t */
+
+/* fbt_cap: FBT assoc / reassoc modes. */
+#define WLC_FBT_CAP_DRV_4WAY_AND_REASSOC  1 /* Driver 4-way handshake & reassoc (WLFBT). */
+
+/* monitor_promisc_level bits */
+#define WL_MONPROMISC_PROMISC 0x0001
+#define WL_MONPROMISC_CTRL 0x0002
+#define WL_MONPROMISC_FCS 0x0004
+
+/* TCP Checksum Offload defines */
+#define TOE_TX_CSUM_OL		0x00000001
+#define TOE_RX_CSUM_OL		0x00000002
+
+/* Wi-Fi Display Services (WFDS) */
+#define WL_P2P_SOCIAL_CHANNELS_MAX  WL_NUMCHANNELS
+#define MAX_WFDS_SEEK_SVC 4	/* Max # of wfds services to seek */
+#define MAX_WFDS_ADVERT_SVC 4	/* Max # of wfds services to advertise */
+#define MAX_WFDS_SVC_NAME_LEN 200	/* maximum service_name length */
+#define MAX_WFDS_ADV_SVC_INFO_LEN 65000	/* maximum adv service_info length */
+#define P2P_WFDS_HASH_LEN 6		/* Length of a WFDS service hash */
+#define MAX_WFDS_SEEK_SVC_INFO_LEN 255	/* maximum seek service_info req length */
+#define MAX_WFDS_SEEK_SVC_NAME_LEN 200	/* maximum service_name length */
+
+/* ap_isolate bitmaps */
+#define AP_ISOLATE_DISABLED		0x0
+#define AP_ISOLATE_SENDUP_ALL		0x01
+#define AP_ISOLATE_SENDUP_MCAST		0x02
+
+/* Type values for the wl_pwrstats_t data field */
+#define WL_PWRSTATS_TYPE_PHY		0 /**< struct wl_pwr_phy_stats */
+#define WL_PWRSTATS_TYPE_SCAN		1 /**< struct wl_pwr_scan_stats */
+#define WL_PWRSTATS_TYPE_USB_HSIC	2 /**< struct wl_pwr_usb_hsic_stats */
+#define WL_PWRSTATS_TYPE_PM_AWAKE1	3 /**< struct wl_pwr_pm_awake_stats_v1 */
+#define WL_PWRSTATS_TYPE_CONNECTION	4 /* struct wl_pwr_connect_stats; assoc and key-exch time */
+#define WL_PWRSTATS_TYPE_PCIE		6 /**< struct wl_pwr_pcie_stats */
+#define WL_PWRSTATS_TYPE_PM_AWAKE2	7 /**< struct wl_pwr_pm_awake_stats_v2 */
+#define WL_PWRSTATS_TYPE_SDIO		8 /* struct wl_pwr_sdio_stats */
+#define WL_PWRSTATS_TYPE_MIMO_PS_METRICS 9 /* struct wl_mimo_meas_metrics_t */
+#define WL_PWRSTATS_TYPE_SLICE_INDEX	10 /* slice index for which this report is meant for */
+#define WL_PWRSTATS_TYPE_TSYNC		11 /**< struct wl_pwr_tsync_stats */
+#define	WL_PWRSTATS_TYPE_OPS_STATS	12 /* struct wl_pwr_ops_stats_t */
+#define WL_PWRSTATS_TYPE_BCNTRIM_STATS	13 /* struct wl_pwr_bcntrim_stats_t */
+#define WL_PWRSTATS_TYPE_SLICE_INDEX_BAND_INFO	14 /* wl_pwr_slice_index_band_t */
+#define WL_PWRSTATS_TYPE_PSBW_STATS	15 /* struct wl_pwr_psbw_stats_t */
+
+/* IOV AWD DATA */
+#define AWD_DATA_JOIN_INFO	0
+#define AWD_DATA_VERSION_V1	1
+
+/* IOV ETD DATA */
+#define ETD_DATA_JOIN_INFO	0
+#define ETD_DATA_VERSION_V1	1
+
+/* CTMODE DBG */
+/* input param: [31:16] => MPDU_THRESHOLD
+ *	        [15:03] => RESERVED
+ *	        [02]    => enable UFP
+ *	        [01]    => enable UFC
+ *	        [00]    => enalbe CTMODE
+ */
+#define	CTMODE_DBG_CTMODE_EN	(0x1u)
+#define	CTMODE_DBG_UFC_EN	(0x2u)
+#define CTMODE_DBG_UFP_EN	(0x4u)
+#define	CTMODE_DBG_MPDU_THRESHOLD_SHIFT	(7u)
+#define CTMODE_DBG_MPDU_THRESHOLD_MASK	((0x1FFu) << CTMODE_DBG_MPDU_THRESHOLD_SHIFT)
+#define	CTMODE_DBG_BYTES_THRESHOLD_SHIFT	(16u)
+#define CTMODE_DBG_BYTES_THRESHOLD_MASK	((0xFFFu) << CTMODE_DBG_BYTES_THRESHOLD_SHIFT)
+
+/* ====== SC use case configs ========= */
+/* SC user/use case request */
+#define WL_SC_REQ_SCAN	0u	/* user scan */
+#define WL_SC_REQ_CNX	1u	/* associated idle */
+#define WL_SC_REQ_NAN	2u	/* NAN synchronization and discovery offload */
+
+/* === Per use case configuration === */
+/* scan cfgs */
+#define SC_SCAN_CFG_PASSIVE_MASK	0x01u	/* Enable passive scan on sc */
+#define SC_SCAN_CFG_PASSIVE_SHIFT	0u
+#define SC_SCAN_CFG_LP_SCAN_MASK	0x02u	/* Enable low prio scan on sc */
+#define SC_SCAN_CFG_LP_SCAN_SHIFT	1u
+#define SC_SCAN_CFG_REG_SCAN_MASK	0x04u	/* Enable split scan using sc */
+#define SC_SCAN_CFG_REG_SCAN_SHIFT	2u
+#define SC_SCAN_CFG_FULL_SCAN_MASK	0x08u	/* Enable full scan on sc */
+#define SC_SCAN_CFG_FULL_SCAN_SHIFT	3u
+/* Add get and set macros for each of the configs? */
+
+/* === Place holder for cnx and nan cfgs === */
 #endif /* wlioctl_defs_h */
