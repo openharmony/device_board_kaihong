@@ -1,7 +1,7 @@
 /*
  * Broadcom USB remote download definitions
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 2022 Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
