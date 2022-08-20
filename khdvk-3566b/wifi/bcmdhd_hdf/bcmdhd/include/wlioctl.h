@@ -10462,3 +10462,1920 @@ enum {
 	NAN_SEC =		12,	/* nan sec */
 	NAN_LAST =		13
 };
+
+enum wl_nan_sub_cmd_xtlv_id {
+
+	/* Special command - Tag zero */
+	WL_NAN_CMD_GLB_NAN_VER = NAN_CMD(WL_NAN_CMD_GLOBAL, 0x00),
+
+	 /* nan cfg sub-commands */
+
+	WL_NAN_CMD_CFG_NAN_INIT = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x01),
+	WL_NAN_CMD_CFG_ROLE = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x02),
+	WL_NAN_CMD_CFG_HOP_CNT = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x03),
+	WL_NAN_CMD_CFG_HOP_LIMIT = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x04),
+	WL_NAN_CMD_CFG_WARMUP_TIME = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x05),
+	WL_NAN_CMD_CFG_STATUS = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x06),
+	WL_NAN_CMD_CFG_OUI = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x07),
+	WL_NAN_CMD_CFG_COUNT = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x08),
+	WL_NAN_CMD_CFG_CLEARCOUNT = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x09),
+	WL_NAN_CMD_CFG_CHANNEL = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x0A),
+	WL_NAN_CMD_CFG_BAND = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x0B),
+	WL_NAN_CMD_CFG_CID = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x0C),
+	WL_NAN_CMD_CFG_IF_ADDR = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x0D),
+	WL_NAN_CMD_CFG_BCN_INTERVAL = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x0E),
+	WL_NAN_CMD_CFG_SDF_TXTIME = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x0F),
+	WL_NAN_CMD_CFG_SID_BEACON = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x10),
+	WL_NAN_CMD_CFG_DW_LEN = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x11),
+	WL_NAN_CMD_CFG_AVAIL = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x12),
+	WL_NAN_CMD_CFG_WFA_TM = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x13),
+	WL_NAN_CMD_CFG_EVENT_MASK =  NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x14),
+	WL_NAN_CMD_CFG_NAN_CONFIG = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x15), /* ctrl */
+	WL_NAN_CMD_CFG_NAN_ENAB = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x16),
+	WL_NAN_CMD_CFG_ULW = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x17),
+	WL_NAN_CMD_CFG_NAN_CONFIG2 = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x18), /* ctrl2 */
+	WL_NAN_CMD_CFG_DEV_CAP = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x19),
+	WL_NAN_CMD_CFG_SCAN_PARAMS = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x1A),
+	WL_NAN_CMD_CFG_VNDR_PAYLOAD = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x1B),
+	WL_NAN_CMD_CFG_FASTDISC = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x1C),
+	WL_NAN_CMD_CFG_MIN_TX_RATE = NAN_CMD(WL_NAN_CMD_CFG_COMP_ID, 0x1D),
+	WL_NAN_CMD_CFG_MAX = WL_NAN_CMD_CFG_MIN_TX_RATE,
+
+	/* Add new commands before and update */
+
+	/* nan election sub-commands */
+	WL_NAN_CMD_ELECTION_HOST_ENABLE = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x01),
+	WL_NAN_CMD_ELECTION_METRICS_CONFIG = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x02),
+	WL_NAN_CMD_ELECTION_METRICS_STATE = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x03),
+	WL_NAN_CMD_ELECTION_LEAVE = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x03),
+	WL_NAN_CMD_ELECTION_MERGE = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x04),
+	WL_NAN_CMD_ELECTION_ADVERTISERS = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x05),
+	WL_NAN_CMD_ELECTION_RSSI_THRESHOLD = NAN_CMD(WL_NAN_CMD_ELECTION_COMP_ID, 0x06),
+	WL_NAN_CMD_ELECTION_MAX = WL_NAN_CMD_ELECTION_RSSI_THRESHOLD,
+	/* New commands go before and update */
+
+	/* nan SD sub-commands */
+	WL_NAN_CMD_SD_PARAMS = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x01),
+	WL_NAN_CMD_SD_PUBLISH = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x02),
+	WL_NAN_CMD_SD_PUBLISH_LIST = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x03),
+	WL_NAN_CMD_SD_CANCEL_PUBLISH = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x04),
+	WL_NAN_CMD_SD_SUBSCRIBE = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x05),
+	WL_NAN_CMD_SD_SUBSCRIBE_LIST = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x06),
+	WL_NAN_CMD_SD_CANCEL_SUBSCRIBE = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x07),
+	WL_NAN_CMD_SD_VND_INFO = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x08),
+	WL_NAN_CMD_SD_STATS = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x09),
+	WL_NAN_CMD_SD_TRANSMIT = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x0A),
+	WL_NAN_CMD_SD_FUP_TRANSMIT = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x0B),
+	WL_NAN_CMD_SD_CONNECTION = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x0C),
+	WL_NAN_CMD_SD_SHOW = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x0D),
+	WL_NAN_CMD_SD_DISC_CACHE_TIMEOUT = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x0E),
+	WL_NAN_CMD_SD_DISC_CACHE_CLEAR = NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x0F),
+	WL_NAN_CMD_SD_MAX = WL_NAN_CMD_SD_DISC_CACHE_CLEAR,
+
+	/* nan time sync sub-commands */
+
+	WL_NAN_CMD_SYNC_SOCIAL_CHAN = NAN_CMD(WL_NAN_CMD_SYNC_COMP_ID, 0x01),
+	WL_NAN_CMD_SYNC_AWAKE_DWS = NAN_CMD(WL_NAN_CMD_SYNC_COMP_ID, 0x02),
+	WL_NAN_CMD_SYNC_BCN_RSSI_NOTIF_THRESHOLD = NAN_CMD(WL_NAN_CMD_SYNC_COMP_ID, 0x03),
+	WL_NAN_CMD_SYNC_MAX = WL_NAN_CMD_SYNC_BCN_RSSI_NOTIF_THRESHOLD,
+
+	/* nan2 commands */
+	WL_NAN_CMD_DATA_CONFIG = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x01),
+	WL_NAN_CMD_DATA_RSVD02 = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x02),
+	WL_NAN_CMD_DATA_RSVD03 = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x03),
+	WL_NAN_CMD_DATA_DATAREQ = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x04),
+	WL_NAN_CMD_DATA_DATARESP = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x05),
+	WL_NAN_CMD_DATA_DATAEND = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x06),
+	WL_NAN_CMD_DATA_SCHEDUPD = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x07),
+	WL_NAN_CMD_DATA_RSVD08 = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x08),
+	WL_NAN_CMD_DATA_CAP = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x9),
+	WL_NAN_CMD_DATA_STATUS = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x0A),
+	WL_NAN_CMD_DATA_STATS = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x0B),
+	WL_NAN_CMD_DATA_RSVD0C = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x0C),
+	WL_NAN_CMD_DATA_NDP_SHOW = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x0D),
+	WL_NAN_CMD_DATA_DATACONF = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x0E),
+	WL_NAN_CMD_DATA_MIN_TX_RATE = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x0F),
+	WL_NAN_CMD_DATA_MAX_PEERS = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x10),
+	WL_NAN_CMD_DATA_DP_IDLE_PERIOD = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x11),
+	WL_NAN_CMD_DATA_DP_OPAQUE_INFO = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x12),
+	WL_NAN_CMD_DATA_DP_HB_DURATION = NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x13),
+	WL_NAN_CMD_DATA_PATH_MAX = WL_NAN_CMD_DATA_DP_HB_DURATION, /* New ones before and update */
+
+	/* nan dam sub-commands */
+	WL_NAN_CMD_DAM_CFG = NAN_CMD(WL_NAN_CMD_DAM_COMP_ID, 0x01),
+	WL_NAN_CMD_DAM_MAX = WL_NAN_CMD_DAM_CFG,  /* New ones before and update */
+
+	/* nan2.0 ranging commands */
+	WL_NAN_CMD_RANGE_REQUEST = NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x01),
+	WL_NAN_CMD_RANGE_AUTO = NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x02),
+	WL_NAN_CMD_RANGE_RESPONSE = NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x03),
+	WL_NAN_CMD_RANGE_CANCEL = NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x04),
+	WL_NAN_CMD_RANGE_IDLE_COUNT = NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x05),
+	WL_NAN_CMD_RANGE_CANCEL_EXT = NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x06),
+
+	/*  nan debug sub-commands  */
+	WL_NAN_CMD_DBG_SCAN_PARAMS = NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x01),
+	WL_NAN_CMD_DBG_SCAN = NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x02),
+	WL_NAN_CMD_DBG_SCAN_RESULTS =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x03),
+	/* This is now moved under CFG */
+	WL_NAN_CMD_DBG_EVENT_MASK =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x04),
+	WL_NAN_CMD_DBG_EVENT_CHECK =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x05),
+	WL_NAN_CMD_DBG_DUMP =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x06),
+	WL_NAN_CMD_DBG_CLEAR =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x07),
+	WL_NAN_CMD_DBG_RSSI =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x08),
+	WL_NAN_CMD_DBG_DEBUG =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x09),
+	WL_NAN_CMD_DBG_TEST1 =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x0A),
+	WL_NAN_CMD_DBG_TEST2 =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x0B),
+	WL_NAN_CMD_DBG_TEST3 =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x0C),
+	WL_NAN_CMD_DBG_DISC_RESULTS =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x0D),
+	WL_NAN_CMD_DBG_STATS =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x0E),
+	WL_NAN_CMD_DBG_LEVEL =  NAN_CMD(WL_NAN_CMD_DBG_COMP_ID, 0x0F),
+	WL_NAN_CMD_DBG_MAX = WL_NAN_CMD_DBG_LEVEL, /* New ones before and update */
+
+	 /* Generic componenet */
+	WL_NAN_CMD_GEN_STATS = NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x01),
+	WL_NAN_CMD_GEN_FW_CAP = NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x02),
+	WL_NAN_CMD_GEN_MAX = WL_NAN_CMD_GEN_FW_CAP,
+
+	/* NAN Save-Restore */
+	WL_NAN_CMD_NSR2 = NAN_CMD(WL_NAN_CMD_NSR_COMP_ID, 0x20),
+	WL_NAN_CMD_NSR2_MAX = WL_NAN_CMD_NSR2,
+
+	/* Host offload sub-commands */
+	WL_NAN_CMD_NANHO_UPDATE = NAN_CMD(WL_NAN_CMD_NANHO_COMP_ID, 0x01), /* WILL BE REMOVED */
+	WL_NAN_CMD_NANHO_INFO = NAN_CMD(WL_NAN_CMD_NANHO_COMP_ID, 0x01),
+	WL_NAN_CMD_NANHO_FRM_TPLT = NAN_CMD(WL_NAN_CMD_NANHO_COMP_ID, 0x02),	/* unused */
+	WL_NAN_CMD_NANHO_OOB_NAF = NAN_CMD(WL_NAN_CMD_NANHO_COMP_ID, 0x03),	/* unused */
+	WL_NAN_CMD_NANHO_LOG_CTRL = NAN_CMD(WL_NAN_CMD_NANHO_COMP_ID, 0x04),
+	WL_NAN_CMD_NANHO_VER = NAN_CMD(WL_NAN_CMD_NANHO_COMP_ID, 0x05),
+	WL_NAN_CMD_NANHO_MAX = WL_NAN_CMD_NANHO_VER,
+
+	/* Add submodules below, and update WL_NAN_CMD_MAX */
+
+	/* ROML check for this enum should use WL_NAN_CMD_MAX */
+	WL_NAN_CMD_MAX = WL_NAN_CMD_NANHO_MAX
+};
+
+/*
+ * Component/Module based NAN TLV IDs for NAN stats
+ */
+typedef enum wl_nan_stats_tlv {
+	WL_NAN_XTLV_SYNC_MAC_STATS		= NAN_CMD(WL_NAN_CMD_SYNC_COMP_ID, 0x01),
+
+	WL_NAN_XTLV_SD_DISC_STATS		= NAN_CMD(WL_NAN_CMD_SD_COMP_ID, 0x01),
+
+	WL_NAN_XTLV_DATA_NDP_STATS		= NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x01),
+	WL_NAN_XTLV_DATA_NDL_STATS		= NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x02),
+	WL_NAN_XTLV_DATA_SEC_STATS		= NAN_CMD(WL_NAN_CMD_DATA_COMP_ID, 0x03),
+
+	WL_NAN_XTLV_GEN_SCHED_STATS		= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x01),
+	WL_NAN_XTLV_GEN_PEER_STATS		= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x02),
+	WL_NAN_XTLV_GEN_PEER_STATS_DEVCAP	= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x03),
+	WL_NAN_XTLV_GEN_PEER_STATS_NDP		= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x04),
+	WL_NAN_XTLV_GEN_PEER_STATS_SCHED	= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x05),
+	WL_NAN_XTLV_GEN_AVAIL_STATS_SCHED	= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x06),
+	WL_NAN_XTLV_GEN_NDP_STATS               = NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x07),
+
+	WL_NAN_XTLV_DAM_STATS			= NAN_CMD(WL_NAN_CMD_DAM_COMP_ID, 0x01),
+	WL_NAN_XTLV_DAM_AVAIL_STATS		= NAN_CMD(WL_NAN_CMD_DAM_COMP_ID, 0x02),
+
+	WL_NAN_XTLV_RANGE_STATS			= NAN_CMD(WL_NAN_CMD_RANGE_COMP_ID, 0x01)
+} wl_nan_stats_tlv_t;
+
+/* NAN stats WL_NAN_CMD_GEN_STATS command */
+/* Input data */
+typedef struct wl_nan_cmn_get_stat {
+	uint32	modules_btmap;	/* Bitmap to indicate module stats are needed:
+				 * See NAN Sub Module ID's above
+				 */
+	uint8	operation;	/* Get, Get and Clear */
+	uint8	arg1;		/* Submodule control variable1 */
+	uint8	arg2;		/* Submodule control variable2 */
+	uint8	pad;		/* May not be needed as TLV's are aligned,add to pass compile chk */
+} wl_nan_cmn_get_stat_t;
+
+/* Output for Stats container */
+typedef struct wl_nan_cmn_stat {
+	uint32	n_stats;	/* Number of different sub TLV stats present in the container */
+	uint32	totlen;		/* Total Length of stats data in container */
+	uint8   stats_tlvs [];	/* Stat TLV's container */
+} wl_nan_cmn_stat_t;
+
+/* Defines for operation */
+#define WLA_NAN_STATS_GET	0
+#define WLA_NAN_STATS_GET_CLEAR	1
+
+#define WL_NAN_STAT_ALL 0xFFFFFFFF
+
+/* NAN Mac stats */
+
+typedef struct wl_nan_mac_band_stats {
+	uint32 bcn_tx;	/* 2g/5g disc/sync beacon tx count */
+	uint32 bcn_rx;	/* 2g/5g disc/sync beacon rx count */
+	uint32 dws;	/* Number of 2g/5g DW's */
+} wl_nan_mac_band_stats_t;
+
+/* Note: if this struct is changing update wl_nan_slot_ecounters_vX_t version,
+ * as this struct is sent as payload in wl_nan_slot_ecounter_vX_ts
+ */
+typedef struct wl_nan_mac_stats {
+	wl_nan_mac_band_stats_t	band[NAN_MAX_BANDS];	/* MAC sync band specific stats */
+	uint32 naf_tx;			/* NAN AF tx */
+	uint32 naf_rx;			/* NAN AF rx */
+	uint32 sdf_tx;			/* SDF tx */
+	uint32 sdf_rx;			/* SDF rx */
+	uint32 cnt_sync_bcn_rx_tu[3];	/* delta bw */
+	uint32 cnt_bcn_tx_out_dw;	/* TX sync beacon outside dw */
+	uint32 cnt_role_am_dw;		/* anchor master role due to dw */
+	uint32 cnt_am_hop_err;		/* wrong hopcount set for AM */
+} wl_nan_mac_stats_t;
+
+/* NAN Sched stats */
+/* Per core Sched stats */
+typedef struct nan_sched_stats_core {
+	uint32	slotstart;		/* slot_start */
+	uint32	slotend;		/* slot_end */
+	uint32	slotskip;		/* slot_skip */
+	uint32	slotstart_partial;	/* slot resume */
+	uint32	slotend_partial;	/* slot pre-empt */
+	uint8   avail_upd_cnt;		/* count to track num of times avail has been updated */
+	uint8	pad[3];
+} nan_sched_stats_core_t;
+/* Common Sched stats */
+typedef struct nan_sched_stats_cmn {
+	uint32	slot_adj_dw;	/* Slot adjusts due to DW changes */
+	uint32	slot_dur;	/* Total slot duration in TU's */
+} nan_sched_stats_cmn_t;
+
+/* Note: if this struct is changing update wl_nan_slot_ecounters_vX_t version,
+ * as this struct is sent as payload in wl_nan_slot_ecounters_vX_t
+ */
+typedef struct nan_sched_stats {
+	nan_sched_stats_cmn_t cmn;
+	nan_sched_stats_core_t slice[MAX_NUM_D11CORES];
+} nan_sched_stats_t;
+/* End NAN Sched stats */
+
+/* NAN Discovery stats */
+typedef struct nan_disc_stats {
+	uint32 pub_tx;		/* Publish tx */
+	uint32 pub_rx;		/* Publish rx */
+	uint32 sub_tx;		/* Subscribe tx */
+	uint32 sub_rx;		/* Subscribe rx */
+	uint32 fup_tx;		/* Followup tx */
+	uint32 fup_rx;		/* Followup rx */
+	uint32 pub_resp_ignored;	/* response to incoming publish ignored */
+	uint32 sub_resp_ignored;	/* response to incoming subscribe ignored */
+} nan_disc_stats_t;
+/* NAN Discovery stats end */
+
+/* statistics for nan sec */
+typedef struct nan_sec_stats_s {
+	uint32 mic_fail;		/* rx mic fail */
+	uint32 replay_fail;		/* replay counter */
+	uint32 tx_fail;			/* tx fail (from txstatus) */
+	uint32 key_info_err;		/* key info field err */
+	uint32 ok_sessions;		/* successful mx negotiations */
+	uint32 fail_sessions;		/* failed sessions */
+	uint32 keydesc_err;		/* key desc error */
+	uint32 invalid_cipher;		/* cipher suite not valid */
+	uint32 pmk_not_found;		/* no pmk found for given service or for any reason */
+	uint32 no_pmk_for_pmkid;	/* no pmk found for give pmkid */
+	uint32 key_install_err;		/* failed to install keys */
+	uint32 no_keydesc_attr;		/* key desc attr missing */
+	uint32 nonce_mismatch;		/* nonce mismatch */
+} nan_sec_stats_t;
+
+/* WL_NAN_XTLV_GEN_PEER_STATS */
+typedef struct wl_nan_peer_stats {
+	struct ether_addr nmi;
+	uint8 pad[2];
+	uint32 pkt_enq; /* counter for queued pkt of peer */
+
+	/* NDL */
+	bool ndl_exist;
+	uint8 ndl_state;
+	bool counter_proposed;
+	uint8 pad1;
+
+	/* NDL QoS */
+	uint16 local_max_latency;
+	uint16 peer_max_latency;
+	uint8 local_min_slots;
+	uint8 peer_min_slots;
+
+	/* security association */
+	struct ether_addr sec_laddr;	/* local mac addr */
+	struct ether_addr sec_raddr;	/* remote mac addr */
+	uint8 sec_csid;
+	uint8 pad2;
+} wl_nan_peer_stats_t;
+
+/* WL_NAN_XTLV_GEN_PEER_STATS_DEVCAP */
+typedef struct wl_nan_peer_stats_dev_cap {
+	uint8 mapid;
+	uint8 awake_dw_2g;
+	uint8 awake_dw_5g;
+	uint8 bands_supported;
+	uint8 op_mode;
+	uint8 num_antennas;
+	uint16 chan_switch_time;
+	uint8 capabilities;
+	uint8 pad[3];
+} wl_nan_peer_stats_dev_cap_t;
+
+/* WL_NAN_XTLV_GEN_PEER_STATS_NDP */
+typedef struct wl_nan_peer_stats_ndp {
+	uint8 peer_role;
+	uint8 ndp_state;
+	uint8 indp_id;	/* initiator ndp id */
+	uint8 ndp_ctrl;	/* ndp control field */
+	struct ether_addr peer_nmi;
+	struct ether_addr peer_ndi;
+	struct ether_addr local_ndi;
+
+	/* peer scb info */
+	bool scb_allocated;
+	bool scb_found;
+	uint32 scb_flags;
+	uint32 scb_flags2;
+	uint32 scb_flags3;
+} wl_nan_peer_stats_ndp_t;
+
+enum {
+	WL_NAN_SCHED_STAT_SLOT_COMM	= 0x01,	/* Committed slot */
+	WL_NAN_SCHED_STAT_SLOT_COND	= 0x02,	/* Conditional slot(proposal/counter) */
+	WL_NAN_SCHED_STAT_SLOT_NDC	= 0x04,	/* NDC slot */
+	WL_NAN_SCHED_STAT_SLOT_IMMUT	= 0x08,	/* Immutable slot */
+	WL_NAN_SCHED_STAT_SLOT_RANGE	= 0x10, /* Ranging slot */
+};
+typedef uint16 wl_nan_stats_sched_slot_info_t;
+
+typedef struct wl_nan_stats_sched_slot {
+	wl_nan_stats_sched_slot_info_t info;	/* capture slot type and more info */
+	chanspec_t chanspec;
+} wl_nan_stats_sched_slot_t;
+
+/* WL_NAN_XTLV_GEN_PEER_STATS_SCHED, WL_NAN_XTLV_GEN_AVAIL_STATS_SCHED */
+typedef struct wl_nan_stats_sched {
+	uint8 map_id;
+	uint8 seq_id;	/* seq id from NA attr */
+	uint8 slot_dur;
+	uint8 pad;
+	uint16 period;
+	uint16 num_slot;
+	wl_nan_stats_sched_slot_t slot[];
+} wl_nan_stats_sched_t;
+
+/* WL_NAN_XTLV_GEN_PEER_STATS_SCHED */
+typedef struct wl_nan_peer_stats_sched {
+	uint8 map_id;
+	uint8 seq_id;	/* seq id from NA attr */
+	uint8 slot_dur;
+	uint8 pad;
+	uint16 period;
+	uint16 num_slot;
+	wl_nan_stats_sched_slot_t slot[];
+} wl_nan_peer_stats_sched_t;
+
+/* WL_NAN_XTLV_RANGE_STATS  */
+typedef struct wl_nan_range_stats {
+	uint16 rng_ssn_estb;
+	uint16 rng_ssn_fail;
+	uint16 rng_sched_start;
+	uint16 rng_sched_end;
+	uint16 ftm_ssn_success; /* number of succesfull ftm sessions */
+	uint16 ftm_ssn_fail;
+	uint16 num_meas; /* number of ftm frames */
+	uint16 num_valid_meas; /* number of ftm frames with valid timestamp */
+} wl_nan_range_stats_t;
+
+/* defines for ndp stats flag */
+
+#define NAN_NDP_STATS_FLAG_ROLE_MASK                      0x01
+#define NAN_NDP_STATS_FLAG_ROLE_INIT                      0x00
+#define NAN_NDP_STATS_FLAG_ROLE_RESP                      0x01
+
+#define NAN_NDP_STATS_STATE_BIT_SHIFT                     1
+#define NAN_NDP_STATS_FLAG_STATE_MASK                     0x07
+#define NAN_NDP_STATS_FLAG_STATE_IN_PROG                  0x00
+#define NAN_NDP_STATS_FLAG_STATE_ESTB                     0x01
+#define NAN_NDP_STATS_FLAG_STATE_TEARDOWN_WAIT            0x02
+/* More states can be added here, when needed */
+
+/* WL_NAN_XTLV_GEN_NDP_STATS */
+typedef struct wl_nan_ndp_stats_s {
+	uint8 ndp_id;
+	uint8 indp_id;
+	uint8 flags;
+	uint8 nan_sec_csid;
+	struct ether_addr lndi_addr;
+	struct ether_addr pnmi_addr;
+	struct ether_addr pndi_addr;
+	uint8 PAD[2];
+} wl_nan_ndp_stats_t;
+
+/* WL_NAN_XTLV_EV_SLOT_INFO */
+typedef struct wl_nan_slot_info_s {
+	/* dw slot start expected */
+	uint32	dwst_h;
+	uint32	dwst_l;
+	/* dw slot start actual */
+	uint32	act_dwst_h;
+	uint32	act_dwst_l;
+	uint16	cur_chan[MAX_NUM_D11CORES];	/* sdb channels */
+	uint16	dw_chan;	/* dw channel */
+	uint8	dw_no;		/* dw number */
+	uint8	slot_seq_no;	/* slot seq no. */
+} wl_nan_slot_info_t;
+
+/* WL_NAN_EVENT_MR_CHANGED */
+typedef uint8 wl_nan_mr_changed_t;
+#define WL_NAN_AMR_CHANGED	1
+#define WL_NAN_IMR_CHANGED	2
+
+/*
+ * The macro BCMUTILS_ERR_CODES is defined only
+ * when using the common header file(a new approach) bcmutils/include/bcmerror.h.
+ * Otherwise, use the error codes from this file.
+ */
+#ifndef BCMUTILS_ERR_CODES
+
+/** status - TBD BCME_ vs NAN status - range reserved for BCME_ */
+enum {
+	/* add new status here... */
+	WL_NAN_E_INVALID_TOKEN		= -2135,	/* invalid token or mismatch */
+	WL_NAN_E_INVALID_ATTR		= -2134,	/* generic invalid attr error */
+	WL_NAN_E_INVALID_NDL_ATTR	= -2133,	/* invalid NDL attribute */
+	WL_NAN_E_SCB_NORESOURCE		= -2132,	/* no more peer scb available */
+	WL_NAN_E_PEER_NOTAVAIL		= -2131,
+	WL_NAN_E_SCB_EXISTS		= -2130,
+	WL_NAN_E_INVALID_PEER_NDI	= -2129,
+	WL_NAN_E_INVALID_LOCAL_NDI	= -2128,
+	WL_NAN_E_ALREADY_EXISTS		= -2127,	/* generic NAN error for duplication */
+	WL_NAN_E_EXCEED_MAX_NUM_MAPS	= -2126,
+	WL_NAN_E_INVALID_DEV_CHAN_SCHED	= -2125,
+	WL_NAN_E_INVALID_PEER_BLOB_TYPE	= -2124,
+	WL_NAN_E_INVALID_LCL_BLOB_TYPE	= -2123,
+	WL_NAN_E_BCMC_PDPA		= -2122,	/* BCMC NAF PDPA */
+	WL_NAN_E_TIMEOUT		= -2121,
+	WL_NAN_E_HOST_CFG		= -2120,
+	WL_NAN_E_NO_ACK			= -2119,
+	WL_NAN_E_SECINST_FAIL		= -2118,
+	WL_NAN_E_REJECT_NDL		= -2117,	/* generic NDL rejection error */
+	WL_NAN_E_INVALID_NDP_ATTR	= -2116,
+	WL_NAN_E_HOST_REJECTED		= -2115,
+	WL_NAN_E_PCB_NORESOURCE		= -2114,
+	WL_NAN_E_NDC_EXISTS		= -2113,
+	WL_NAN_E_NO_NDC_ENTRY_AVAIL	= -2112,
+	WL_NAN_E_INVALID_NDC_ENTRY      = -2111,
+	WL_NAN_E_SD_TX_LIST_FULL        = -2110,
+	WL_NAN_E_SVC_SUB_LIST_FULL      = -2109,
+	WL_NAN_E_SVC_PUB_LIST_FULL      = -2108,
+	WL_NAN_E_SDF_MAX_LEN_EXCEEDED   = -2107,
+	WL_NAN_E_ZERO_CRB		= -2106,	/* no CRB between local and peer */
+	WL_NAN_E_PEER_NDC_NOT_SELECTED	= -2105,	/* peer ndc not selected */
+	WL_NAN_E_DAM_CHAN_CONFLICT	= -2104,	/* dam schedule channel conflict */
+	WL_NAN_E_DAM_SCHED_PERIOD	= -2103,	/* dam schedule period mismatch */
+	WL_NAN_E_LCL_NDC_NOT_SELECTED	= -2102,	/* local selected ndc not configured */
+	WL_NAN_E_NDL_QOS_INVALID_NA	= -2101,	/* na doesn't comply with ndl qos */
+	WL_NAN_E_CLEAR_NAF_WITH_SA_AS_RNDI = -2100,	/* rx clear naf with peer rndi */
+	WL_NAN_E_SEC_CLEAR_PKT		= -2099,	/* rx clear pkt from a peer with sec_sa */
+	WL_NAN_E_PROT_NON_PDPA_NAF	= -2098,	/* rx protected non PDPA frame */
+	WL_NAN_E_DAM_DOUBLE_REMOVE	= -2097,	/* remove peer schedule already removed */
+	WL_NAN_E_DAM_DOUBLE_MERGE	= -2096,	/* merge peer schedule already merged */
+	WL_NAN_E_DAM_REJECT_INVALID	= -2095,	/* reject for invalid schedule */
+	WL_NAN_E_DAM_REJECT_RANGE	= -2094,
+	WL_NAN_E_DAM_REJECT_QOS		= -2093,
+	WL_NAN_E_DAM_REJECT_NDC		= -2092,
+	WL_NAN_E_DAM_REJECT_PEER_IMMUT	= -2091,
+	WL_NAN_E_DAM_REJECT_LCL_IMMUT	= -2090,
+	WL_NAN_E_DAM_EXCEED_NUM_SCHED	= -2089,
+	WL_NAN_E_DAM_INVALID_SCHED_MAP	= -2088,	/* invalid schedule map list */
+	WL_NAN_E_DAM_INVALID_LCL_SCHED	= -2087,
+	WL_NAN_E_INVALID_MAP_ID		= -2086,
+	WL_NAN_E_CHAN_OVERLAP_ACROSS_MAP = -2085,
+	WL_NAN_E_INVALID_CHAN_LIST	= -2084,
+	WL_NAN_E_INVALID_RANGE_TBMP	= -2083,
+	WL_NAN_E_INVALID_IMMUT_SCHED	= -2082,
+	WL_NAN_E_INVALID_NDC_ATTR	= -2081,
+	WL_NAN_E_INVALID_TIME_BITMAP	= -2080,
+	WL_NAN_E_INVALID_NA_ATTR	= -2079,
+	WL_NAN_E_NO_NA_ATTR_IN_AVAIL_MAP = -2078,	/* no na attr saved in avail map */
+	WL_NAN_E_INVALID_MAP_IDX	= -2077,
+	WL_NAN_E_SEC_SA_NOTFOUND	= -2076,
+	WL_NAN_E_BSSCFG_NOTFOUND	= -2075,
+	WL_NAN_E_SCB_NOTFOUND		= -2074,
+	WL_NAN_E_NCS_SK_KDESC_TYPE      = -2073,
+	WL_NAN_E_NCS_SK_KEY_DESC_VER    = -2072,	/* key descr ver */
+	WL_NAN_E_NCS_SK_KEY_TYPE        = -2071,	/* key descr type */
+	WL_NAN_E_NCS_SK_KEYINFO_FAIL    = -2070,	/* key info (generic) */
+	WL_NAN_E_NCS_SK_KEY_LEN         = -2069,	/* key len */
+	WL_NAN_E_NCS_SK_KDESC_NOT_FOUND = -2068,	/* key desc not found */
+	WL_NAN_E_NCS_SK_INVALID_PARAMS  = -2067,	/* invalid args */
+	WL_NAN_E_NCS_SK_KDESC_INVALID   = -2066,	/* key descr is not valid */
+	WL_NAN_E_NCS_SK_NONCE_MISMATCH  = -2065,
+	WL_NAN_E_NCS_SK_KDATA_SAVE_FAIL = -2064,	/* not able to save key data */
+	WL_NAN_E_NCS_SK_AUTH_TOKEN_CALC_FAIL = -2063,
+	WL_NAN_E_NCS_SK_PTK_CALC_FAIL   = -2062,
+	WL_NAN_E_INVALID_STARTOFFSET	= -2061,
+	WL_NAN_E_BAD_NA_ENTRY_TYPE	= -2060,
+	WL_NAN_E_INVALID_CHANBMP	= -2059,
+	WL_NAN_E_INVALID_OP_CLASS	= -2058,
+	WL_NAN_E_NO_IES			= -2057,
+	WL_NAN_E_NO_PEER_ENTRY_AVAIL	= -2056,
+	WL_NAN_E_INVALID_PEER		= -2055,
+	WL_NAN_E_PEER_EXISTS		= -2054,
+	WL_NAN_E_PEER_NOTFOUND		= -2053,
+	WL_NAN_E_NO_MEM			= -2052,
+	WL_NAN_E_INVALID_OPTION		= -2051,
+	WL_NAN_E_INVALID_BAND		= -2050,
+	WL_NAN_E_INVALID_MAC		= -2049,
+	WL_NAN_E_BAD_INSTANCE		= -2048,
+	/* NAN status code reserved from -2048 to -3071 */
+	/* Do NOT add new status below -2048 */
+	WL_NAN_E_ERROR			= -1,
+	WL_NAN_E_OK			= 0
+};
+
+#endif	/* BCMUTILS_ERR_CODES */
+
+/* Error codes used in vendor specific attribute in Data Path Termination frames */
+enum {
+	WL_NAN_DPEND_E_OK		= 0,
+	WL_NAN_DPEND_E_ERROR		= 1,
+	WL_NAN_DPEND_E_HOST_CMD		= 2,
+	WL_NAN_DPEND_E_HOST_REJECTED	= 3,	/* host rejected rx frame  */
+	WL_NAN_DPEND_E_RESOURCE_LIMIT	= 4,
+	WL_NAN_DPEND_E_NO_ACK_RCV	= 5,
+	WL_NAN_DPEND_E_TIMEOUT		= 6,
+	WL_NAN_DPEND_E_NO_ELT		= 7,	/* rx frame missing element container */
+	WL_NAN_DPEND_E_NO_NDP_ATTR	= 8,
+	WL_NAN_DPEND_E_NO_AVAIL_ATTR	= 9,
+	WL_NAN_DPEND_E_NO_NDC_ATTR	= 10,
+	WL_NAN_DPEND_E_NO_RANGE_BM	= 11,
+	WL_NAN_DPEND_E_INVALID_NDP_ATTR	= 12,
+	WL_NAN_DPEND_E_INVALID_NDC_ATTR	= 13,
+	WL_NAN_DPEND_E_INVALID_IMMUT	= 14,
+	WL_NAN_DPEND_E_INVALID_NDL_QOS	= 15,
+	WL_NAN_DPEND_E_INVALID_SEC_PARAMS = 16,
+	WL_NAN_DPEND_E_REJECT_AVAIL	= 17,
+	WL_NAN_DPEND_E_REJECT_NDL	= 18,
+	WL_NAN_DPEND_E_SCB_NORESOURCE	= 19
+};
+
+typedef int32 wl_nan_status_t;
+
+/** nan cmd list entry  */
+enum wl_nan_sub_cmd_input_flags {
+	WL_NAN_SUB_CMD_FLAG_NONE = 0,
+	WL_NAN_SUB_CMD_FLAG_SKIP = 1, /* Skip to next sub-command on error */
+	WL_NAN_SUB_CMD_FLAG_TERMINATE = 2, /* Terminate processing and return */
+	WL_NAN_SUB_CMD_FLAG_LAST /* Keep this at the end */
+};
+
+/** container for nan events */
+typedef struct wl_nan_ioc {
+	uint16	version;	/**< interface command or event version */
+	uint16	id;			/**< nan ioctl cmd  ID  */
+	uint16	len;		/**< total length of all tlv records in data[]  */
+	uint16	pad;		/**< pad to be 32 bit aligment */
+	uint8	data [];	/**< var len payload of bcm_xtlv_t type */
+} wl_nan_ioc_t;
+
+/*
+ * NAN sub-command data structures
+ */
+
+/*
+ * Config component WL_NAN_CMD_CFG_XXXX sub-commands
+ * WL_NAN_CMD_CFG_ENABLE
+ */
+enum wl_nan_config_state {
+	WL_NAN_CONFIG_STATE_DISABLE = 0,
+	WL_NAN_CONFIG_STATE_ENABLE = 1
+};
+
+typedef int8 wl_nan_config_state_t;
+
+/* WL_NAN_CMD_CFG_NAN_INIT */
+
+typedef uint8 wl_nan_init_t;
+
+/* WL_NAN_CMD_CFG_NAN_VERSION */
+typedef uint16 wl_nan_ver_t;
+
+/* WL_NAN_CMD_CFG_NAN_CONFIG  */
+typedef uint32 wl_nan_cfg_ctrl_t;
+
+/* WL_NAN_CMD_CFG_NAN_CONFIG2 */
+typedef struct wl_nan_cfg_ctrl2 {
+	uint32 flags1; /* wl_nan_cfg_ctrl2_flags1 */
+	uint32 flags2; /* wl_nan_cfg_ctrl2_flags2 */
+} wl_nan_cfg_ctrl2_t;
+
+enum wl_nan_cfg_ctrl2_flags1 {
+	/* Allows unicast SDF TX while local device is under NDP/NDL negotiation,
+	 * but Not with the peer SDF destined to.
+	 */
+	WL_NAN_CTRL2_FLAG1_ALLOW_SDF_TX_UCAST_IN_PROG	= 0x00000001,
+	/* Allows broadcast SDF TX while local device is under NDP/NDL negotiation */
+	WL_NAN_CTRL2_FLAG1_ALLOW_SDF_TX_BCAST_IN_PROG	= 0x00000002,
+	/* Allows the device to send schedule update automatically on local schedule change */
+	WL_NAN_CTRL2_FLAG1_AUTO_SCHEDUPD		= 0x00000004,
+	/* Allows the device to handle slot pre_close operations */
+	WL_NAN_CTRL2_FLAG1_SLOT_PRE_CLOSE		= 0x00000008
+};
+#define WL_NAN_CTRL2_FLAGS1_MASK	0x0000000F
+
+#define WL_NAN_CTRL2_FLAGS2_MASK	0x00000000
+
+/*
+ * WL_NAN_CMD_CFG_BAND, WL_NAN_CMD_CFG_RSSI_THRESHOLD(Get only)
+ */
+typedef uint8 wl_nan_band_t;
+
+/*
+ * WL_NAN_CMD_CFG_ROLE
+ */
+enum wl_nan_role {
+	WL_NAN_ROLE_AUTO = 0,
+	WL_NAN_ROLE_NON_MASTER_NON_SYNC = 1,
+	WL_NAN_ROLE_NON_MASTER_SYNC = 2,
+	WL_NAN_ROLE_MASTER = 3,
+	WL_NAN_ROLE_ANCHOR_MASTER = 4
+};
+
+typedef uint8 wl_nan_role_t;
+
+typedef struct wl_nan_device_state
+{
+	wl_nan_role_t role;		/* Sync Master, Non-Sync Master */
+	uint8 state;	/* TBD  */
+	uint8 hopcount;	/* Hops to the Anchor Master */
+	struct ether_addr immediate_master; /* Master MAC */
+	struct ether_addr anchor_master;	/* Anchor Master MAC */
+	struct ether_addr cluster_id; /* Cluster ID to which this device belongs to */
+	uint8 PAD[3];
+	uint32 tsf_high;  /* NAN Cluster TSFs */
+	uint32 tsf_low;
+} wl_nan_device_state_t;
+
+/*
+ * WL_NAN_CMD_CFG_HOP_CNT, WL_NAN_CMD_CFG_HOP_LIMIT
+ */
+typedef uint8 wl_nan_hop_count_t;
+
+/*
+ * WL_NAN_CMD_CFG_WARMUP_TIME
+ */
+typedef uint32 wl_nan_warmup_time_ticks_t;
+
+/*
+ * WL_NAN_CMD_CFG_RSSI_THRESHOLD
+ * rssi_close and rssi_mid are used to transition master to non-master
+ * role by NAN state machine. rssi thresholds corresponding to the band
+ * will be updated.
+ */
+/* To be deprecated */
+typedef struct wl_nan_rssi_threshold {
+	wl_nan_band_t band;
+	int8 rssi_close;
+	int8 rssi_mid;
+	uint8 pad;
+} wl_nan_rssi_threshold_t;
+
+/* WL_NAN_CMD_ELECTION_RSSI_THRESHOLD */
+
+typedef struct wl_nan_rssi_thld {
+	int8 rssi_close_2g;
+	int8 rssi_mid_2g;
+	int8 rssi_close_5g;
+	int8 rssi_mid_5g;
+} wl_nan_rssi_thld_t;
+
+/* WL_NAN_CMD_DATA_MAX_PEERS */
+
+typedef uint8 wl_nan_max_peers_t;
+
+/*
+ * WL_NAN_CMD_CFG_STATUS
+ */
+
+typedef enum wl_nan_election_mode {
+	WL_NAN_ELECTION_RUN_BY_HOST = 1,
+	WL_NAN_ELECTION_RUN_BY_FW = 2
+} wl_nan_election_mode_t;
+
+typedef struct wl_nan_conf_status {
+	struct ether_addr	nmi;		/*  NAN mgmt interface address */
+	uint8			enabled;	/* NAN is enabled */
+	uint8			role;		/* Current nan sync role */
+	struct ether_addr	cid;		/*  Current Cluster id */
+	uint8			social_chans[2];	/* Social channels */
+	uint8			mr[8];		/* Self Master Rank */
+	uint8			amr[8];		/* Anchor Master Rank */
+	uint32			ambtt;		/* Anchor master beacon target time */
+	uint32			cluster_tsf_h;	/* Current Cluster TSF High */
+	uint32			cluster_tsf_l;	/* Current Cluster TSF Low */
+	uint8			election_mode; /* Election mode, host or firmware */
+	uint8			hop_count;	/* Current Hop count */
+	uint8			imr[8];		/* Immediate Master Rank */
+	uint8			pad[4];		/* remove after precommit */
+	uint16			opt_tlvs_len;
+	uint8			opt_tlvs[];
+} wl_nan_conf_status_t;
+
+/*
+ * WL_NAN_CMD_CFG_OUI
+ */
+typedef struct wl_nan_oui_type {
+	uint8 nan_oui[DOT11_OUI_LEN];
+	uint8 type;
+} wl_nan_oui_type_t;
+
+/*
+ * WL_NAN_CMD_CFG_COUNT
+ */
+typedef struct wl_nan_count {
+	uint32 cnt_bcn_tx;		/**< TX disc/sync beacon count */
+	uint32 cnt_bcn_rx;		/**< RX disc/sync beacon count */
+	uint32 cnt_svc_disc_tx;		/**< TX svc disc frame count */
+	uint32 cnt_svc_disc_rx;		/**< RX svc disc frame count */
+} wl_nan_count_t;
+/*
+ * Election component WL_NAN_CMD_ELECTION_XXXX sub-commands
+ * WL_NAN_CMD_ELECTION_HOST_ENABLE
+ */
+enum wl_nan_enable_flags {
+	WL_NAN_DISABLE_FLAG_HOST_ELECTION = 0,
+	WL_NAN_ENABLE_FLAG_HOST_ELECTION = 1
+};
+
+/*
+ * 0 - disable host based election
+ * 1 - enable host based election
+ */
+typedef uint8 wl_nan_host_enable_t;
+
+/*
+ * WL_NAN_CMD_ELECTION_METRICS_CONFIG
+ */
+/* Set only */
+typedef struct wl_nan_election_metric_config {
+	uint8 random_factor; /* Configured random factor */
+	uint8 master_pref;	/* configured master preference */
+	uint8 pad[2];
+} wl_nan_election_metric_config_t;
+
+/*
+ * WL_NAN_CMD_ELECTION_METRICS_STATE
+ */
+/* Get only */
+typedef struct wl_nan_election_metric_state {
+	uint8 random_factor; /* random factor used in MIs */
+	uint8 master_pref;	 /* Master advertised in MIs */
+	uint8 pad[2];
+} wl_nan_election_metric_state_t;
+
+/*
+ * WL_NAN_CMD_ELECTION_LEAVE
+ * WL_NAN_CMD_ELECTION_STOP
+ */
+typedef struct ether_addr wl_nan_cluster_id_t;
+
+#define NHO_SEC_NCS_SK_REPLAY_CNT_LEN    8u
+/* kck */
+#define NHO_SEC_NCS_SK_256_KCK_LEN         24u  /* refer nan2 r21 7.1.4.1 */
+/* kek */
+#define NHO_SEC_NCS_SK_256_KEK_LEN         32u  /* refer nan2 r21 7.1.4.1 */
+/* tk */
+#define NHO_SEC_NCS_SK_256_TK_LEN          32u  /* refer nan2 r21 section 7 */
+
+#define NHO_SEC_NCS_SK_MAX_KEY_LEN      (NHO_SEC_NCS_SK_256_KCK_LEN \
+					+ NHO_SEC_NCS_SK_256_KEK_LEN \
+					+ NHO_SEC_NCS_SK_256_TK_LEN)
+
+#define NHO_SEC_KEY_INSTALL_FLAG                 (1 << 0)
+#define NHO_SEC_KEY_UNINSTALL_FLAG               (1 << 1)
+
+/* WL_NAN_XTLV_NANHO_SEC_SA */
+typedef struct nanho_sec_sa {
+	int8 csid;	/* Cipher suite ID to identify the security type */
+	uint8 kck_len; /* KCK len in key_buf */
+	uint8 kek_len; /* KEK len in key_buf */
+	uint8 tk_len; /* Transient key len in key_buf */
+	uint16 flags;
+	uint16 pad;
+	struct ether_addr laddr;	/* local mac addr */
+	struct ether_addr raddr;	/* remote mac addr */
+	uint8 key_krc[NHO_SEC_NCS_SK_REPLAY_CNT_LEN];   /* Key Replay ctr */
+	uint8 key_buf[NHO_SEC_NCS_SK_MAX_KEY_LEN];		/* PTK = KCK + KEK + TK */
+} nanho_sec_sa_t;
+
+/*
+ * WL_NAN_CMD_ELECTION_MERGE
+ * 0 - disable cluster merge
+ * 1 - enable cluster merge
+ */
+typedef uint8 wl_nan_merge_enable_t;
+
+/*
+ * WL_NAN_CMD_CFG_ROLE
+ * role = 0 means configuration by firmware(obsolete); otherwise by host
+ * when host configures role, also need target master address to sync to
+ */
+#define NAN_SYNC_MASTER_SELF	1
+#define NAN_SYNC_MASTER_USE_TIMING		2 	/*  Use the tsf timing provided */
+#define NAN_SYNC_MASTER_AMREC_UPD		4	/* provide AM record update */
+
+/*
+	struct ether_addr addr:
+	when NAN_SYNC_MASTER_USE_TIMING is set, addr is the mac of Rx NAN beacon
+	providing the timing info
+	ltsf_h, ltsf_l:
+	The local TSF timestamp filled in by FW in the WL_NAN_EVENT_BCN_RX event;
+	rtsf_h, rtsf_l:
+	The timestamp in the Rx beacon frame, filled in by host
+	uint32 ambtt:
+	the amtt in the cluster ID attribute in the Rx beacon frame
+*/
+
+typedef struct nan_sync_master {
+	uint8 flag;	/*  1: self; 2: use TSF timing; 4: AMR update */
+	uint8  hop_count;
+	struct ether_addr addr;
+	struct ether_addr cluster_id;
+	chanspec_t channel; /* bcn reception channel */
+	uint32 ltsf_h;
+	uint32 ltsf_l;
+	uint32 rtsf_h;
+	uint32 rtsf_l;
+	uint8 amr[WL_NAN_MASTER_RANK_LEN];
+	uint32 ambtt;
+} nan_sync_master_t;
+
+/* NAN advertiser structure */
+/* TODO RSDB: add chspec to indicates core corresponds correct core */
+typedef struct nan_adv_entry {
+	uint8 age;	/* used to remove stale entries */
+	uint8 hop_count;	/* for NTLV support, use bit7 for virtual NAN peer */
+	struct ether_addr addr;
+	struct ether_addr cluster_id;
+	chanspec_t channel; /* bcn reception channel */
+	uint32 ltsf_h;
+	uint32 ltsf_l;
+	uint32 rtsf_h;
+	uint32 rtsf_l;
+	uint8 amr[WL_NAN_MASTER_RANK_LEN];
+	uint32 ambtt;
+	int8	rssi[NAN_MAX_BANDS];		/* rssi last af was received at */
+	int8	last_rssi[NAN_MAX_BANDS];	/* rssi in the last AF */
+} nan_adv_entry_t;
+#define NAN_VIRTUAL_PEER_BIT	0x80
+
+typedef enum {
+	NAC_CNT_NTLV_AF_TX = 0,		/* count of AF containing NTLV tx */
+	NAC_CNT_NTLV_AF_RX,		/* count of AF containing NTLV rx */
+	NAC_CNT_NTLV_TMERR_TX,		/* count of NTLV tx timing error */
+	NAC_CNT_NTLV_TMERR_RX,		/* count of NTLV rx timing error */
+	NAC_CNT_NTLV_TM_MISMATCH,	/* count of TopMaster mismatch in Rx NTLV processing */
+	NAC_CNT_NTLV_ADV_EXISTED,	/* count of NTLV ignored bc advertiser existed from bcn */
+	NAC_CNT_NTLV_STALED_BCN,	/* count of staled bcn from NTLV info */
+	NAC_CNT_NTLV_MERGE,		/* count of NTLV used for NAN cluster merge */
+	NAC_CNT_NTLV_ELECTION_DROP,	/* count of NTLV dropped in NAN election */
+	NAC_CNT_NTLV_TSF_ADOPT,		/* count of NTLV used for NAN TSF adoption */
+	NAC_CNT_NTLV_LAST
+} nac_cnt_enum_t;
+
+#define NAC_MAX_CNT	(NAC_CNT_NTLV_LAST)
+
+typedef struct nac_stats {
+	uint32 nac_cnt[NAC_MAX_CNT];
+} nac_stats_t;
+
+typedef struct nan_adv_table {
+	uint8  num_adv;
+	uint8	adv_size;
+	uint8	pad[2];
+	nan_adv_entry_t adv_nodes[0];
+} nan_adv_table_t;
+
+typedef struct wl_nan_role_cfg {
+	wl_nan_role_t cfg_role;
+	wl_nan_role_t cur_role;
+	uint8 pad[2];
+	nan_sync_master_t target_master;
+} wl_nan_role_cfg_t;
+
+typedef struct wl_nan_role_config {
+	wl_nan_role_t role;
+	struct ether_addr target_master;
+	uint8 pad;
+} wl_nan_role_config_t;
+
+typedef int8 wl_nan_sd_optional_field_types_t;
+
+/* Flag bits for Publish and Subscribe (wl_nan_sd_params_t flags) */
+
+/* First 8 bits are blocked for mapping
+ * against svc_control flag bits which goes out
+ * as part of SDA attribute in air in SDF frames
+ */
+#define WL_NAN_RANGE_LIMITED		0x0040
+
+/* Event generation indicator (default is continuous) */
+
+#define WL_NAN_MATCH_ONCE		0x100000
+#define WL_NAN_MATCH_NEVER		0x200000
+
+/* Bits specific to Publish */
+
+#define WL_NAN_PUB_UNSOLICIT	0x1000	/* Unsolicited Tx */
+#define WL_NAN_PUB_SOLICIT		0x2000	/* Solicited Tx */
+#define WL_NAN_PUB_BOTH			0x3000	/* Both the above */
+
+#define WL_NAN_PUB_BCAST		0x4000	/* bcast solicited Tx only */
+#define WL_NAN_PUB_EVENT		0x8000	/* Event on each solicited Tx */
+#define WL_NAN_PUB_SOLICIT_PENDING	0x10000 /* Used for one-time solicited Publish */
+
+#define WL_NAN_FOLLOWUP			0x20000 /* Follow-up frames */
+#define WL_NAN_TX_FOLLOWUP             0x40000 /* host generated transmit Follow-up frames */
+
+/* Bits specific to Subscribe */
+
+#define WL_NAN_SUB_ACTIVE		0x1000 /* Active subscribe mode */
+#define WL_NAN_SUB_MATCH_IF_SVC_INFO	0x2000 /* Service info in publish */
+
+#define WL_NAN_TTL_UNTIL_CANCEL	0xFFFFFFFF /* Special values for time to live (ttl) parameter */
+
+/*
+ * Publish -  runs until first transmission
+ * Subscribe - runs until first  DiscoveryResult event
+ */
+#define WL_NAN_TTL_FIRST	0
+
+/* Nan Service Based control Flags */
+
+/* If set, dev will take care of dp_resp */
+#define WL_NAN_SVC_CTRL_AUTO_DPRESP               0x1000000
+
+/* If set, host wont rec event "receive" */
+#define WL_NAN_SVC_CTRL_SUPPRESS_EVT_RECEIVE      0x2000000
+
+/* If set, host wont rec event "replied" */
+#define WL_NAN_SVC_CTRL_SUPPRESS_EVT_REPLIED      0x4000000
+
+/* If set, host wont rec event "terminated" */
+#define WL_NAN_SVC_CTRL_SUPPRESS_EVT_TERMINATED   0x8000000
+
+/*
+ * WL_NAN_CMD_SD_PARAMS
+ */
+typedef struct wl_nan_sd_params
+{
+	uint16	length; /* length including options */
+	uint8	period; /* period of the unsolicited SDF xmission in DWs */
+	uint8   awake_dw; /* interval between two DWs where SDF tx/rx are done */
+	uint8	svc_hash[WL_NAN_SVC_HASH_LEN]; /* Hash for the service name */
+	uint8	instance_id; /* Instance of the current service */
+	int8	proximity_rssi; /* RSSI limit to Rx subscribe or pub SDF 0 no effect */
+	uint32	flags; /* bitmap representing aforesaid optional flags */
+	int32	ttl; /* TTL for this instance id, -1 will run till cancelled */
+	tlv_t	optional[1]; /* optional fields in the SDF  as appropriate */
+} wl_nan_sd_params_t;
+
+/*
+ * WL_NAN_CMD_SD_PUBLISH_LIST
+ * WL_NAN_CMD_SD_SUBSCRIBE_LIST
+ */
+typedef struct wl_nan_service_info
+{
+	uint8 instance_id;	/* Publish instance ID */
+	uint8 service_hash[WL_NAN_SVC_HASH_LEN]; /* Hash for service name */
+} wl_nan_service_info_t;
+
+typedef struct wl_nan_service_list
+{
+	uint16 id_count; /* Number of registered publish/subscribe services */
+	wl_nan_service_info_t list[1]; /* service info defined by nan_service instance */
+} wl_nan_service_list_t;
+
+/*
+ * WL_NAN_CMD_CFG_BCN_INTERVAL
+ */
+typedef uint16 wl_nan_disc_bcn_interval_t;
+
+/*
+ * WL_NAN_CMD_CFG_SDF_TXTIME
+ */
+typedef uint16 wl_nan_svc_disc_txtime_t;
+
+/*
+ * WL_NAN_CMD_CFG_STOP_BCN_TX
+ */
+typedef uint16 wl_nan_stop_bcn_tx_t;
+
+/*
+ * WL_NAN_CMD_CFG_SID_BEACON
+ */
+typedef struct wl_nan_sid_beacon_control {
+	uint8 sid_enable;	/* Flag to indicate the inclusion of Service IDs in Beacons */
+	uint8 sid_count;	/* Limit for number of publish SIDs to be included in Beacons */
+	uint8 sub_sid_count;	/* Limit for number of subscribe SIDs to be included in Beacons */
+	uint8 pad;
+} wl_nan_sid_beacon_control_t;
+
+/*
+ * WL_NAN_CMD_CFG_DW_LEN
+ */
+typedef uint16 wl_nan_dw_len_t;
+
+/*
+ * WL_NAN_CMD_CFG_AWAKE_DW   Will be deprecated.
+ */
+typedef struct wl_nan_awake_dw {
+	wl_nan_band_t band;	/* 0 - b mode 1- a mode */
+	uint8 interval;		/* 1 or 2 or 4 or 8 or 16 */
+	uint16 pad;
+} wl_nan_awake_dw_t;
+
+/*
+ * WL_NAN_CMD_CFG_AWAKE_DWS
+ */
+typedef struct wl_nan_awake_dws {
+	uint8 dw_interval_2g;	/* 2G DW interval */
+	uint8 dw_interval_5g;	/* 5G DW interval */
+	uint16 pad;
+} wl_nan_awake_dws_t;
+
+/* WL_NAN_CMD_SYNC_BCN_RSSI_NOTIF_THRESHOLD */
+
+typedef struct wl_nan_rssi_notif_thld {
+	int8 bcn_rssi_2g;
+	int8 bcn_rssi_5g;
+	int16 pad;
+} wl_nan_rssi_notif_thld_t;
+
+/*
+ * WL_NAN_CMD_CFG_SOCIAL_CHAN
+ */
+typedef struct wl_nan_social_channels {
+	uint8 soc_chan_2g;	/* 2G social channel */
+	uint8 soc_chan_5g;	/* 5G social channel */
+	uint16 pad;
+} wl_nan_social_channels_t;
+
+/*
+ * WL_NAN_CMD_SD_CANCEL_PUBLISH
+ * WL_NAN_CMD_SD_CANCEL_SUBSCRIBE
+ */
+typedef uint8 wl_nan_instance_id; /* Instance ID of an active publish instance */
+
+/*
+ * WL_NAN_CMD_SD_VND_INFO
+ */
+typedef struct wl_nan_sd_vendor_info
+{
+	uint16 length; /* Size in bytes of the payload following this field */
+	uint8 data[];	/* Vendor Information */
+} wl_nan_sd_vendor_info_t;
+
+/*
+ * WL_NAN_CMD_SD_STATS
+ */
+typedef struct wl_nan_sd_stats {
+	uint32  sdftx;
+	uint32  sdfrx;
+	uint32  sdsrffail;
+	uint32  sdrejrssi;
+	uint32  sdfollowuprx;
+	uint32  sdsubmatch;
+	uint32  sdpubreplied;
+	uint32  sdmftfail1;
+	uint32  sdmftfail2;
+	uint32  sdmftfail3;
+	uint32  sdmftfail4;
+}  wl_nan_sd_stats_t;
+
+/* Flag bits for sd transmit message (wl_nan_sd_transmit_t flags) */
+
+/* If set, host wont rec "tx status" event for tx-followup msg */
+#define WL_NAN_FUP_SUPR_EVT_TXS      0x01
+/* more flags can be added here */
+
+/*
+ * WL_NAN_CMD_SD_TRANSMIT
+ * WL_NAN_CMD_SD_FUP_TRANSMIT
+ */
+typedef struct wl_nan_sd_transmit {
+	uint8	local_service_id;		/* Sender Service ID */
+	uint8	requestor_service_id;		/* Destination Service ID */
+	struct ether_addr destination_addr;	/* Destination MAC */
+	uint16	token;				/* follow_up_token when a follow-up
+						 * msg is queued successfully
+						 */
+	uint8	priority;			/* requested relative prio */
+	uint8	flags;                          /* Flags for tx follow-up msg */
+	uint16	opt_len;			/* total length of optional tlvs */
+	uint8	opt_tlv[];			/* optional tlvs in bcm_xtlv_t type */
+} wl_nan_sd_transmit_t;
+
+/* disc cache timeout for a cache entry */
+typedef uint16 wl_nan_disc_cache_timeout_t;
+
+/*
+ * WL_NAN_CMD_SYNC_TSRESERVE
+ */
+/** time slot */
+#define NAN_MAX_TIMESLOT	32
+typedef struct wl_nan_timeslot {
+	uint32	abitmap; /**< available bitmap */
+	uint32 chanlist[NAN_MAX_TIMESLOT];
+} wl_nan_timeslot_t;
+
+/*
+ * Deprecated
+ *
+ * WL_NAN_CMD_SYNC_TSRELEASE
+ */
+typedef uint32 wl_nan_ts_bitmap_t;
+
+/* nan passive scan params */
+#define NAN_SCAN_MAX_CHCNT 8
+/* nan merge scan params */
+typedef struct wl_nan_scan_params {
+	/* dwell time of discovery channel corresponds to band_idx.
+	 * If set to 0 then fw default will be used.
+	 */
+	uint16 dwell_time;
+	/* scan period of  discovery channel corresponds to band_idx.
+	 * If set to 0 then fw default will be used.
+	 */
+	uint16 scan_period;
+	/* band index of discovery channel */
+	uint8 band_index;
+} wl_nan_scan_params_t;
+
+/*
+ * WL_NAN_CMD_DBG_SCAN
+ */
+typedef struct wl_nan_dbg_scan {
+	struct ether_addr cid;
+	uint8 pad[2];
+} wl_nan_dbg_scan_t;
+
+/* NAN_DBG_LEVEL */
+typedef struct wl_nan_dbg_level {
+	uint32 nan_err_level; /* for Error levels */
+	uint32 nan_dbg_level; /* for bebug logs and trace */
+	uint32 nan_info_level; /* for dumps like prhex */
+} wl_nan_dbg_level_t;
+
+/*
+ * WL_NAN_CMD_DBG_EVENT_MASK
+ */
+typedef uint32 wl_nan_event_mask_t;
+
+/*
+ * WL_NAN_CMD_DBG_EVENT_CHECK
+ */
+typedef uint8 wl_nan_dbg_ifname[BCM_MSG_IFNAME_MAX];
+
+/*
+ * WL_NAN_CMD_DBG_DUMP
+ * WL_NAN_CMD_DBG_CLEAR
+ */
+enum wl_nan_dbg_dump_type {
+	WL_NAN_DBG_DT_RSSI_DATA = 1,
+	WL_NAN_DBG_DT_STATS_DATA = 2,
+	/*
+	 * Additional enums before this line
+	 */
+	WL_NAN_DBG_DT_INVALID
+};
+typedef int8 wl_nan_dbg_dump_type_t;
+
+/** various params and ctl swithce for nan_debug instance  */
+/*
+ * WL_NAN_CMD_DBG_DEBUG
+ */
+typedef struct wl_nan_debug_params {
+	uint16	cmd;	/**< debug cmd to perform a debug action */
+	uint16	status;
+	uint32	msglevel; /**< msg level if enabled */
+	uint8	enabled; /**< runtime debuging enabled */
+	uint8 collect;
+	uint8 PAD[2];
+} wl_nan_debug_params_t;
+
+typedef struct wl_nan_sched_svc_timeslot_s {
+	uint32 abitmap; /* availability bitmap */
+	uint32 chanlist[NAN_MAX_TIMESLOT];
+	uint8  res; /* resolution: 0 = 16ms, 1 = 32ms, 2 = 64ms 3 = reserved. REfer NAN spec */
+	uint8  mapid; /* mapid from NAN spec. Used to differentiate 2G Vs 5G band */
+	uint8 PAD[2];
+} wl_nan_sched_svc_timeslot_t;
+
+/*
+ * WL_NAN_CMD_DATA_DP_IDLE_PERIOD
+ */
+typedef uint16 wl_nan_ndp_idle_period_t;
+
+/*
+ * WL_NAN_CMD_DATA_DP_HB_DURATION
+ */
+typedef uint16 wl_nan_ndp_hb_duration_t;
+
+/* nan cmd IDs */
+enum wl_nan_cmds {
+	 /* nan cfg /disc & dbg ioctls */
+	WL_NAN_CMD_ENABLE = 1,
+	WL_NAN_CMD_ATTR = 2,
+	WL_NAN_CMD_NAN_JOIN = 3,
+	WL_NAN_CMD_LEAVE = 4,
+	WL_NAN_CMD_MERGE = 5,
+	WL_NAN_CMD_STATUS = 6,
+	WL_NAN_CMD_TSRESERVE = 7,
+	WL_NAN_CMD_TSSCHEDULE = 8,
+	WL_NAN_CMD_TSRELEASE = 9,
+	WL_NAN_CMD_OUI = 10,
+	WL_NAN_CMD_OOB_AF = 11,
+	WL_NAN_CMD_SCAN_PARAMS = 12,
+
+	WL_NAN_CMD_COUNT = 15,
+	WL_NAN_CMD_CLEARCOUNT = 16,
+
+	/*  discovery engine commands */
+	WL_NAN_CMD_PUBLISH = 20,
+	WL_NAN_CMD_SUBSCRIBE = 21,
+	WL_NAN_CMD_CANCEL_PUBLISH = 22,
+	WL_NAN_CMD_CANCEL_SUBSCRIBE = 23,
+	WL_NAN_CMD_TRANSMIT = 24,
+	WL_NAN_CMD_CONNECTION = 25,
+	WL_NAN_CMD_SHOW = 26,
+	WL_NAN_CMD_STOP = 27,	/* stop nan for a given cluster ID  */
+	/*  nan debug iovars & cmds  */
+	WL_NAN_CMD_SCAN = 47,
+	WL_NAN_CMD_SCAN_RESULTS = 48,
+	WL_NAN_CMD_EVENT_MASK = 49,
+	WL_NAN_CMD_EVENT_CHECK = 50,
+	WL_NAN_CMD_DUMP = 51,
+	WL_NAN_CMD_CLEAR = 52,
+	WL_NAN_CMD_RSSI = 53,
+
+	WL_NAN_CMD_DEBUG = 60,
+	WL_NAN_CMD_TEST1 = 61,
+	WL_NAN_CMD_TEST2 = 62,
+	WL_NAN_CMD_TEST3 = 63,
+	WL_NAN_CMD_DISC_RESULTS = 64,
+	/* nan 2.0 data path commands */
+	WL_NAN_CMD_DATAPATH = 65
+};
+
+/*   NAN DP interface commands  */
+enum wl_nan_dp_cmds {
+	/* nan 2.0 ioctls */
+	WL_NAN_CMD_DP_CAP = 1000,
+	WL_NAN_CMD_DP_CONFIG = 1001,
+	WL_NAN_CMD_DP_CREATE = 1002,
+	WL_NAN_CMD_DP_AUTO_CONNECT = 1003,
+	WL_NAN_CMD_DP_DATA_REQ = 1004,
+	WL_NAN_CMD_DP_DATA_RESP = 1005,
+	WL_NAN_CMD_DP_SCHED_UPD = 1006,
+	WL_NAN_CMD_DP_END = 1007,
+	WL_NAN_CMD_DP_CONNECT = 1008,
+	WL_NAN_CMD_DP_STATUS = 1009
+};
+
+/* TODO Should remove this fixed length */
+#define WL_NAN_DATA_SVC_SPEC_INFO_LEN 32 /* arbitrary */
+#define WL_NAN_DP_MAX_SVC_INFO	      0xFF
+#define WL_NAN_DATA_NDP_INST_SUPPORT 16
+
+/* Nan flags (16 bits) */
+#define WL_NAN_DP_FLAG_SVC_INFO		0x0001
+#define WL_NAN_DP_FLAG_CONFIRM		0x0002
+#define WL_NAN_DP_FLAG_EXPLICIT_CFM	0x0004
+#define WL_NAN_DP_FLAG_SECURITY		0x0008
+#define WL_NAN_DP_FLAG_HAST_NDL_COUNTER	0x0010 /* Host assisted NDL counter */
+
+/* NAN Datapath host status */
+#define WL_NAN_DP_STATUS_ACCEPTED     1
+#define WL_NAN_DP_STATUS_REJECTED     0
+
+/* to be done */
+typedef struct wl_nan_dp_cap {
+	uint8 tbd;
+} wl_nan_dp_cap_t;
+
+/** The service hash (service id) is exactly this many bytes. */
+#define WL_NAN_SVC_HASH_LEN	6
+/** Number of hash functions per bloom filter */
+#define WL_NAN_HASHES_PER_BLOOM 4
+/* no. of max last disc results */
+#define WL_NAN_MAX_DISC_RESULTS	3
+
+/* NAN security related defines */
+/* NCS-SK related */
+#define WL_NAN_NCS_SK_PMK_LEN	32
+#define WL_NAN_NCS_SK_PMKID_LEN	16
+
+/* recent discovery results */
+typedef struct wl_nan_disc_result_s
+{
+	wl_nan_instance_id_t instance_id;	/* instance id of pub/sub req */
+	wl_nan_instance_id_t peer_instance_id;	/* peer instance id of pub/sub req/resp */
+	uint8 svc_hash[WL_NAN_SVC_HASH_LEN];	/* service descp string */
+	struct ether_addr peer_mac;	/* peer mac address */
+} wl_nan_disc_result_t;
+
+/* list of recent discovery results */
+typedef struct wl_nan_disc_results_s
+{
+	wl_nan_disc_result_t disc_result[WL_NAN_MAX_DISC_RESULTS];
+} wl_nan_disc_results_list_t;
+
+/* nan 1.0 events */
+/* To be deprecated - will be replaced by event_disc_result */
+typedef struct wl_nan_ev_disc_result {
+	wl_nan_instance_id_t pub_id;
+	wl_nan_instance_id_t sub_id;
+	struct ether_addr pub_mac;
+	uint8 opt_tlvs[0];
+} wl_nan_ev_disc_result_t;
+
+typedef struct wl_nan_event_disc_result {
+	wl_nan_instance_id_t pub_id;
+	wl_nan_instance_id_t sub_id;
+	struct ether_addr pub_mac;
+	int8		publish_rssi;		/* publisher RSSI */
+	uint8		attr_num;
+	uint16		attr_list_len;	/* length of the all the attributes in the SDF */
+	uint8		attr_list[0];	/* list of NAN attributes */
+} wl_nan_event_disc_result_t;
+
+typedef struct wl_nan_ev_p2p_avail {
+	struct ether_addr sender;
+	struct ether_addr p2p_dev_addr;
+	uint8 dev_role;
+	uint8 resolution;
+	uint8 repeat;
+	uint8 pad[3];
+	chanspec_t chanspec;
+	uint32 avail_bmap;
+} wl_nan_ev_p2p_avail_t;
+
+/*
+* discovery interface event structures *
+*/
+
+enum wl_nan_oob_af_flags {
+	WL_NAN_OOB_AF_FLAG_SEND_EVENT	= 0x0001, /* send tx status event */
+	WL_NAN_OOB_AF_FLAG_FLUSH_PCB	= 0x0002, /* flush PCB */
+	WL_NAN_OOB_AF_FLAG_ADD_DCAP	= 0x0004, /* add dev cap attr into NAF body */
+	WL_NAN_OOB_AF_FLAG_ADD_ELMT	= 0x0008, /* add elmt container attr into NAF body */
+	WL_NAN_OOB_AF_FLAG_MFP_REQUIRED	= 0x0010  /* MFP required */
+};
+typedef uint16 wl_nan_oob_af_flags_t;
+
+/* mandatory parameters for OOB action frame */
+typedef struct wl_nan_oob_af_params_s
+{
+	uint8 fup_lcl_id;	/* local instance ID of follow-up SDF */
+	uint8 fup_peer_id;	/* peer instance ID of follow-up SDF */
+	uint8 sdf_type;		/* represented by service control type NAN_SC_XXX */
+	uint8 unused_uint8;
+	uint32 unused_uint32;
+	struct ether_addr bssid;
+	struct ether_addr dest;
+	uint32 pkt_lifetime;
+	uint8 n2af_sub_type;	/* NAN2 AF sub type */
+	uint8 retry_cnt;	/* NAF tx retry (not 802.11 re-tx) */
+	uint16 token;		/* NAN host seq num */
+	uint16 flags;		/* wl_nan_oob_af_flags_t */
+	uint32 fsm_id;		/* unique fsm id */
+	uint16 payload_len;
+	uint8 payload[1];
+} wl_nan_oob_af_params_t;
+
+/* NAN Ranging */
+
+/* Bit defines for global flags */
+#define WL_NAN_RANGING_ENABLE		1 /**< enable RTT */
+#define WL_NAN_RANGING_RANGED		2 /**< Report to host if ranged as target */
+typedef struct nan_ranging_config {
+	uint32 chanspec;		/**< Ranging chanspec */
+	uint16 timeslot;		/**< NAN RTT start time slot  1-511 */
+	uint16 duration;		/**< NAN RTT duration in ms */
+	struct ether_addr allow_mac;	/**< peer initiated ranging: the allowed peer mac
+					 * address, a unicast (for one peer) or
+					 * a broadcast for all. Setting it to all zeros
+					 * means responding to none,same as not setting
+					 * the flag bit NAN_RANGING_RESPOND
+					 */
+	uint16 flags;
+} wl_nan_ranging_config_t;
+
+/** list of peers for self initiated ranging */
+/** Bit defines for per peer flags */
+#define WL_NAN_RANGING_REPORT (1<<0)	/**< Enable reporting range to target */
+typedef struct nan_ranging_peer {
+	uint32 chanspec;		/**< desired chanspec for this peer */
+	uint32 abitmap;			/**< available bitmap */
+	struct ether_addr ea;		/**< peer MAC address */
+	uint8 frmcnt;			/**< frame count */
+	uint8 retrycnt;			/**< retry count */
+	uint16 flags;			/**< per peer flags, report or not */
+	uint16 PAD;
+} wl_nan_ranging_peer_t;
+typedef struct nan_ranging_list {
+	uint8 count;			/**< number of MAC addresses */
+	uint8 num_peers_done;		/**< host set to 0, when read, shows number of peers
+					 * completed, success or fail
+					 */
+	uint8 num_dws;			/**< time period to do the ranging, specified in dws */
+	uint8 reserve;			/**< reserved field */
+	wl_nan_ranging_peer_t rp[1];	/**< variable length array of peers */
+} wl_nan_ranging_list_t;
+
+/* ranging results, a list for self initiated ranging and one for peer initiated ranging */
+/* There will be one structure for each peer */
+#define WL_NAN_RANGING_STATUS_SUCCESS		1
+#define WL_NAN_RANGING_STATUS_FAIL		2
+#define WL_NAN_RANGING_STATUS_TIMEOUT		3
+#define WL_NAN_RANGING_STATUS_ABORT		4 /**< with partial results if sounding count > 0 */
+typedef struct nan_ranging_result {
+	uint8 status;			/**< 1: Success, 2: Fail 3: Timeout 4: Aborted */
+	uint8 sounding_count;		/**< number of measurements completed (0 = failure) */
+	struct ether_addr ea;		/**< initiator MAC address */
+	uint32 chanspec;		/**< Chanspec where the ranging was done */
+	uint32 timestamp;		/**< 32bits of the TSF timestamp ranging was completed at */
+	uint32 distance;		/**< mean distance in meters expressed as Q4 number.
+					 * Only valid when sounding_count > 0. Examples:
+					 * 0x08 = 0.5m
+					 * 0x10 = 1m
+					 * 0x18 = 1.5m
+					 * set to 0xffffffff to indicate invalid number
+					 */
+	int32 rtt_var;			/**< standard deviation in 10th of ns of RTTs measured.
+					 * Only valid when sounding_count > 0
+					 */
+	struct ether_addr tgtea;	/**< target MAC address */
+	uint8 PAD[2];
+} wl_nan_ranging_result_t;
+typedef struct nan_ranging_event_data {
+	uint8 mode;			/**< 1: Result of host initiated ranging */
+					/* 2: Result of peer initiated ranging */
+	uint8 reserved;
+	uint8 success_count;		/**< number of peers completed successfully */
+	uint8 count;			/**< number of peers in the list */
+	wl_nan_ranging_result_t rr[1];	/**< variable array of ranging peers */
+} wl_nan_ranging_event_data_t;
+
+enum {
+	WL_NAN_STATS_RSSI = 1,
+	WL_NAN_STATS_DATA = 2,
+	WL_NAN_STATS_DP = 3,
+/*
+ * ***** ADD before this line ****
+ */
+	WL_NAN_STATS_INVALID
+};
+typedef struct wl_nan_dp_stats {
+	uint32 tbd; /* TBD */
+} wl_nan_dp_stats_t;
+
+typedef struct wl_nan_stats {
+	/* general */
+	uint32 cnt_dw; /* DW slots */
+	uint32 cnt_disc_bcn_sch; /* disc beacon slots */
+	uint32 cnt_amr_exp; /* count of ambtt expiries resetting roles */
+	uint32 cnt_bcn_upd; /* count of beacon template updates */
+	uint32 cnt_bcn_tx; /* count of sync & disc bcn tx */
+	uint32 cnt_bcn_rx; /* count of sync & disc bcn rx */
+	uint32 cnt_sync_bcn_tx; /* count of sync bcn tx within DW */
+	uint32 cnt_disc_bcn_tx; /* count of disc bcn tx */
+	uint32 cnt_sdftx_bcmc; /* count of bcast/mcast sdf tx */
+	uint32 cnt_sdftx_uc; /* count of unicast sdf tx */
+	uint32 cnt_sdftx_fail; /* count of unicast sdf tx fails */
+	uint32 cnt_sdf_rx; /* count of  sdf rx */
+	/* NAN roles */
+	uint32 cnt_am; /* anchor master */
+	uint32 cnt_master; /* master */
+	uint32 cnt_nms; /* non master sync */
+	uint32 cnt_nmns; /* non master non sync */
+	/* TX */
+	uint32 cnt_err_txtime; /* txtime in sync bcn frame not a multiple of dw intv */
+	uint32 cnt_err_unsch_tx; /* tx while not in DW/ disc bcn slot */
+	uint32 cnt_err_bcn_tx; /*  beacon tx error */
+	uint32 cnt_sync_bcn_tx_miss; /* no. of times time delta between 2 cosequetive
+						* sync beacons is more than expected
+						*/
+	/* MSCH */
+	uint32 cnt_err_msch_reg; /* error is Dw/disc reg with msch */
+	uint32 cnt_err_wrong_ch_cb; /* count of msch calbacks in wrong channel */
+	uint32 cnt_dw_skip;	/* count of DW rejected */
+	uint32 cnt_disc_skip; /* count of disc bcn rejected */
+	uint32 cnt_dw_start_early; /* msch cb not at registered time */
+	uint32 cnt_dw_start_late; /* no. of delays in slot start */
+	/* SCANS */
+	uint32 cnt_mrg_scan; /* count of merge scans completed */
+	uint32 cnt_err_ms_rej; /* number of merge scan failed */
+	uint32 cnt_scan_results; /* no. of nan beacons scanned */
+	uint32 cnt_join_scan_rej; /* no. of join scans rejected */
+	uint32 cnt_nan_scan_abort; /* no. of join scans rejected */
+	/* enable/disable */
+	uint32 cnt_nan_enab; /* no. of times nan feature got enabled */
+	uint32 cnt_nan_disab; /* no. of times nan feature got disabled */
+	uint32 cnt_sync_bcn_rx; /* count of sync bcn rx within DW */
+	uint32 cnt_sync_bcn_rx_tu[3]; /* Delta bw the tsf in bcn & remote */
+	uint32 cnt_bcn_tx_out_dw;  /* TX sync beacon outside dw */
+	uint32 cnt_role_am_dw; /* anchor master role due to dw */
+	uint32 cnt_am_hop_err; /* wrong hopcount set for AM */
+} wl_nan_stats_t;
+
+#define WL_NAN_MAC_MAX_NAN_PEERS 6
+#define WL_NAN_MAC_MAX_RSSI_DATA_PER_PEER  10
+
+typedef struct wl_nan_nbr_rssi {
+	uint8 rx_chan; /* channel number on which bcn rcvd */
+	uint8 PAD[3];
+	int32 rssi_raw;  /* received rssi value */
+	int32 rssi_avg;  /* normalized rssi value */
+} wl_nan_peer_rssi_t;
+
+typedef struct wl_nan_peer_rssi_entry {
+	struct ether_addr mac;  /* peer mac address */
+	uint8 flags;   /* TODO:rssi data order: latest first, oldest first etc */
+	uint8 rssi_cnt;   /* rssi data sample present */
+	wl_nan_peer_rssi_t rssi[WL_NAN_MAC_MAX_RSSI_DATA_PER_PEER]; /* RSSI data frm peer */
+} wl_nan_peer_rssi_entry_t;
+
+#define WL_NAN_PEER_RSSI      0x1
+#define WL_NAN_PEER_RSSI_LIST 0x2
+
+typedef struct wl_nan_nbr_rssi_data {
+	uint8 flags;   /* this is a list or single rssi data */
+	uint8 peer_cnt; /* number of peers */
+	uint16 pad; /* padding */
+	wl_nan_peer_rssi_entry_t peers[1]; /* peers data list */
+} wl_nan_peer_rssi_data_t;
+
+/* WL_NAN_CMD_DBG_DUMP, GET Resp */
+typedef struct wl_nan_dbg_dump_rsp {
+	wl_nan_dbg_dump_type_t dump_type; /* dump data type */
+	uint8 pad[3];
+	union {
+		wl_nan_peer_rssi_data_t peer_rssi;
+		wl_nan_stats_t		nan_stats;
+	} u;
+} wl_nan_dbg_dump_rsp_t;
+
+enum nan_termination_status {
+	NAN_TERM_REASON_INVALID = 1,
+	NAN_TERM_REASON_TIMEOUT = 2,
+	NAN_TERM_REASON_USER_REQ = 3,
+	NAN_TERM_REASON_FAILURE = 4,
+	NAN_TERM_REASON_COUNT_REACHED = 5,
+	NAN_TERM_REASON_DE_SHUTDOWN = 6,
+	NAN_TERM_REASON_DISABLE_IN_PROGRESS = 7
+};
+
+/* nan2 data iovar */
+/* nan2 qos */
+typedef struct wl_nan_dp_qos
+{
+	uint8 tid;
+	uint8 pad;
+	uint16 pkt_size;
+	uint16 mean_rate;
+	uint16 svc_interval;
+} wl_nan_dp_qos_t;
+
+#define WL_NAN_NDL_QOS_MAX_LAT_NO_PREF 0xFFFF
+
+/* nan2 qos */
+typedef struct wl_nan_ndl_qos
+{
+	uint8 min_slots;	/* min slots per dw interval */
+	uint8 pad;
+	uint16 max_latency;	/* max latency */
+} wl_nan_ndl_qos_t;
+
+/* ndp config */
+typedef struct wl_nan_ndp_config
+{
+	uint8 ndp_id;
+	uint8 pub_id;
+	struct ether_addr pub_addr;
+	struct ether_addr data_addr;	/* configure local data addr */
+	struct ether_addr init_data_addr;	/* initiator data addr */
+	uint8 svc_spec_info[WL_NAN_DATA_SVC_SPEC_INFO_LEN];
+	wl_nan_dp_qos_t qos;
+	uint16 avail_len;
+	uint8 pad[3];
+	uint8 data[1];
+} wl_nan_ndp_config_t;
+
+/* nan2 device capabilities */
+typedef struct wl_nan_ndp_oper_cfg {
+	uint8 awake_dw_2g;
+	uint8 awake_dw_5g;
+	uint8 bands_supported;
+	uint8 op_mode;
+} wl_nan_ndp_oper_cfg_t;
+
+typedef uint8 wl_nan_ndp_ndpid_t;
+typedef uint8 wl_nan_ndp_conn_t;
+
+#define WL_NAN_INVALID_NDPID	0	/* reserved ndp id */
+
+typedef struct wl_nan_dp_req {
+	uint8 type;		    /* 0- unicast 1 - multicast */
+	uint8 pub_id;		    /* Publisher ID */
+	uint16 flags;
+	struct ether_addr peer_mac; /* Peer's NMI addr */
+	struct ether_addr mcast_mac; /* Multicast addr */
+	struct ether_addr ndi;
+	wl_nan_dp_qos_t qos;
+	wl_nan_ndl_qos_t ndl_qos;	/* ndl qos */
+	uint8 tlv_params[];	/* xtlv parameters for command */
+} wl_nan_dp_req_t;
+
+/* TODO  Need to replace ndp_id with lndp_id */
+/* Return structure to data req IOVAR */
+typedef struct wl_nan_dp_req_ret {
+	struct ether_addr indi;	    /* Initiators data mac addr */
+	uint8 ndp_id;		    /* Initiators ndpid */
+	uint8 pad;
+} wl_nan_dp_req_ret_t;
+
+typedef struct wl_nan_dp_resp {
+	uint8 type;		    /* 0- unicast 1 - multicast */
+	uint8 status;		    /* Accepted or Rejected */
+	uint8 reason_code;
+	/* Local NDP ID for unicast, mc_id for multicast, 0 for implicit NMSG */
+	uint8 ndp_id;	/* can be host indp id also */
+	wl_nan_dp_qos_t qos;
+	/* Initiator data address for unicast or multicast address for multicast */
+	struct ether_addr mac_addr;
+	struct ether_addr ndi;
+	uint16 flags;
+	wl_nan_ndl_qos_t ndl_qos;	/* ndl qos */
+	uint8 tlv_params[];	/* xtlv parameters for command */
+} wl_nan_dp_resp_t;
+
+/* Return structure to data resp IOVAR */
+typedef struct wl_nan_dp_resp_ret {
+	uint8 nmsgid;		    /* NMSG ID or for multicast else 0 */
+	uint8 pad[3];
+} wl_nan_dp_resp_ret_t;
+
+typedef struct wl_nan_dp_conf {
+	uint8 lndp_id;	/* can be host ndp id */
+	uint8 status;	/* Accepted or Rejected */
+	uint8 pad[2];
+} wl_nan_dp_conf_t;
+
+typedef struct wl_nan_dp_end
+{
+	uint8 lndp_id;	/* can be host ndp id */
+	uint8 status;
+	struct ether_addr mac_addr;	/* initiator's ndi */
+} wl_nan_dp_end_t;
+
+typedef struct wl_nan_dp_schedupd {
+	uint8 type;		/* 0: unicast, 1: multicast */
+	uint8 flags;
+	struct ether_addr addr;	/* peer NMI or multicast addr */
+	wl_nan_dp_qos_t qos;
+	wl_nan_ndl_qos_t ndl_qos;	/* ndl qos */
+	uint8 map_id;
+	uint8 pad;
+	uint16 hostseq;
+} wl_nan_dp_schedupd_t;
+
+/* set: update with notification, unset: NDL setup handshake */
+#define WL_NAN_DP_SCHEDUPD_NOTIF (1 << 0)
+
+/* list ndp ids */
+typedef struct wl_nan_ndp_id_list {
+	uint16 ndp_count;
+	uint8 lndp_id[];
+} wl_nan_ndp_id_list_t;
+
+/* nan2 status */
+typedef struct ndp_session {
+	uint8 lndp_id;
+	uint8 state;
+	uint8 pub_id;
+	uint8 pad;
+} ndp_session_t;
+
+typedef struct wl_nan_ndp_status {
+	struct ether_addr peer_nmi;
+	struct ether_addr peer_ndi;
+	ndp_session_t session;
+	struct ether_addr lndi;
+	uint8 pad[2];
+} wl_nan_ndp_status_t;
+
+#define NAN_DP_OPAQUE_INFO_DP_RESP 0x01
+#define NAN_DP_OPAQUE_INFO_DP_CONF 0x02
+
+typedef struct wl_nan_dp_opaque_info {
+	uint8 frm_mask;   /* dp_resp / dp_conf as defined above. */
+	struct ether_addr initiator_ndi;  /* NDI to match in the dp_req. */
+	uint8 pub_id;     /* publish id where the opaque data is included. */
+	uint8 len;        /* len of opaque_info[]. */
+	uint8 pad[3];
+	uint8 opaque_info[0];
+} wl_nan_dp_opaque_info_t;
+
+/* events */
+#define NAN_DP_SESSION_UNICAST         0
+#define NAN_DP_SESSION_MULTICAST       1
+#define NAN_DP_SECURITY_NONE           0
+#define NAN_DP_SECURITY_CSID           1
+#define NAN_DP_SECURITY_MK             2
+#define WL_NAN_DATA_NMSGID_LEN    8 /* 8 bytes as per nan spec */
+
+/* Common event structure for Nan Datapath
+ * Used for sending NDP Indication, Response, Confirmation, Securty Install and Establish events
+ */
+typedef struct wl_nan_ev_datapath_cmn {
+	uint8 type;
+	/* ndp_id is valid only if type is unicast */
+	uint8 ndp_id;
+	uint8 pub_id;
+	uint8 security;
+	/* Following two fields are valid only if type is unicast */
+	struct ether_addr initiator_ndi;
+	struct ether_addr responder_ndi;
+	struct ether_addr peer_nmi;
+	uint8 status;
+	uint8 role;
+	/* Following two fields are valid only if type is multicast */
+	uint8 nmsg_id[WL_NAN_DATA_NMSGID_LEN];
+	uint8 mc_id;
+	uint8 pad;
+	uint16 opt_tlv_len;
+	uint8 opt_tlvs[];
+} wl_nan_ev_datapath_cmn_t;
+
+/* this is obsolete - DON'T USE */
+typedef struct wl_nan_ev_datapath_end {
+	uint8 ndp_id;
+	uint8 status;
+	uint8 pad[2];
+	struct ether_addr peer_nmi;
+	struct ether_addr peer_ndi;
+} wl_nan_ev_datapath_end_t;
+
+typedef struct wl_tsf {
+	uint32 tsf_l;
+	uint32 tsf_h;
+} wl_tsf_t;
+
+typedef struct wl_nan_ev_rx_bcn {
+	wl_tsf_t tsf;
+	uint16   bcn_len;
+	uint8    pad[2];
+	uint8    bcn[0];
+} wl_nan_ev_rx_bcn_t;
+
+/* reason of host assist request */
+enum wl_nan_host_assist_reason {
+	WL_NAN_HAST_REASON_NONE		= 0,
+
+	/* reason for host assist request */
+	WL_NAN_HAST_REASON_NO_CRB		= 1, /* NDL: no common NA */
+	WL_NAN_HAST_REASON_NDC			= 2, /* NDL: NDC not compliant */
+	WL_NAN_HAST_REASON_IMMUT		= 3, /* NDL: peer immutable schedule */
+	WL_NAN_HAST_REASON_RNG			= 4, /* NDL: ranging schedule */
+	WL_NAN_HAST_REASON_QOS			= 5, /* NDL: QoS not satisfied */
+	WL_NAN_HAST_REASON_SVC_NDI_MISSING	= 6, /* SD: NDI associated with svc is missing */
+	WL_NAN_HAST_REASON_PEER_SCB_NORESOURCE	= 7  /* NDP: no more peer scb available */
+};
+typedef uint8 wl_nan_host_assist_reason_t;
+
+/* WL_NAN_XTLV_HOST_ASSIST_REQ */
+typedef struct wl_nan_host_assist_req {
+	struct ether_addr peer_nmi;		/* peer nmi */
+	struct ether_addr initiator_ndi;	/* initiator ndi */
+	uint8 indp_id;				/* initiator NDP ID */
+	wl_nan_frame_type_t frm_type;		/* received NAF type */
+	wl_nan_host_assist_reason_t reason;	/* reason of host assist request */
+	uint8 pub_id;				/* Publish ID (valid for WL_NAN_FRM_TYPE_DP_REQ) */
+	uint8 pad[2];
+} wl_nan_host_assist_req_t;
+
+/* nan sub-features */
+enum wl_nan_fw_cap_flag1 {
+	WL_NAN_FW_CAP_FLAG_NONE			= 0x00000000, /* dummy */
+	WL_NAN_FW_CAP_FLAG1_AVAIL		= 0x00000001,
+	WL_NAN_FW_CAP_FLAG1_DISC		= 0x00000002,
+	WL_NAN_FW_CAP_FLAG1_DATA		= 0x00000004,
+	WL_NAN_FW_CAP_FLAG1_SEC			= 0x00000008,
+	WL_NAN_FW_CAP_FLAG1_RANGE		= 0x00000010,
+	WL_NAN_FW_CAP_FLAG1_WFA_TB		= 0x00000020,
+	WL_NAN_FW_CAP_FLAG1_DAM			= 0x00000040,
+	WL_NAN_FW_CAP_FLAG1_DAM_STRICT		= 0x00000080,
+	WL_NAN_FW_CAP_FLAG1_DAM_AUTO		= 0x00000100,
+	WL_NAN_FW_CAP_FLAG1_DBG			= 0x00000200,
+	WL_NAN_FW_CAP_FLAG1_BCMC_IN_NDC		= 0x00000400,
+	WL_NAN_FW_CAP_FLAG1_CHSTATS		= 0x00000800,
+	WL_NAN_FW_CAP_FLAG1_ASSOC_COEX		= 0x00001000,
+	WL_NAN_FW_CAP_FLAG1_FASTDISC		= 0x00002000,
+	WL_NAN_FW_CAP_FLAG1_NO_ID_GEN		= 0x00004000,
+	WL_NAN_FW_CAP_FLAG1_DP_OPAQUE_DATA	= 0x00008000,
+	WL_NAN_FW_CAP_FLAG1_NSR2		= 0x00010000,
+	WL_NAN_FW_CAP_FLAG1_NSR2_SAVE		= 0x00020000,
+	WL_NAN_FW_CAP_FLAG1_NANHO		= 0x00040000
+};
+
+/* WL_NAN_XTLV_GEN_FW_CAP */
+typedef struct wl_nan_fw_cap {
+	uint32 flags1;                  /* nan sub-features compiled in firmware */
+	uint32 flags2;                  /* for more sub-features in future */
+	uint8  max_svc_publishes;        /* max num of service publish */
+	uint8  max_svc_subscribes;       /* max num of service subscribe */
+	uint8  max_lcl_sched_maps;       /* max num of local schedule map */
+	uint8  max_lcl_ndc_entries;      /* max num of local NDC entry */
+	uint8  max_lcl_ndi_interfaces;   /* max num of local NDI interface */
+	uint8  max_peer_entries;         /* max num of peer entry */
+	uint8  max_ndp_sessions;         /* max num of NDP session */
+	uint8  max_concurrent_nan_clusters; /* max num of concurrent clusters */
+	uint16 max_service_name_len; /* max service name length */
+	uint16 max_match_filter_len; /* max match filter length */
+	uint16 max_total_match_filter_len; /* max total match filter length */
+	uint16 max_service_specific_info_len; /* max service specific info length */
+	uint16 max_vsa_data_len; /* max vendor specific attrib data length */
+	uint16 max_mesh_data_len; /* max mesh data length */
+	uint16 max_app_info_len; /* max app info length */
+	uint16 max_sdea_svc_specific_info_len; /* max sdea ser specific info length */
+	uint8  max_queued_tx_followup_msgs; /* max no. of queued tx followup msgs */
+	uint8  max_subscribe_address; /* max subscribe addresses supported */
+	uint8  ndp_supported_bands; /* number of ndp supported bands */
+	uint8  is_ndp_security_supported; /* if secure ndp is supported */
+	uint8  cipher_suites_supported_mask; /* bitmask for suites supported */
+	uint8  pad[3];
+} wl_nan_fw_cap_t;
+
+/* WL_NAN_XTLV_GEN_FW_CAP_V2 */
+typedef struct wl_nan_fw_cap_v2 {
+	uint32 flags1;			/* nan sub-features compiled in firmware */
+	uint32 flags2;			/* for more sub-features in future */
+	uint8  max_svc_publishes;	/* max num of service publish */
+	uint8  max_svc_subscribes;	/* max num of service subscribe */
+	uint8  max_lcl_sched_maps;	/* max num of local schedule map */
+	uint8  max_lcl_ndc_entries;	/* max num of local NDC entry */
+	uint8  max_lcl_ndi_interfaces;	/* max num of local NDI interface */
+	uint8  max_peer_entries;	/* max num of peer entry */
+	uint8  max_peer_sched_maps;	/* max num of peer schedule maps */
+	uint8  max_ndp_sessions;	/* max num of NDP session */
+	uint32 cipher_suites_supported_mask; /* bitmask for supported cipher suites */
+	uint32 reserved_uint32_1;	/* reserved for future sub-features */
+	uint32 reserved_uint32_2;	/* reserved for future sub-features */
+	uint32 reserved_uint32_3;	/* reserved for future sub-features */
+	uint32 reserved_uint32_4;	/* reserved for future sub-features */
+} wl_nan_fw_cap_v2_t;
+
+/* nan cipher suite support mask bits */
+#define WL_NAN_CIPHER_SUITE_SHARED_KEY_128_MASK  0x01
+#define WL_NAN_CIPHER_SUITE_SHARED_KEY_256_MASK  0x02
+
+/* NAN Save Restore */
+#define WL_NAN_NSR2_INFO_MAX_SIZE	2048 /* arbitrary */
+
+/* WL_NAN_XTLV_NSR2_PEER */
+typedef struct wl_nan_nsr_peer_info {
+	struct ether_addr nmi;
+	uint8 l_min_slots;	/* local QoS min slots */
+	uint8 p_min_slots;	/* peer QoS min slots */
+	uint16 l_max_latency;	/* local QoS max latency */
+	uint16 p_max_latency;	/* peer QoS max latency */
+	uint8 num_map;		/* num of NA map */
+	uint8 pad;
+	uint16 attrs_len;	/* total len of following attrs */
+	uint8 attrs[];		/* peer attributes (NA/NDC/ULW/DevCap/Element container) */
+} wl_nan_nsr_peer_info_t;
+
+enum wl_nan_nsr_ndp_flag {
+	WL_NAN_NSR_NDP_FLAG_LCL_INITATOR	= 0x0001,
+	WL_NAN_NSR_NDP_FLAG_MCAST		= 0x0002
+};
+typedef uint16 wl_nan_nsr_ndp_flag_t;
+
+/* WL_NAN_XTLV_NSR2_NDP */
+typedef struct wl_nan_nsr_ndp_info {
+	struct ether_addr peer_nmi;
+	struct ether_addr peer_ndi;
+	struct ether_addr lcl_ndi;
+	uint16 flags;		/* wl_nan_nsr_ndp_flag_t */
+	uint8 pub_id;		/* publish id */
+	uint8 indp_id;		/* initiator's ndp id */
+	uint8 last_token;	/* last NDP dialog token */
+	uint8 pad;
+} wl_nan_nsr_ndp_info_t;
