@@ -20730,4 +20730,22 @@ enum wl_soe_status {
 
 #define NR5GCX_STATUS_VER_1 1
 /* NR coex status structures */
+typedef struct wlc_nr5gcx_status_v1 {
+	uint16 version;			/* version info */
+	uint16 len;			/* status length */
+	uint32 mode;			/* NR coex status */
+	uint32 nr_req_cnt;		/* NR req number since last read */
+	uint32 nr_dur;			/* NR duration since last read, us */
+	uint32 nr_duty_cycle;		/* NR duty cycle since last read */
+	uint32 nr_max_dur;		/* NR max duration in a single request */
+	uint32 wlan_crit_cnt;		/* aggregated # of WLAN critical events */
+	uint32 wlan_crit_dur;		/* aggregated WLAN critical event duration, ms */
+	uint32 wlan_crit_max_dur;	/* Duration of the WLAN critical events whose dur is max */
+	uint16 wlan_crit_evt_bitmap;	/* WLAN critical event occurrence bitmap,
+					* 1 event per bit.
+					*/
+	uint16 wlan_crit_max_evt_type;	/* The event type of the WLAN critical
+					* event whose dur is max
+					*/
+} wlc_nr5gcx_status_v1_t;
 #endif /* _wlioctl_h_ */
