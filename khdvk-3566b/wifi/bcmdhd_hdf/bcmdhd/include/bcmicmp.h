@@ -1,7 +1,7 @@
 /*
  * Fundamental constants relating to ICMP Protocol
  *
- * Copyright (C) 1999-2019, Broadcom.
+ * Copyright (C) 2022 Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -57,6 +57,7 @@
 #define ICMP6_NEIGH_SOLICITATION	135
 #define ICMP6_NEIGH_ADVERTISEMENT	136
 #define ICMP6_REDIRECT			137
+
 #define ICMP6_RTRSOL_OPT_OFFSET		8
 #define ICMP6_RTRADV_OPT_OFFSET		16
 #define ICMP6_NEIGHSOL_OPT_OFFSET	24
@@ -84,4 +85,5 @@ BWL_PRE_PACKED_STRUCT struct bcmicmp_hdr {
 
 /* This marks the end of a packed structure section. */
 #include <packed_section_end.h>
+
 #endif	/* #ifndef _bcmicmp_h_ */
