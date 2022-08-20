@@ -1,9 +1,6 @@
 /*
- * hdf_mac80211_sta_event.h
  *
- * hdf driver
- *
- * Copyright (c) 2022 Shenzhen KaiHong Digital Industry Development Co., Ltd.
+ * Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
