@@ -1195,6 +1195,234 @@ pktq_flush(osl_t *osh, struct pktq *pq, bool dir)
 	}
 }
 
+/* Return sum of lengths of a specific set of precedences */
+int
+pktq_mlen(struct pktq *pq, uint prec_bmp)
+{
+	int prec, len;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return 0;
+
+	len = 0;
+
+	for (prec = 0; prec <= pq->hi_prec; prec++)
+		if (prec_bmp & (1 << prec))
+			len += pq->q[prec].n_pkts;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return 0;
+
+	return len;
+}
+
+/* Priority peek from a specific set of precedences */
+void * BCMFASTPATH
+pktq_mpeek(struct pktq *pq, uint prec_bmp, int *prec_out)
+{
+	struct pktq_prec *q;
+	void *p = NULL;
+	int prec;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return NULL;
+
+	if (pq->n_pkts_tot == 0)
+		goto done;
+
+	while ((prec = pq->hi_prec) > 0 && pq->q[prec].head == NULL)
+		pq->hi_prec--;
+
+	while ((prec_bmp & (1 << prec)) == 0 || pq->q[prec].head == NULL)
+		if (prec-- == 0)
+			goto done;
+
+	q = &pq->q[prec];
+
+	if ((p = q->head) == NULL)
+		goto done;
+
+	if (prec_out)
+		*prec_out = prec;
+
+done:
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return NULL;
+
+	return p;
+}
+/* Priority dequeue from a specific set of precedences */
+void * BCMFASTPATH
+pktq_mdeq(struct pktq *pq, uint prec_bmp, int *prec_out)
+{
+	struct pktq_prec *q;
+	void *p = NULL;
+	int prec;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return NULL;
+
+	if (pq->n_pkts_tot == 0)
+		goto done;
+
+	while ((prec = pq->hi_prec) > 0 && pq->q[prec].head == NULL)
+		pq->hi_prec--;
+
+	while ((pq->q[prec].head == NULL) || ((prec_bmp & (1 << prec)) == 0))
+		if (prec-- == 0)
+			goto done;
+
+	q = &pq->q[prec];
+
+	if ((p = q->head) == NULL)
+		goto done;
+
+	if ((q->head = PKTLINK(p)) == NULL)
+		q->tail = NULL;
+
+	q->n_pkts--;
+
+	// terence 20150308: fix for non-null pointer of skb->prev sent from ndo_start_xmit
+	if (q->n_pkts == 0) {
+		q->head = NULL;
+		q->tail = NULL;
+	}
+
+#ifdef WL_TXQ_STALL
+	q->dequeue_count++;
+#endif // endif
+
+	if (prec_out)
+		*prec_out = prec;
+
+	pq->n_pkts_tot--;
+
+	PKTSETLINK(p, NULL);
+
+done:
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return NULL;
+
+	return p;
+}
+
+#ifdef HND_PKTQ_THREAD_SAFE
+int
+pktqprec_avail_pkts(struct pktq *pq, int prec)
+{
+	int ret;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return 0;
+
+	ASSERT(prec >= 0 && prec < pq->num_prec);
+
+	ret = pq->q[prec].max_pkts - pq->q[prec].n_pkts;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return 0;
+
+	return ret;
+}
+
+bool
+pktqprec_full(struct pktq *pq, int prec)
+{
+	bool ret;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return FALSE;
+
+	ASSERT(prec >= 0 && prec < pq->num_prec);
+
+	ret = pq->q[prec].n_pkts >= pq->q[prec].max_pkts;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return FALSE;
+
+	return ret;
+}
+
+int
+pktq_avail(struct pktq *pq)
+{
+	int ret;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return 0;
+
+	ret = pq->max_pkts - pq->n_pkts_tot;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return 0;
+
+	return ret;
+}
+
+int
+spktq_avail(struct spktq *spq)
+{
+	int ret;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&spq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return 0;
+
+	ret = spq->q.max_pkts - spq->q.n_pkts;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&spq->mutex) != OSL_EXT_SUCCESS)
+		return 0;
+
+	return ret;
+}
+
+bool
+pktq_full(struct pktq *pq)
+{
+	bool ret;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&pq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return FALSE;
+
+	ret = pq->n_pkts_tot >= pq->max_pkts;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&pq->mutex) != OSL_EXT_SUCCESS)
+		return FALSE;
+
+	return ret;
+}
+
+bool
+spktq_full(struct spktq *spq)
+{
+	bool ret;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_ACQUIRE(&spq->mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
+		return FALSE;
+
+	ret = spq->q.n_pkts >= spq->q.max_pkts;
+
+	/* protect shared resource */
+	if (HND_PKTQ_MUTEX_RELEASE(&spq->mutex) != OSL_EXT_SUCCESS)
+		return FALSE;
+
+	return ret;
 }
 
 #endif	/* HND_PKTQ_THREAD_SAFE */
