@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Shenzhen KaiHong Digital Industry Development Co., Ltd.
+ * Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
