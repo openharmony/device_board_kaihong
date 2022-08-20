@@ -1703,3 +1703,396 @@ static uint32 last_axi_error_core = 0;
 static uint32 last_axi_error_wrap = 0;
 #endif /* ETD */
 
+/*
+ * API to clear the back plane timeout per core.
+ * Caller may passs optional wrapper address. If present this will be used as
+ * the wrapper base address. If wrapper base address is provided then caller
+ * must provide the coreid also.
+ * If both coreid and wrapper is zero, then err status of current bridge
+ * will be verified.
+ */
+uint32
+ai_clear_backplane_to_per_core(si_t *sih, uint coreid, uint coreunit, void *wrap)
+{
+	int ret = AXI_WRAP_STS_NONE;
+	aidmp_t *ai = NULL;
+	uint32 errlog_status = 0;
+	si_info_t *sii = SI_INFO(sih);
+	uint32 errlog_lo = 0, errlog_hi = 0, errlog_id = 0, errlog_flags = 0;
+	uint32 current_coreidx = si_coreidx(sih);
+	uint32 target_coreidx = si_findcoreidx(sih, coreid, coreunit);
+
+#if defined(BCM_BACKPLANE_TIMEOUT)
+	si_axi_error_t * axi_error = sih->err_info ?
+		&sih->err_info->axi_error[sih->err_info->count] : NULL;
+#endif /* BCM_BACKPLANE_TIMEOUT */
+	bool restore_core = FALSE;
+
+	if ((sii->axi_num_wrappers == 0) ||
+#ifdef BCM_BACKPLANE_TIMEOUT
+		(!PCIE(sii)) ||
+#endif /* BCM_BACKPLANE_TIMEOUT */
+		FALSE) {
+		SI_VMSG((" %s, axi_num_wrappers:%d, Is_PCIE:%d, BUS_TYPE:%d, ID:%x\n",
+			__FUNCTION__, sii->axi_num_wrappers, PCIE(sii),
+			BUSTYPE(sii->pub.bustype), sii->pub.buscoretype));
+		return AXI_WRAP_STS_NONE;
+	}
+
+	if (wrap != NULL) {
+		ai = (aidmp_t *)wrap;
+	} else if (coreid && (target_coreidx != current_coreidx)) {
+
+		if (ai_setcoreidx(sih, target_coreidx) == NULL) {
+			/* Unable to set the core */
+			SI_PRINT(("Set Code Failed: coreid:%x, unit:%d, target_coreidx:%d\n",
+				coreid, coreunit, target_coreidx));
+			errlog_lo = target_coreidx;
+			ret = AXI_WRAP_STS_SET_CORE_FAIL;
+			goto end;
+		}
+
+		restore_core = TRUE;
+		ai = (aidmp_t *)si_wrapperregs(sih);
+	} else {
+		/* Read error status of current wrapper */
+		ai = (aidmp_t *)si_wrapperregs(sih);
+
+		/* Update CoreID to current Code ID */
+		coreid = si_coreid(sih);
+	}
+
+	/* read error log status */
+	errlog_status = R_REG(sii->osh, &ai->errlogstatus);
+
+	if (errlog_status == ID32_INVALID) {
+		/* Do not try to peek further */
+		SI_PRINT(("%s, errlogstatus:%x - Slave Wrapper:%x\n",
+			__FUNCTION__, errlog_status, coreid));
+		ret = AXI_WRAP_STS_WRAP_RD_ERR;
+		errlog_lo = (uint32)(uintptr)&ai->errlogstatus;
+		goto end;
+	}
+
+	if ((errlog_status & AIELS_TIMEOUT_MASK) != 0) {
+		uint32 tmp;
+		uint32 count = 0;
+		/* set ErrDone to clear the condition */
+		W_REG(sii->osh, &ai->errlogdone, AIELD_ERRDONE_MASK);
+
+		/* SPINWAIT on errlogstatus timeout status bits */
+		while ((tmp = R_REG(sii->osh, &ai->errlogstatus)) & AIELS_TIMEOUT_MASK) {
+
+			if (tmp == ID32_INVALID) {
+				SI_PRINT(("%s: prev errlogstatus:%x, errlogstatus:%x\n",
+					__FUNCTION__, errlog_status, tmp));
+				ret = AXI_WRAP_STS_WRAP_RD_ERR;
+				errlog_lo = (uint32)(uintptr)&ai->errlogstatus;
+				goto end;
+			}
+			/*
+			 * Clear again, to avoid getting stuck in the loop, if a new error
+			 * is logged after we cleared the first timeout
+			 */
+			W_REG(sii->osh, &ai->errlogdone, AIELD_ERRDONE_MASK);
+
+			count++;
+			OSL_DELAY(10);
+			if ((10 * count) > AI_REG_READ_TIMEOUT) {
+				errlog_status = tmp;
+				break;
+			}
+		}
+
+		errlog_lo = R_REG(sii->osh, &ai->errlogaddrlo);
+		errlog_hi = R_REG(sii->osh, &ai->errlogaddrhi);
+		errlog_id = R_REG(sii->osh, &ai->errlogid);
+		errlog_flags = R_REG(sii->osh, &ai->errlogflags);
+
+		/* we are already in the error path, so OK to check for the  slave error */
+		if (ai_ignore_errlog(sii, ai, errlog_lo, errlog_hi, errlog_id,
+			errlog_status)) {
+			si_ignore_errlog_cnt++;
+			goto end;
+		}
+
+		/* only reset APB Bridge on timeout (not slave error, or dec error) */
+		switch (errlog_status & AIELS_TIMEOUT_MASK) {
+			case AIELS_SLAVE_ERR:
+				SI_PRINT(("AXI slave error\n"));
+				ret = AXI_WRAP_STS_SLAVE_ERR;
+				break;
+
+			case AIELS_TIMEOUT:
+				ai_reset_axi_to(sii, ai);
+				ret = AXI_WRAP_STS_TIMEOUT;
+				break;
+
+			case AIELS_DECODE:
+				SI_PRINT(("AXI decode error\n"));
+				ret = AXI_WRAP_STS_DECODE_ERR;
+				break;
+			default:
+				ASSERT(0);	/* should be impossible */
+		}
+
+		SI_PRINT(("\tCoreID: %x\n", coreid));
+		SI_PRINT(("\t errlog: lo 0x%08x, hi 0x%08x, id 0x%08x, flags 0x%08x"
+			", status 0x%08x\n",
+			errlog_lo, errlog_hi, errlog_id, errlog_flags,
+			errlog_status));
+	}
+
+end:
+#if defined(ETD)
+	if (ret != AXI_WRAP_STS_NONE) {
+		last_axi_error = ret;
+		last_axi_error_core = coreid;
+		last_axi_error_wrap = (uint32)ai;
+	}
+#endif /* ETD */
+
+#if defined(BCM_BACKPLANE_TIMEOUT)
+	if (axi_error && (ret != AXI_WRAP_STS_NONE)) {
+		axi_error->error = ret;
+		axi_error->coreid = coreid;
+		axi_error->errlog_lo = errlog_lo;
+		axi_error->errlog_hi = errlog_hi;
+		axi_error->errlog_id = errlog_id;
+		axi_error->errlog_flags = errlog_flags;
+		axi_error->errlog_status = errlog_status;
+		sih->err_info->count++;
+
+		if (sih->err_info->count == SI_MAX_ERRLOG_SIZE) {
+			sih->err_info->count = SI_MAX_ERRLOG_SIZE - 1;
+			SI_PRINT(("AXI Error log overflow\n"));
+		}
+	}
+#endif /* BCM_BACKPLANE_TIMEOUT */
+
+	if (restore_core) {
+		if (ai_setcoreidx(sih, current_coreidx) == NULL) {
+			/* Unable to set the core */
+			return ID32_INVALID;
+		}
+	}
+
+	return ret;
+}
+
+/* reset AXI timeout */
+static void
+ai_reset_axi_to(si_info_t *sii, aidmp_t *ai)
+{
+	/* reset APB Bridge */
+	OR_REG(sii->osh, &ai->resetctrl, AIRC_RESET);
+	/* sync write */
+	(void)R_REG(sii->osh, &ai->resetctrl);
+	/* clear Reset bit */
+	AND_REG(sii->osh, &ai->resetctrl, ~(AIRC_RESET));
+	/* sync write */
+	(void)R_REG(sii->osh, &ai->resetctrl);
+	SI_PRINT(("AXI timeout\n"));
+	if (R_REG(sii->osh, &ai->resetctrl) & AIRC_RESET) {
+		SI_PRINT(("reset failed on wrapper %p\n", ai));
+		g_disable_backplane_logs = TRUE;
+	}
+}
+#endif /* AXI_TIMEOUTS || BCM_BACKPLANE_TIMEOUT */
+
+/*
+ * This API polls all slave wrappers for errors and returns bit map of
+ * all reported errors.
+ * return - bit map of
+ *	AXI_WRAP_STS_NONE
+ *	AXI_WRAP_STS_TIMEOUT
+ *	AXI_WRAP_STS_SLAVE_ERR
+ *	AXI_WRAP_STS_DECODE_ERR
+ *	AXI_WRAP_STS_PCI_RD_ERR
+ *	AXI_WRAP_STS_WRAP_RD_ERR
+ *	AXI_WRAP_STS_SET_CORE_FAIL
+ * On timeout detection, correspondign bridge will be reset to
+ * unblock the bus.
+ * Error reported in each wrapper can be retrieved using the API
+ * si_get_axi_errlog_info()
+ */
+uint32
+ai_clear_backplane_to(si_t *sih)
+{
+	uint32 ret = 0;
+#if defined(AXI_TIMEOUTS) || defined(BCM_BACKPLANE_TIMEOUT)
+
+	si_info_t *sii = SI_INFO(sih);
+	aidmp_t *ai;
+	uint32 i;
+	axi_wrapper_t * axi_wrapper = sii->axi_wrapper;
+
+#ifdef BCM_BACKPLANE_TIMEOUT
+	uint32 prev_value = 0;
+	osl_t *osh = sii->osh;
+	uint32 cfg_reg = 0;
+	uint32 offset = 0;
+
+	if ((sii->axi_num_wrappers == 0) || (!PCIE(sii)))
+#else
+	if (sii->axi_num_wrappers == 0)
+#endif // endif
+	{
+		SI_VMSG((" %s, axi_num_wrappers:%d, Is_PCIE:%d, BUS_TYPE:%d, ID:%x\n",
+			__FUNCTION__, sii->axi_num_wrappers, PCIE(sii),
+			BUSTYPE(sii->pub.bustype), sii->pub.buscoretype));
+		return AXI_WRAP_STS_NONE;
+	}
+
+#ifdef BCM_BACKPLANE_TIMEOUT
+	/* Save and restore wrapper access window */
+	if (BUSTYPE(sii->pub.bustype) == PCI_BUS) {
+		if (PCIE_GEN1(sii)) {
+			cfg_reg = PCI_BAR0_WIN2;
+			offset = PCI_BAR0_WIN2_OFFSET;
+		} else if (PCIE_GEN2(sii)) {
+			cfg_reg = PCIE2_BAR0_CORE2_WIN2;
+			offset = PCIE2_BAR0_CORE2_WIN2_OFFSET;
+		}
+		else {
+			ASSERT(!"!PCIE_GEN1 && !PCIE_GEN2");
+		}
+
+		prev_value = OSL_PCI_READ_CONFIG(osh, cfg_reg, 4);
+
+		if (prev_value == ID32_INVALID) {
+			si_axi_error_t * axi_error =
+				sih->err_info ?
+					&sih->err_info->axi_error[sih->err_info->count] :
+					NULL;
+
+			SI_PRINT(("%s, PCI_BAR0_WIN2 - %x\n", __FUNCTION__, prev_value));
+			if (axi_error) {
+				axi_error->error = ret = AXI_WRAP_STS_PCI_RD_ERR;
+				axi_error->errlog_lo = cfg_reg;
+				sih->err_info->count++;
+
+				if (sih->err_info->count == SI_MAX_ERRLOG_SIZE) {
+					sih->err_info->count = SI_MAX_ERRLOG_SIZE - 1;
+					SI_PRINT(("AXI Error log overflow\n"));
+				}
+			}
+
+			return ret;
+		}
+	}
+#endif /* BCM_BACKPLANE_TIMEOUT */
+
+	for (i = 0; i < sii->axi_num_wrappers; ++i) {
+		uint32 tmp;
+
+		if (axi_wrapper[i].wrapper_type != AI_SLAVE_WRAPPER) {
+			continue;
+		}
+
+#ifdef BCM_BACKPLANE_TIMEOUT
+		if (BUSTYPE(sii->pub.bustype) == PCI_BUS) {
+			/* Set BAR0_CORE2_WIN2 to bridge wapper base address */
+			OSL_PCI_WRITE_CONFIG(osh,
+				cfg_reg, 4, axi_wrapper[i].wrapper_addr);
+
+			/* set AI to BAR0 + Offset corresponding to Gen1 or gen2 */
+			ai = (aidmp_t *) (DISCARD_QUAL(sii->curmap, uint8) + offset);
+		}
+		else
+#endif /* BCM_BACKPLANE_TIMEOUT */
+		{
+			ai = (aidmp_t *)(uintptr) axi_wrapper[i].wrapper_addr;
+		}
+
+		tmp = ai_clear_backplane_to_per_core(sih, axi_wrapper[i].cid, 0,
+			DISCARD_QUAL(ai, void));
+
+		ret |= tmp;
+	}
+
+#ifdef BCM_BACKPLANE_TIMEOUT
+	/* Restore the initial wrapper space */
+	if (prev_value) {
+		OSL_PCI_WRITE_CONFIG(osh, cfg_reg, 4, prev_value);
+	}
+#endif /* BCM_BACKPLANE_TIMEOUT */
+
+#endif /* AXI_TIMEOUTS || BCM_BACKPLANE_TIMEOUT */
+
+	return ret;
+}
+
+uint
+ai_num_slaveports(si_t *sih, uint coreidx)
+{
+	si_info_t *sii = SI_INFO(sih);
+	si_cores_info_t *cores_info = (si_cores_info_t *)sii->cores_info;
+	uint32 cib;
+
+	cib = cores_info->cib[coreidx];
+	return ((cib & CIB_NSP_MASK) >> CIB_NSP_SHIFT);
+}
+
+#ifdef UART_TRAP_DBG
+void
+ai_dump_APB_Bridge_registers(si_t *sih)
+{
+aidmp_t *ai;
+si_info_t *sii = SI_INFO(sih);
+
+	ai = (aidmp_t *) sii->br_wrapba[0];
+	printf("APB Bridge 0\n");
+	printf("lo 0x%08x, hi 0x%08x, id 0x%08x, flags 0x%08x",
+		R_REG(sii->osh, &ai->errlogaddrlo),
+		R_REG(sii->osh, &ai->errlogaddrhi),
+		R_REG(sii->osh, &ai->errlogid),
+		R_REG(sii->osh, &ai->errlogflags));
+	printf("\n status 0x%08x\n", R_REG(sii->osh, &ai->errlogstatus));
+}
+#endif /* UART_TRAP_DBG */
+
+void
+ai_force_clocks(si_t *sih, uint clock_state)
+{
+
+	si_info_t *sii = SI_INFO(sih);
+	aidmp_t *ai, *ai_sec = NULL;
+	volatile uint32 dummy;
+	uint32 ioctrl;
+	si_cores_info_t *cores_info = (si_cores_info_t *)sii->cores_info;
+
+	ASSERT(GOODREGS(sii->curwrap));
+	ai = sii->curwrap;
+	if (cores_info->wrapba2[sii->curidx])
+		ai_sec = REG_MAP(cores_info->wrapba2[sii->curidx], SI_CORE_SIZE);
+
+	/* ensure there are no pending backplane operations */
+	SPINWAIT((R_REG(sii->osh, &ai->resetstatus) != 0), 300);
+
+	if (clock_state == FORCE_CLK_ON) {
+		ioctrl = R_REG(sii->osh, &ai->ioctrl);
+		W_REG(sii->osh, &ai->ioctrl, (ioctrl | SICF_FGC));
+		dummy = R_REG(sii->osh, &ai->ioctrl);
+		BCM_REFERENCE(dummy);
+		if (ai_sec) {
+			ioctrl = R_REG(sii->osh, &ai_sec->ioctrl);
+			W_REG(sii->osh, &ai_sec->ioctrl, (ioctrl | SICF_FGC));
+			dummy = R_REG(sii->osh, &ai_sec->ioctrl);
+			BCM_REFERENCE(dummy);
+		}
+	} else {
+		ioctrl = R_REG(sii->osh, &ai->ioctrl);
+		W_REG(sii->osh, &ai->ioctrl, (ioctrl & (~SICF_FGC)));
+		dummy = R_REG(sii->osh, &ai->ioctrl);
+		BCM_REFERENCE(dummy);
+		if (ai_sec) {
+			ioctrl = R_REG(sii->osh, &ai_sec->ioctrl);
+			W_REG(sii->osh, &ai_sec->ioctrl, (ioctrl & (~SICF_FGC)));
+			dummy = R_REG(sii->osh, &ai_sec->ioctrl);
+			BCM_REFERENCE(dummy);
+		}
+	}
+	/* ensure there are no pending backplane operations */
+	SPINWAIT((R_REG(sii->osh, &ai->resetstatus) != 0), 300);
+}
