@@ -9502,3 +9502,1660 @@ dhd_prot_process_d2h_mb_data(dhd_pub_t *dhd, void* buf)
 		d2h_data->d2h_mailbox_data));
 	dhd_bus_handle_mb_data(dhd->bus, d2h_data->d2h_mailbox_data);
 }
+
+static void
+dhd_prot_process_d2h_host_ts_complete(dhd_pub_t *dhd, void* buf)
+{
+	DHD_ERROR(("Timesunc feature not compiled in but GOT HOST_TS_COMPLETE\n"));
+
+}
+
+/** called on e.g. flow ring delete */
+void dhd_prot_clean_flow_ring(dhd_pub_t *dhd, void *msgbuf_flow_info)
+{
+	msgbuf_ring_t *flow_ring = (msgbuf_ring_t *)msgbuf_flow_info;
+	dhd_prot_ring_detach(dhd, flow_ring);
+	DHD_INFO(("%s Cleaning up Flow \n", __FUNCTION__));
+}
+
+void dhd_prot_print_flow_ring(dhd_pub_t *dhd, void *msgbuf_flow_info,
+	struct bcmstrbuf *strbuf, const char * fmt)
+{
+	const char *default_fmt =
+		"RD %d WR %d BASE(VA) %p BASE(PA) %x:%x SIZE %d "
+		"WORK_ITEM_SIZE %d MAX_WORK_ITEMS %d TOTAL_SIZE %d\n";
+	msgbuf_ring_t *flow_ring = (msgbuf_ring_t *)msgbuf_flow_info;
+	uint16 rd, wr;
+	uint32 dma_buf_len = flow_ring->max_items * flow_ring->item_len;
+
+	if (fmt == NULL) {
+		fmt = default_fmt;
+	}
+
+	if (dhd->bus->is_linkdown) {
+		DHD_ERROR(("%s: Skip dumping flowring due to Link down\n", __FUNCTION__));
+		return;
+	}
+
+	dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, flow_ring->idx);
+	dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, flow_ring->idx);
+	bcm_bprintf(strbuf, fmt, rd, wr, flow_ring->dma_buf.va,
+		ltoh32(flow_ring->base_addr.high_addr),
+		ltoh32(flow_ring->base_addr.low_addr),
+		flow_ring->item_len, flow_ring->max_items,
+		dma_buf_len);
+}
+
+void dhd_prot_print_info(dhd_pub_t *dhd, struct bcmstrbuf *strbuf)
+{
+	dhd_prot_t *prot = dhd->prot;
+	bcm_bprintf(strbuf, "IPCrevs: Dev %d, \t Host %d, \tactive %d\n",
+		dhd->prot->device_ipc_version,
+		dhd->prot->host_ipc_version,
+		dhd->prot->active_ipc_version);
+
+	bcm_bprintf(strbuf, "max Host TS bufs to post: %d, \t posted %d \n",
+		dhd->prot->max_tsbufpost, dhd->prot->cur_ts_bufs_posted);
+	bcm_bprintf(strbuf, "max INFO bufs to post: %d, \t posted %d \n",
+		dhd->prot->max_infobufpost, dhd->prot->infobufpost);
+	bcm_bprintf(strbuf, "max event bufs to post: %d, \t posted %d \n",
+		dhd->prot->max_eventbufpost, dhd->prot->cur_event_bufs_posted);
+	bcm_bprintf(strbuf, "max ioctlresp bufs to post: %d, \t posted %d \n",
+		dhd->prot->max_ioctlrespbufpost, dhd->prot->cur_ioctlresp_bufs_posted);
+	bcm_bprintf(strbuf, "max RX bufs to post: %d, \t posted %d \n",
+		dhd->prot->max_rxbufpost, dhd->prot->rxbufpost);
+
+	bcm_bprintf(strbuf,
+		"%14s %5s %5s %17s %17s %14s %14s %10s\n",
+		"Type", "RD", "WR", "BASE(VA)", "BASE(PA)",
+		"WORK_ITEM_SIZE", "MAX_WORK_ITEMS", "TOTAL_SIZE");
+	bcm_bprintf(strbuf, "%14s", "H2DCtrlPost");
+	dhd_prot_print_flow_ring(dhd, &prot->h2dring_ctrl_subn, strbuf,
+		" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	bcm_bprintf(strbuf, "%14s", "D2HCtrlCpl");
+	dhd_prot_print_flow_ring(dhd, &prot->d2hring_ctrl_cpln, strbuf,
+		" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	bcm_bprintf(strbuf, "%14s", "H2DRxPost", prot->rxbufpost);
+	dhd_prot_print_flow_ring(dhd, &prot->h2dring_rxp_subn, strbuf,
+		" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	bcm_bprintf(strbuf, "%14s", "D2HRxCpl");
+	dhd_prot_print_flow_ring(dhd, &prot->d2hring_rx_cpln, strbuf,
+		" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	bcm_bprintf(strbuf, "%14s", "D2HTxCpl");
+	dhd_prot_print_flow_ring(dhd, &prot->d2hring_tx_cpln, strbuf,
+		" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	if (dhd->prot->h2dring_info_subn != NULL && dhd->prot->d2hring_info_cpln != NULL) {
+		bcm_bprintf(strbuf, "%14s", "H2DRingInfoSub");
+		dhd_prot_print_flow_ring(dhd, prot->h2dring_info_subn, strbuf,
+			" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+		bcm_bprintf(strbuf, "%14s", "D2HRingInfoCpl");
+		dhd_prot_print_flow_ring(dhd, prot->d2hring_info_cpln, strbuf,
+			" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	}
+	if (dhd->prot->d2hring_edl != NULL) {
+		bcm_bprintf(strbuf, "%14s", "D2HRingEDL");
+		dhd_prot_print_flow_ring(dhd, prot->d2hring_edl, strbuf,
+			" %5d %5d %17p %8x:%8x %14d %14d %10d\n");
+	}
+
+	bcm_bprintf(strbuf, "active_tx_count %d	 pktidmap_avail(ctrl/rx/tx) %d %d %d\n",
+		OSL_ATOMIC_READ(dhd->osh, &dhd->prot->active_tx_count),
+		DHD_PKTID_AVAIL(dhd->prot->pktid_ctrl_map),
+		DHD_PKTID_AVAIL(dhd->prot->pktid_rx_map),
+		DHD_PKTID_AVAIL(dhd->prot->pktid_tx_map));
+
+}
+
+int
+dhd_prot_flow_ring_delete(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
+{
+	tx_flowring_delete_request_t *flow_delete_rqst;
+	dhd_prot_t *prot = dhd->prot;
+	unsigned long flags;
+	uint16 alloced = 0;
+	msgbuf_ring_t *ring = &prot->h2dring_ctrl_subn;
+
+	DHD_RING_LOCK(ring->ring_lock, flags);
+
+	/* Request for ring buffer space */
+	flow_delete_rqst = (tx_flowring_delete_request_t *)
+		dhd_prot_alloc_ring_space(dhd, ring, 1, &alloced, FALSE);
+
+	if (flow_delete_rqst == NULL) {
+		DHD_RING_UNLOCK(ring->ring_lock, flags);
+		DHD_ERROR(("%s: Flow Delete Req - failure ring space\n", __FUNCTION__));
+		return BCME_NOMEM;
+	}
+
+	/* Common msg buf hdr */
+	flow_delete_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_DELETE;
+	flow_delete_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
+	flow_delete_rqst->msg.request_id = htol32(0); /* TBD */
+	flow_delete_rqst->msg.flags = ring->current_phase;
+
+	flow_delete_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;
+	ring->seqnum++;
+
+	/* Update Delete info */
+	flow_delete_rqst->flow_ring_id = htol16((uint16)flow_ring_node->flowid);
+	flow_delete_rqst->reason = htol16(BCME_OK);
+
+	DHD_ERROR(("%s: Send Flow Delete Req RING ID %d for peer %pM"
+		" prio %d ifindex %d\n", __FUNCTION__, flow_ring_node->flowid,
+		flow_ring_node->flow_info.da, flow_ring_node->flow_info.tid,
+		flow_ring_node->flow_info.ifindex));
+
+	/* update ring's WR index and ring doorbell to dongle */
+	dhd_prot_ring_write_complete(dhd, ring, flow_delete_rqst, 1);
+
+	DHD_RING_UNLOCK(ring->ring_lock, flags);
+
+	return BCME_OK;
+}
+
+static void BCMFASTPATH
+dhd_prot_flow_ring_fastdelete(dhd_pub_t *dhd, uint16 flowid, uint16 rd_idx)
+{
+	flow_ring_node_t *flow_ring_node = DHD_FLOW_RING(dhd, flowid);
+	msgbuf_ring_t *ring = (msgbuf_ring_t *)flow_ring_node->prot_info;
+	host_txbuf_cmpl_t txstatus;
+	host_txbuf_post_t *txdesc;
+	uint16 wr_idx;
+
+	DHD_INFO(("%s: FAST delete ring, flowid=%d, rd_idx=%d, wr_idx=%d\n",
+		__FUNCTION__, flowid, rd_idx, ring->wr));
+
+	memset(&txstatus, 0, sizeof(txstatus));
+	txstatus.compl_hdr.flow_ring_id = flowid;
+	txstatus.cmn_hdr.if_id = flow_ring_node->flow_info.ifindex;
+	wr_idx = ring->wr;
+
+	while (wr_idx != rd_idx) {
+		if (wr_idx)
+			wr_idx--;
+		else
+			wr_idx = ring->max_items - 1;
+		txdesc = (host_txbuf_post_t *)((char *)DHD_RING_BGN_VA(ring) +
+			(wr_idx * ring->item_len));
+		txstatus.cmn_hdr.request_id = txdesc->cmn_hdr.request_id;
+		dhd_prot_txstatus_process(dhd, &txstatus);
+	}
+}
+
+static void
+dhd_prot_flow_ring_delete_response_process(dhd_pub_t *dhd, void *msg)
+{
+	tx_flowring_delete_response_t *flow_delete_resp = (tx_flowring_delete_response_t *)msg;
+
+	DHD_ERROR(("%s: Flow Delete Response status = %d Flow %d\n", __FUNCTION__,
+		flow_delete_resp->cmplt.status, flow_delete_resp->cmplt.flow_ring_id));
+
+	if (dhd->fast_delete_ring_support) {
+		dhd_prot_flow_ring_fastdelete(dhd, flow_delete_resp->cmplt.flow_ring_id,
+			flow_delete_resp->read_idx);
+	}
+	dhd_bus_flow_ring_delete_response(dhd->bus, flow_delete_resp->cmplt.flow_ring_id,
+		flow_delete_resp->cmplt.status);
+}
+
+static void
+dhd_prot_process_flow_ring_resume_response(dhd_pub_t *dhd, void* msg)
+{
+#ifdef IDLE_TX_FLOW_MGMT
+	tx_idle_flowring_resume_response_t	*flow_resume_resp =
+		(tx_idle_flowring_resume_response_t *)msg;
+
+	DHD_ERROR(("%s Flow resume Response status = %d Flow %d\n", __FUNCTION__,
+		flow_resume_resp->cmplt.status, flow_resume_resp->cmplt.flow_ring_id));
+
+	dhd_bus_flow_ring_resume_response(dhd->bus, flow_resume_resp->cmplt.flow_ring_id,
+		flow_resume_resp->cmplt.status);
+#endif /* IDLE_TX_FLOW_MGMT */
+}
+
+static void
+dhd_prot_process_flow_ring_suspend_response(dhd_pub_t *dhd, void* msg)
+{
+#ifdef IDLE_TX_FLOW_MGMT
+	int16 status;
+	tx_idle_flowring_suspend_response_t	*flow_suspend_resp =
+		(tx_idle_flowring_suspend_response_t *)msg;
+	status = flow_suspend_resp->cmplt.status;
+
+	DHD_ERROR(("%s Flow id %d suspend Response status = %d\n",
+		__FUNCTION__, flow_suspend_resp->cmplt.flow_ring_id,
+		status));
+
+	if (status != BCME_OK) {
+
+		DHD_ERROR(("%s Error in Suspending Flow rings!!"
+			"Dongle will still be polling idle rings!!Status = %d \n",
+			__FUNCTION__, status));
+	}
+#endif /* IDLE_TX_FLOW_MGMT */
+}
+
+int
+dhd_prot_flow_ring_flush(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
+{
+	tx_flowring_flush_request_t *flow_flush_rqst;
+	dhd_prot_t *prot = dhd->prot;
+	unsigned long flags;
+	uint16 alloced = 0;
+	msgbuf_ring_t *ring = &prot->h2dring_ctrl_subn;
+
+	DHD_RING_LOCK(ring->ring_lock, flags);
+
+	/* Request for ring buffer space */
+	flow_flush_rqst = (tx_flowring_flush_request_t *)
+		dhd_prot_alloc_ring_space(dhd, ring, 1, &alloced, FALSE);
+	if (flow_flush_rqst == NULL) {
+		DHD_RING_UNLOCK(ring->ring_lock, flags);
+		DHD_ERROR(("%s: Flow Flush Req - failure ring space\n", __FUNCTION__));
+		return BCME_NOMEM;
+	}
+
+	/* Common msg buf hdr */
+	flow_flush_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_FLUSH;
+	flow_flush_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
+	flow_flush_rqst->msg.request_id = htol32(0); /* TBD */
+	flow_flush_rqst->msg.flags = ring->current_phase;
+	flow_flush_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;
+	ring->seqnum++;
+
+	flow_flush_rqst->flow_ring_id = htol16((uint16)flow_ring_node->flowid);
+	flow_flush_rqst->reason = htol16(BCME_OK);
+
+	DHD_INFO(("%s: Send Flow Flush Req\n", __FUNCTION__));
+
+	/* update ring's WR index and ring doorbell to dongle */
+	dhd_prot_ring_write_complete(dhd, ring, flow_flush_rqst, 1);
+
+	DHD_RING_UNLOCK(ring->ring_lock, flags);
+
+	return BCME_OK;
+} /* dhd_prot_flow_ring_flush */
+
+static void
+dhd_prot_flow_ring_flush_response_process(dhd_pub_t *dhd, void *msg)
+{
+	tx_flowring_flush_response_t *flow_flush_resp = (tx_flowring_flush_response_t *)msg;
+
+	DHD_INFO(("%s: Flow Flush Response status = %d\n", __FUNCTION__,
+		flow_flush_resp->cmplt.status));
+
+	dhd_bus_flow_ring_flush_response(dhd->bus, flow_flush_resp->cmplt.flow_ring_id,
+		flow_flush_resp->cmplt.status);
+}
+
+/**
+ * Request dongle to configure soft doorbells for D2H rings. Host populated soft
+ * doorbell information is transferred to dongle via the d2h ring config control
+ * message.
+ */
+void
+dhd_msgbuf_ring_config_d2h_soft_doorbell(dhd_pub_t *dhd)
+{
+#if defined(DHD_D2H_SOFT_DOORBELL_SUPPORT)
+	uint16 ring_idx;
+	uint8 *msg_next;
+	void *msg_start;
+	uint16 alloced = 0;
+	unsigned long flags;
+	dhd_prot_t *prot = dhd->prot;
+	ring_config_req_t *ring_config_req;
+	bcmpcie_soft_doorbell_t *soft_doorbell;
+	msgbuf_ring_t *ctrl_ring = &prot->h2dring_ctrl_subn;
+	const uint16 d2h_rings = BCMPCIE_D2H_COMMON_MSGRINGS;
+
+	/* Claim space for d2h_ring number of d2h_ring_config_req_t messages */
+	DHD_RING_LOCK(ctrl_ring->ring_lock, flags);
+	msg_start = dhd_prot_alloc_ring_space(dhd, ctrl_ring, d2h_rings, &alloced, TRUE);
+
+	if (msg_start == NULL) {
+		DHD_ERROR(("%s Msgbuf no space for %d D2H ring config soft doorbells\n",
+			__FUNCTION__, d2h_rings));
+		DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+		return;
+	}
+
+	msg_next = (uint8*)msg_start;
+
+	for (ring_idx = 0; ring_idx < d2h_rings; ring_idx++) {
+
+		/* position the ring_config_req into the ctrl subm ring */
+		ring_config_req = (ring_config_req_t *)msg_next;
+
+		/* Common msg header */
+		ring_config_req->msg.msg_type = MSG_TYPE_D2H_RING_CONFIG;
+		ring_config_req->msg.if_id = 0;
+		ring_config_req->msg.flags = 0;
+
+		ring_config_req->msg.epoch = ctrl_ring->seqnum % H2D_EPOCH_MODULO;
+		ctrl_ring->seqnum++;
+
+		ring_config_req->msg.request_id = htol32(DHD_FAKE_PKTID); /* unused */
+
+		/* Ring Config subtype and d2h ring_id */
+		ring_config_req->subtype = htol16(D2H_RING_CONFIG_SUBTYPE_SOFT_DOORBELL);
+		ring_config_req->ring_id = htol16(DHD_D2H_RINGID(ring_idx));
+
+		/* Host soft doorbell configuration */
+		soft_doorbell = &prot->soft_doorbell[ring_idx];
+
+		ring_config_req->soft_doorbell.value = htol32(soft_doorbell->value);
+		ring_config_req->soft_doorbell.haddr.high =
+			htol32(soft_doorbell->haddr.high);
+		ring_config_req->soft_doorbell.haddr.low =
+			htol32(soft_doorbell->haddr.low);
+		ring_config_req->soft_doorbell.items = htol16(soft_doorbell->items);
+		ring_config_req->soft_doorbell.msecs = htol16(soft_doorbell->msecs);
+
+		DHD_INFO(("%s: Soft doorbell haddr 0x%08x 0x%08x value 0x%08x\n",
+			__FUNCTION__, ring_config_req->soft_doorbell.haddr.high,
+			ring_config_req->soft_doorbell.haddr.low,
+			ring_config_req->soft_doorbell.value));
+
+		msg_next = msg_next + ctrl_ring->item_len;
+	}
+
+	/* update control subn ring's WR index and ring doorbell to dongle */
+	dhd_prot_ring_write_complete(dhd, ctrl_ring, msg_start, d2h_rings);
+
+	DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+
+#endif /* DHD_D2H_SOFT_DOORBELL_SUPPORT */
+}
+
+static void
+dhd_prot_process_d2h_ring_config_complete(dhd_pub_t *dhd, void *msg)
+{
+	DHD_INFO(("%s: Ring Config Response - status %d ringid %d\n",
+		__FUNCTION__, ltoh16(((ring_config_resp_t *)msg)->compl_hdr.status),
+		ltoh16(((ring_config_resp_t *)msg)->compl_hdr.flow_ring_id)));
+}
+
+int
+dhd_prot_debug_info_print(dhd_pub_t *dhd)
+{
+	dhd_prot_t *prot = dhd->prot;
+	msgbuf_ring_t *ring;
+	uint16 rd, wr;
+	uint32 dma_buf_len;
+	uint64 current_time;
+	ulong ring_tcm_rd_addr; /* dongle address */
+	ulong ring_tcm_wr_addr; /* dongle address */
+
+	DHD_ERROR(("\n ------- DUMPING VERSION INFORMATION ------- \r\n"));
+	DHD_ERROR(("DHD: %s\n", dhd_version));
+	DHD_ERROR(("Firmware: %s\n", fw_version));
+
+#ifdef DHD_FW_COREDUMP
+	DHD_ERROR(("\n ------- DUMPING CONFIGURATION INFORMATION ------ \r\n"));
+	DHD_ERROR(("memdump mode: %d\n", dhd->memdump_enabled));
+#endif /* DHD_FW_COREDUMP */
+
+	DHD_ERROR(("\n ------- DUMPING PROTOCOL INFORMATION ------- \r\n"));
+	DHD_ERROR(("ICPrevs: Dev %d, Host %d, active %d\n",
+		prot->device_ipc_version,
+		prot->host_ipc_version,
+		prot->active_ipc_version));
+	DHD_ERROR(("d2h_intr_method -> %s\n",
+			dhd->bus->d2h_intr_method ? "PCIE_MSI" : "PCIE_INTX"));
+	DHD_ERROR(("max Host TS bufs to post: %d, posted %d\n",
+		prot->max_tsbufpost, prot->cur_ts_bufs_posted));
+	DHD_ERROR(("max INFO bufs to post: %d, posted %d\n",
+		prot->max_infobufpost, prot->infobufpost));
+	DHD_ERROR(("max event bufs to post: %d, posted %d\n",
+		prot->max_eventbufpost, prot->cur_event_bufs_posted));
+	DHD_ERROR(("max ioctlresp bufs to post: %d, posted %d\n",
+		prot->max_ioctlrespbufpost, prot->cur_ioctlresp_bufs_posted));
+	DHD_ERROR(("max RX bufs to post: %d, posted %d\n",
+		prot->max_rxbufpost, prot->rxbufpost));
+	DHD_ERROR(("h2d_max_txpost: %d, prot->h2d_max_txpost: %d\n",
+		h2d_max_txpost, prot->h2d_max_txpost));
+
+	current_time = OSL_LOCALTIME_NS();
+	DHD_ERROR(("current_time="SEC_USEC_FMT"\n", GET_SEC_USEC(current_time)));
+	DHD_ERROR(("ioctl_fillup_time="SEC_USEC_FMT
+		" ioctl_ack_time="SEC_USEC_FMT
+		" ioctl_cmplt_time="SEC_USEC_FMT"\n",
+		GET_SEC_USEC(prot->ioctl_fillup_time),
+		GET_SEC_USEC(prot->ioctl_ack_time),
+		GET_SEC_USEC(prot->ioctl_cmplt_time)));
+
+	/* Check PCIe INT registers */
+	if (!dhd_pcie_dump_int_regs(dhd)) {
+		DHD_ERROR(("%s : PCIe link might be down\n", __FUNCTION__));
+		dhd->bus->is_linkdown = TRUE;
+	}
+
+	DHD_ERROR(("\n ------- DUMPING IOCTL RING RD WR Pointers ------- \r\n"));
+
+	ring = &prot->h2dring_ctrl_subn;
+	dma_buf_len = ring->max_items * ring->item_len;
+	ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+	ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+	DHD_ERROR(("CtrlPost: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+		"SIZE %d \r\n",
+		ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+		ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr, dma_buf_len));
+	DHD_ERROR(("CtrlPost: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+	if (dhd->bus->is_linkdown) {
+		DHD_ERROR(("CtrlPost: From Shared Mem: RD and WR are invalid"
+			" due to PCIe link down\r\n"));
+	} else {
+		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+		DHD_ERROR(("CtrlPost: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+	}
+	DHD_ERROR(("CtrlPost: seq num: %d \r\n", ring->seqnum % H2D_EPOCH_MODULO));
+
+	ring = &prot->d2hring_ctrl_cpln;
+	dma_buf_len = ring->max_items * ring->item_len;
+	ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+	ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+	DHD_ERROR(("CtrlCpl: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+		"SIZE %d \r\n",
+		ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+		ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr, dma_buf_len));
+	DHD_ERROR(("CtrlCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+	if (dhd->bus->is_linkdown) {
+		DHD_ERROR(("CtrlCpl: From Shared Mem: RD and WR are invalid"
+			" due to PCIe link down\r\n"));
+	} else {
+		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+		dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+		DHD_ERROR(("CtrlCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+	}
+	DHD_ERROR(("CtrlCpl: Expected seq num: %d \r\n", ring->seqnum % H2D_EPOCH_MODULO));
+
+	ring = prot->h2dring_info_subn;
+	if (ring) {
+		dma_buf_len = ring->max_items * ring->item_len;
+		ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+		ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+		DHD_ERROR(("InfoSub: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+			"SIZE %d \r\n",
+			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+			ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr,
+			dma_buf_len));
+		DHD_ERROR(("InfoSub: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("InfoSub: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("InfoSub: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
+		DHD_ERROR(("InfoSub: seq num: %d \r\n", ring->seqnum % H2D_EPOCH_MODULO));
+	}
+	ring = prot->d2hring_info_cpln;
+	if (ring) {
+		dma_buf_len = ring->max_items * ring->item_len;
+		ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+		ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+		DHD_ERROR(("InfoCpl: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+			"SIZE %d \r\n",
+			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+			ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr,
+			dma_buf_len));
+		DHD_ERROR(("InfoCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("InfoCpl: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("InfoCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
+		DHD_ERROR(("InfoCpl: Expected seq num: %d \r\n", ring->seqnum % D2H_EPOCH_MODULO));
+	}
+
+	ring = &prot->d2hring_tx_cpln;
+	if (ring) {
+		ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+		ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+		dma_buf_len = ring->max_items * ring->item_len;
+		DHD_ERROR(("TxCpl: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+			"SIZE %d \r\n",
+			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+			ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr,
+			dma_buf_len));
+		DHD_ERROR(("TxCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("TxCpl: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("TxCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
+		DHD_ERROR(("TxCpl: Expected seq num: %d \r\n", ring->seqnum % D2H_EPOCH_MODULO));
+	}
+
+	ring = &prot->d2hring_rx_cpln;
+	if (ring) {
+		ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+		ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+		dma_buf_len = ring->max_items * ring->item_len;
+		DHD_ERROR(("RxCpl: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+			"SIZE %d \r\n",
+			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+			ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr,
+			dma_buf_len));
+		DHD_ERROR(("RxCpl: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("RxCpl: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("RxCpl: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
+		DHD_ERROR(("RxCpl: Expected seq num: %d \r\n", ring->seqnum % D2H_EPOCH_MODULO));
+	}
+#ifdef EWP_EDL
+	ring = prot->d2hring_edl;
+	if (ring) {
+		ring_tcm_rd_addr = dhd->bus->ring_sh[ring->idx].ring_state_r;
+		ring_tcm_wr_addr = dhd->bus->ring_sh[ring->idx].ring_state_w;
+		dma_buf_len = ring->max_items * ring->item_len;
+		DHD_ERROR(("EdlRing: Mem Info: BASE(VA) %p BASE(PA) %x:%x tcm_rd_wr 0x%lx:0x%lx "
+			"SIZE %d \r\n",
+			ring->dma_buf.va, ltoh32(ring->base_addr.high_addr),
+			ltoh32(ring->base_addr.low_addr), ring_tcm_rd_addr, ring_tcm_wr_addr,
+			dma_buf_len));
+		DHD_ERROR(("EdlRing: From Host mem: RD: %d WR %d \r\n", ring->rd, ring->wr));
+		if (dhd->bus->is_linkdown) {
+			DHD_ERROR(("EdlRing: From Shared Mem: RD and WR are invalid"
+				" due to PCIe link down\r\n"));
+		} else {
+			dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, ring->idx);
+			dhd_bus_cmn_readshared(dhd->bus, &wr, RING_WR_UPD, ring->idx);
+			DHD_ERROR(("EdlRing: From Shared Mem: RD: %d WR %d \r\n", rd, wr));
+		}
+		DHD_ERROR(("EdlRing: Expected seq num: %d \r\n",
+			ring->seqnum % D2H_EPOCH_MODULO));
+	}
+#endif /* EWP_EDL */
+
+	DHD_ERROR(("%s: cur_ioctlresp_bufs_posted %d cur_event_bufs_posted %d\n",
+		__FUNCTION__, prot->cur_ioctlresp_bufs_posted, prot->cur_event_bufs_posted));
+#ifdef DHD_LIMIT_MULTI_CLIENT_FLOWRINGS
+	DHD_ERROR(("%s: multi_client_flow_rings:%d max_multi_client_flow_rings:%d\n",
+		__FUNCTION__, dhd->multi_client_flow_rings, dhd->max_multi_client_flow_rings));
+#endif /* DHD_LIMIT_MULTI_CLIENT_FLOWRINGS */
+
+	DHD_ERROR(("pktid_txq_start_cnt: %d\n", prot->pktid_txq_start_cnt));
+	DHD_ERROR(("pktid_txq_stop_cnt: %d\n", prot->pktid_txq_stop_cnt));
+	DHD_ERROR(("pktid_depleted_cnt: %d\n", prot->pktid_depleted_cnt));
+
+	dhd_pcie_debug_info_dump(dhd);
+
+	return 0;
+}
+
+int
+dhd_prot_ringupd_dump(dhd_pub_t *dhd, struct bcmstrbuf *b)
+{
+	uint32 *ptr;
+	uint32 value;
+
+	if (dhd->prot->d2h_dma_indx_wr_buf.va) {
+		uint32 i;
+		uint32 max_h2d_queues = dhd_bus_max_h2d_queues(dhd->bus);
+
+		OSL_CACHE_INV((void *)dhd->prot->d2h_dma_indx_wr_buf.va,
+			dhd->prot->d2h_dma_indx_wr_buf.len);
+
+		ptr = (uint32 *)(dhd->prot->d2h_dma_indx_wr_buf.va);
+
+		bcm_bprintf(b, "\n max_tx_queues %d\n", max_h2d_queues);
+
+		bcm_bprintf(b, "\nRPTR block H2D common rings, 0x%04x\n", ptr);
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tH2D CTRL: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tH2D RXPOST: value 0x%04x\n", value);
+
+		ptr++;
+		bcm_bprintf(b, "RPTR block Flow rings , 0x%04x\n", ptr);
+		for (i = BCMPCIE_H2D_COMMON_MSGRINGS; i < max_h2d_queues; i++) {
+			value = ltoh32(*ptr);
+			bcm_bprintf(b, "\tflowring ID %d: value 0x%04x\n", i, value);
+			ptr++;
+		}
+	}
+
+	if (dhd->prot->h2d_dma_indx_rd_buf.va) {
+		OSL_CACHE_INV((void *)dhd->prot->h2d_dma_indx_rd_buf.va,
+			dhd->prot->h2d_dma_indx_rd_buf.len);
+
+		ptr = (uint32 *)(dhd->prot->h2d_dma_indx_rd_buf.va);
+
+		bcm_bprintf(b, "\nWPTR block D2H common rings, 0x%04x\n", ptr);
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H CTRLCPLT: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H TXCPLT: value 0x%04x\n", value);
+		ptr++;
+		value = ltoh32(*ptr);
+		bcm_bprintf(b, "\tD2H RXCPLT: value 0x%04x\n", value);
+	}
+
+	return 0;
+}
+
+uint32
+dhd_prot_metadata_dbg_set(dhd_pub_t *dhd, bool val)
+{
+	dhd_prot_t *prot = dhd->prot;
+#if DHD_DBG_SHOW_METADATA
+	prot->metadata_dbg = val;
+#endif // endif
+	return (uint32)prot->metadata_dbg;
+}
+
+uint32
+dhd_prot_metadata_dbg_get(dhd_pub_t *dhd)
+{
+	dhd_prot_t *prot = dhd->prot;
+	return (uint32)prot->metadata_dbg;
+}
+
+uint32
+dhd_prot_metadatalen_set(dhd_pub_t *dhd, uint32 val, bool rx)
+{
+	dhd_prot_t *prot = dhd->prot;
+	if (rx)
+		prot->rx_metadata_offset = (uint16)val;
+	else
+		prot->tx_metadata_offset = (uint16)val;
+	return dhd_prot_metadatalen_get(dhd, rx);
+}
+
+uint32
+dhd_prot_metadatalen_get(dhd_pub_t *dhd, bool rx)
+{
+	dhd_prot_t *prot = dhd->prot;
+	if (rx)
+		return prot->rx_metadata_offset;
+	else
+		return prot->tx_metadata_offset;
+}
+
+/** optimization to write "n" tx items at a time to ring */
+uint32
+dhd_prot_txp_threshold(dhd_pub_t *dhd, bool set, uint32 val)
+{
+	dhd_prot_t *prot = dhd->prot;
+	if (set)
+		prot->txp_threshold = (uint16)val;
+	val = prot->txp_threshold;
+	return val;
+}
+
+#ifdef DHD_RX_CHAINING
+
+static INLINE void BCMFASTPATH
+dhd_rxchain_reset(rxchain_info_t *rxchain)
+{
+	rxchain->pkt_count = 0;
+}
+
+static void BCMFASTPATH
+dhd_rxchain_frame(dhd_pub_t *dhd, void *pkt, uint ifidx)
+{
+	uint8 *eh;
+	uint8 prio;
+	dhd_prot_t *prot = dhd->prot;
+	rxchain_info_t *rxchain = &prot->rxchain;
+
+	ASSERT(!PKTISCHAINED(pkt));
+	ASSERT(PKTCLINK(pkt) == NULL);
+	ASSERT(PKTCGETATTR(pkt) == 0);
+
+	eh = PKTDATA(dhd->osh, pkt);
+	prio = IP_TOS46(eh + ETHER_HDR_LEN) >> IPV4_TOS_PREC_SHIFT;
+
+	if (rxchain->pkt_count && !(PKT_CTF_CHAINABLE(dhd, ifidx, eh, prio, rxchain->h_sa,
+		rxchain->h_da, rxchain->h_prio))) {
+		/* Different flow - First release the existing chain */
+		dhd_rxchain_commit(dhd);
+	}
+
+	/* For routers, with HNDCTF, link the packets using PKTSETCLINK, */
+	/* so that the chain can be handed off to CTF bridge as is. */
+	if (rxchain->pkt_count == 0) {
+		/* First packet in chain */
+		rxchain->pkthead = rxchain->pkttail = pkt;
+
+		/* Keep a copy of ptr to ether_da, ether_sa and prio */
+		rxchain->h_da = ((struct ether_header *)eh)->ether_dhost;
+		rxchain->h_sa = ((struct ether_header *)eh)->ether_shost;
+		rxchain->h_prio = prio;
+		rxchain->ifidx = ifidx;
+		rxchain->pkt_count++;
+	} else {
+		/* Same flow - keep chaining */
+		PKTSETCLINK(rxchain->pkttail, pkt);
+		rxchain->pkttail = pkt;
+		rxchain->pkt_count++;
+	}
+
+	if ((dhd_rx_pkt_chainable(dhd, ifidx)) && (!ETHER_ISMULTI(rxchain->h_da)) &&
+		((((struct ether_header *)eh)->ether_type == HTON16(ETHER_TYPE_IP)) ||
+		(((struct ether_header *)eh)->ether_type == HTON16(ETHER_TYPE_IPV6)))) {
+		PKTSETCHAINED(dhd->osh, pkt);
+		PKTCINCRCNT(rxchain->pkthead);
+		PKTCADDLEN(rxchain->pkthead, PKTLEN(dhd->osh, pkt));
+	} else {
+		dhd_rxchain_commit(dhd);
+		return;
+	}
+
+	/* If we have hit the max chain length, dispatch the chain and reset */
+	if (rxchain->pkt_count >= DHD_PKT_CTF_MAX_CHAIN_LEN) {
+		dhd_rxchain_commit(dhd);
+	}
+}
+
+static void BCMFASTPATH
+dhd_rxchain_commit(dhd_pub_t *dhd)
+{
+	dhd_prot_t *prot = dhd->prot;
+	rxchain_info_t *rxchain = &prot->rxchain;
+
+	if (rxchain->pkt_count == 0)
+		return;
+
+	/* Release the packets to dhd_linux */
+	dhd_bus_rx_frame(dhd->bus, rxchain->pkthead, rxchain->ifidx, rxchain->pkt_count);
+
+	/* Reset the chain */
+	dhd_rxchain_reset(rxchain);
+}
+
+#endif /* DHD_RX_CHAINING */
+
+#ifdef IDLE_TX_FLOW_MGMT
+int
+dhd_prot_flow_ring_resume(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
+{
+	tx_idle_flowring_resume_request_t *flow_resume_rqst;
+	msgbuf_ring_t *flow_ring;
+	dhd_prot_t *prot = dhd->prot;
+	unsigned long flags;
+	uint16 alloced = 0;
+	msgbuf_ring_t *ctrl_ring = &prot->h2dring_ctrl_subn;
+
+	/* Fetch a pre-initialized msgbuf_ring from the flowring pool */
+	flow_ring = dhd_prot_flowrings_pool_fetch(dhd, flow_ring_node->flowid);
+	if (flow_ring == NULL) {
+		DHD_ERROR(("%s: dhd_prot_flowrings_pool_fetch TX Flowid %d failed\n",
+			__FUNCTION__, flow_ring_node->flowid));
+		return BCME_NOMEM;
+	}
+
+	DHD_RING_LOCK(ctrl_ring->ring_lock, flags);
+
+	/* Request for ctrl_ring buffer space */
+	flow_resume_rqst = (tx_idle_flowring_resume_request_t *)
+		dhd_prot_alloc_ring_space(dhd, ctrl_ring, 1, &alloced, FALSE);
+
+	if (flow_resume_rqst == NULL) {
+		dhd_prot_flowrings_pool_release(dhd, flow_ring_node->flowid, flow_ring);
+		DHD_ERROR(("%s: Flow resume Req flowid %d - failure ring space\n",
+			__FUNCTION__, flow_ring_node->flowid));
+		DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+		return BCME_NOMEM;
+	}
+
+	flow_ring_node->prot_info = (void *)flow_ring;
+
+	/* Common msg buf hdr */
+	flow_resume_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_RESUME;
+	flow_resume_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
+	flow_resume_rqst->msg.request_id = htol32(0); /* TBD */
+
+	flow_resume_rqst->msg.epoch = ctrl_ring->seqnum % H2D_EPOCH_MODULO;
+	ctrl_ring->seqnum++;
+
+	flow_resume_rqst->flow_ring_id = htol16((uint16)flow_ring_node->flowid);
+	DHD_ERROR(("%s Send Flow resume Req flow ID %d\n",
+		__FUNCTION__, flow_ring_node->flowid));
+
+	/* Update the flow_ring's WRITE index */
+	if (IDMA_ACTIVE(dhd) || dhd->dma_h2d_ring_upd_support) {
+		dhd_prot_dma_indx_set(dhd, flow_ring->wr,
+		                      H2D_DMA_INDX_WR_UPD, flow_ring->idx);
+	} else if (IFRM_ACTIVE(dhd) && (flow_ring->idx >= BCMPCIE_H2D_MSGRING_TXFLOW_IDX_START)) {
+		dhd_prot_dma_indx_set(dhd, flow_ring->wr,
+			H2D_IFRM_INDX_WR_UPD,
+			(flow_ring->idx - BCMPCIE_H2D_MSGRING_TXFLOW_IDX_START));
+	} else {
+		dhd_bus_cmn_writeshared(dhd->bus, &(flow_ring->wr),
+			sizeof(uint16), RING_WR_UPD, flow_ring->idx);
+	}
+
+	/* update control subn ring's WR index and ring doorbell to dongle */
+	dhd_prot_ring_write_complete(dhd, ctrl_ring, flow_resume_rqst, 1);
+
+	DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+
+	return BCME_OK;
+} /* dhd_prot_flow_ring_create */
+
+int
+dhd_prot_flow_ring_batch_suspend_request(dhd_pub_t *dhd, uint16 *ringid, uint16 count)
+{
+	tx_idle_flowring_suspend_request_t *flow_suspend_rqst;
+	dhd_prot_t *prot = dhd->prot;
+	unsigned long flags;
+	uint16 index;
+	uint16 alloced = 0;
+	msgbuf_ring_t *ring = &prot->h2dring_ctrl_subn;
+
+	DHD_RING_LOCK(ring->ring_lock, flags);
+
+	/* Request for ring buffer space */
+	flow_suspend_rqst = (tx_idle_flowring_suspend_request_t *)
+		dhd_prot_alloc_ring_space(dhd, ring, 1, &alloced, FALSE);
+
+	if (flow_suspend_rqst == NULL) {
+		DHD_RING_UNLOCK(ring->ring_lock, flags);
+		DHD_ERROR(("%s: Flow suspend Req - failure ring space\n", __FUNCTION__));
+		return BCME_NOMEM;
+	}
+
+	/* Common msg buf hdr */
+	flow_suspend_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_SUSPEND;
+	/* flow_suspend_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex; */
+	flow_suspend_rqst->msg.request_id = htol32(0); /* TBD */
+
+	flow_suspend_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;
+	ring->seqnum++;
+
+	/* Update flow id  info */
+	for (index = 0; index < count; index++)
+	{
+		flow_suspend_rqst->ring_id[index] = ringid[index];
+	}
+	flow_suspend_rqst->num = count;
+
+	DHD_ERROR(("%s sending batch suspend!! count is %d\n", __FUNCTION__, count));
+
+	/* update ring's WR index and ring doorbell to dongle */
+	dhd_prot_ring_write_complete(dhd, ring, flow_suspend_rqst, 1);
+
+	DHD_RING_UNLOCK(ring->ring_lock, flags);
+
+	return BCME_OK;
+}
+#endif /* IDLE_TX_FLOW_MGMT */
+
+static const char* etd_trap_name(hnd_ext_tag_trap_t tag)
+{
+	switch (tag)
+	{
+	case TAG_TRAP_SIGNATURE: return "TAG_TRAP_SIGNATURE";
+	case TAG_TRAP_STACK: return "TAG_TRAP_STACK";
+	case TAG_TRAP_MEMORY: return "TAG_TRAP_MEMORY";
+	case TAG_TRAP_DEEPSLEEP: return "TAG_TRAP_DEEPSLEEP";
+	case TAG_TRAP_PSM_WD: return "TAG_TRAP_PSM_WD";
+	case TAG_TRAP_PHY: return "TAG_TRAP_PHY";
+	case TAG_TRAP_BUS: return "TAG_TRAP_BUS";
+	case TAG_TRAP_MAC_SUSP: return "TAG_TRAP_MAC_SUSP";
+	case TAG_TRAP_BACKPLANE: return "TAG_TRAP_BACKPLANE";
+	case TAG_TRAP_PCIE_Q: return "TAG_TRAP_PCIE_Q";
+	case TAG_TRAP_WLC_STATE: return "TAG_TRAP_WLC_STATE";
+	case TAG_TRAP_MAC_WAKE: return "TAG_TRAP_MAC_WAKE";
+	case TAG_TRAP_HMAP: return "TAG_TRAP_HMAP";
+	case TAG_TRAP_PHYTXERR_THRESH: return "TAG_TRAP_PHYTXERR_THRESH";
+	case TAG_TRAP_HC_DATA: return "TAG_TRAP_HC_DATA";
+	case TAG_TRAP_LOG_DATA: return "TAG_TRAP_LOG_DATA";
+	case TAG_TRAP_CODE: return "TAG_TRAP_CODE";
+	case TAG_TRAP_LAST:
+	default:
+		return "Unknown";
+	}
+	return "Unknown";
+}
+
+int dhd_prot_dump_extended_trap(dhd_pub_t *dhdp, struct bcmstrbuf *b, bool raw)
+{
+	uint32 i;
+	uint32 *ext_data;
+	hnd_ext_trap_hdr_t *hdr;
+	const bcm_tlv_t *tlv;
+	const trap_t *tr;
+	const uint32 *stack;
+	const hnd_ext_trap_bp_err_t *bpe;
+	uint32 raw_len;
+
+	ext_data = dhdp->extended_trap_data;
+
+	/* return if there is no extended trap data */
+	if (!ext_data || !(dhdp->dongle_trap_data & D2H_DEV_EXT_TRAP_DATA))
+	{
+		bcm_bprintf(b, "%d (0x%x)", dhdp->dongle_trap_data, dhdp->dongle_trap_data);
+		return BCME_OK;
+	}
+
+	bcm_bprintf(b, "Extended trap data\n");
+
+	/* First word is original trap_data */
+	bcm_bprintf(b, "trap_data = 0x%08x\n", *ext_data);
+	ext_data++;
+
+	/* Followed by the extended trap data header */
+	hdr = (hnd_ext_trap_hdr_t *)ext_data;
+	bcm_bprintf(b, "version: %d, len: %d\n", hdr->version, hdr->len);
+
+	/* Dump a list of all tags found  before parsing data */
+	bcm_bprintf(b, "\nTags Found:\n");
+	for (i = 0; i < TAG_TRAP_LAST; i++) {
+		tlv = bcm_parse_tlvs(hdr->data, hdr->len, i);
+		if (tlv)
+			bcm_bprintf(b, "Tag: %d (%s), Length: %d\n", i, etd_trap_name(i), tlv->len);
+	}
+
+	if (raw)
+	{
+		raw_len = sizeof(hnd_ext_trap_hdr_t) + (hdr->len / 4) + (hdr->len % 4 ? 1 : 0);
+		for (i = 0; i < raw_len; i++)
+		{
+			bcm_bprintf(b, "0x%08x ", ext_data[i]);
+			if (i % 4 == 3)
+				bcm_bprintf(b, "\n");
+		}
+		return BCME_OK;
+	}
+
+	/* Extract the various supported TLVs from the extended trap data */
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_CODE);
+	if (tlv)
+	{
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_CODE), tlv->len);
+		bcm_bprintf(b, "ETD TYPE: %d\n", tlv->data[0]);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_SIGNATURE);
+	if (tlv)
+	{
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_SIGNATURE), tlv->len);
+		tr = (const trap_t *)tlv->data;
+
+		bcm_bprintf(b, "TRAP %x: pc %x, lr %x, sp %x, cpsr %x, spsr %x\n",
+		       tr->type, tr->pc, tr->r14, tr->r13, tr->cpsr, tr->spsr);
+		bcm_bprintf(b, "  r0 %x, r1 %x, r2 %x, r3 %x, r4 %x, r5 %x, r6 %x\n",
+		       tr->r0, tr->r1, tr->r2, tr->r3, tr->r4, tr->r5, tr->r6);
+		bcm_bprintf(b, "  r7 %x, r8 %x, r9 %x, r10 %x, r11 %x, r12 %x\n",
+		       tr->r7, tr->r8, tr->r9, tr->r10, tr->r11, tr->r12);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_STACK);
+	if (tlv)
+	{
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_STACK), tlv->len);
+		stack = (const uint32 *)tlv->data;
+		for (i = 0; i < (uint32)(tlv->len / 4); i++)
+		{
+			bcm_bprintf(b, "  0x%08x\n", *stack);
+			stack++;
+		}
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_BACKPLANE);
+	if (tlv)
+	{
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_BACKPLANE), tlv->len);
+		bpe = (const hnd_ext_trap_bp_err_t *)tlv->data;
+		bcm_bprintf(b, " error: %x\n", bpe->error);
+		bcm_bprintf(b, " coreid: %x\n", bpe->coreid);
+		bcm_bprintf(b, " baseaddr: %x\n", bpe->baseaddr);
+		bcm_bprintf(b, " ioctrl: %x\n", bpe->ioctrl);
+		bcm_bprintf(b, " iostatus: %x\n", bpe->iostatus);
+		bcm_bprintf(b, " resetctrl: %x\n", bpe->resetctrl);
+		bcm_bprintf(b, " resetstatus: %x\n", bpe->resetstatus);
+		bcm_bprintf(b, " errlogctrl: %x\n", bpe->errlogctrl);
+		bcm_bprintf(b, " errlogdone: %x\n", bpe->errlogdone);
+		bcm_bprintf(b, " errlogstatus: %x\n", bpe->errlogstatus);
+		bcm_bprintf(b, " errlogaddrlo: %x\n", bpe->errlogaddrlo);
+		bcm_bprintf(b, " errlogaddrhi: %x\n", bpe->errlogaddrhi);
+		bcm_bprintf(b, " errlogid: %x\n", bpe->errlogid);
+		bcm_bprintf(b, " errloguser: %x\n", bpe->errloguser);
+		bcm_bprintf(b, " errlogflags: %x\n", bpe->errlogflags);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_MEMORY);
+	if (tlv)
+	{
+		const hnd_ext_trap_heap_err_t* hme;
+
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_MEMORY), tlv->len);
+		hme = (const hnd_ext_trap_heap_err_t *)tlv->data;
+		bcm_bprintf(b, " arena total: %d\n", hme->arena_total);
+		bcm_bprintf(b, " heap free: %d\n", hme->heap_free);
+		bcm_bprintf(b, " heap in use: %d\n", hme->heap_inuse);
+		bcm_bprintf(b, " mf count: %d\n", hme->mf_count);
+		bcm_bprintf(b, " stack LWM: %x\n", hme->stack_lwm);
+
+		bcm_bprintf(b, " Histogram:\n");
+		for (i = 0; i < (HEAP_HISTOGRAM_DUMP_LEN * 2); i += 2) {
+			if (hme->heap_histogm[i] == 0xfffe)
+				bcm_bprintf(b, " Others\t%d\t?\n", hme->heap_histogm[i + 1]);
+			else if (hme->heap_histogm[i] == 0xffff)
+				bcm_bprintf(b, " >= 256K\t%d\t?\n", hme->heap_histogm[i + 1]);
+			else
+				bcm_bprintf(b, " %d\t%d\t%d\n", hme->heap_histogm[i] << 2,
+					hme->heap_histogm[i + 1], (hme->heap_histogm[i] << 2)
+					* hme->heap_histogm[i + 1]);
+		}
+
+		bcm_bprintf(b, " Max free block: %d\n", hme->max_sz_free_blk[0] << 2);
+		for (i = 1; i < HEAP_MAX_SZ_BLKS_LEN; i++) {
+			bcm_bprintf(b, " Next lgst free block: %d\n", hme->max_sz_free_blk[i] << 2);
+		}
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_PCIE_Q);
+	if (tlv)
+	{
+		const hnd_ext_trap_pcie_mem_err_t* pqme;
+
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_PCIE_Q), tlv->len);
+		pqme = (const hnd_ext_trap_pcie_mem_err_t *)tlv->data;
+		bcm_bprintf(b, " d2h queue len: %x\n", pqme->d2h_queue_len);
+		bcm_bprintf(b, " d2h req queue len: %x\n", pqme->d2h_req_queue_len);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_WLC_STATE);
+	if (tlv)
+	{
+		const hnd_ext_trap_wlc_mem_err_t* wsme;
+
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_WLC_STATE), tlv->len);
+		wsme = (const hnd_ext_trap_wlc_mem_err_t *)tlv->data;
+		bcm_bprintf(b, " instance: %d\n", wsme->instance);
+		bcm_bprintf(b, " associated: %d\n", wsme->associated);
+		bcm_bprintf(b, " peer count: %d\n", wsme->peer_cnt);
+		bcm_bprintf(b, " client count: %d\n", wsme->soft_ap_client_cnt);
+		bcm_bprintf(b, " TX_AC_BK_FIFO: %d\n", wsme->txqueue_len[0]);
+		bcm_bprintf(b, " TX_AC_BE_FIFO: %d\n", wsme->txqueue_len[1]);
+		bcm_bprintf(b, " TX_AC_VI_FIFO: %d\n", wsme->txqueue_len[2]);
+		bcm_bprintf(b, " TX_AC_VO_FIFO: %d\n", wsme->txqueue_len[3]);
+
+		if (tlv->len >= (sizeof(*wsme) * 2)) {
+			wsme++;
+			bcm_bprintf(b, "\n instance: %d\n", wsme->instance);
+			bcm_bprintf(b, " associated: %d\n", wsme->associated);
+			bcm_bprintf(b, " peer count: %d\n", wsme->peer_cnt);
+			bcm_bprintf(b, " client count: %d\n", wsme->soft_ap_client_cnt);
+			bcm_bprintf(b, " TX_AC_BK_FIFO: %d\n", wsme->txqueue_len[0]);
+			bcm_bprintf(b, " TX_AC_BE_FIFO: %d\n", wsme->txqueue_len[1]);
+			bcm_bprintf(b, " TX_AC_VI_FIFO: %d\n", wsme->txqueue_len[2]);
+			bcm_bprintf(b, " TX_AC_VO_FIFO: %d\n", wsme->txqueue_len[3]);
+		}
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_PHY);
+	if (tlv)
+	{
+		const hnd_ext_trap_phydbg_t* phydbg;
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_PHY), tlv->len);
+		phydbg = (const hnd_ext_trap_phydbg_t *)tlv->data;
+		bcm_bprintf(b, " err: 0x%x\n", phydbg->err);
+		bcm_bprintf(b, " RxFeStatus: 0x%x\n", phydbg->RxFeStatus);
+		bcm_bprintf(b, " TxFIFOStatus0: 0x%x\n", phydbg->TxFIFOStatus0);
+		bcm_bprintf(b, " TxFIFOStatus1: 0x%x\n", phydbg->TxFIFOStatus1);
+		bcm_bprintf(b, " RfseqMode: 0x%x\n", phydbg->RfseqMode);
+		bcm_bprintf(b, " RfseqStatus0: 0x%x\n", phydbg->RfseqStatus0);
+		bcm_bprintf(b, " RfseqStatus1: 0x%x\n", phydbg->RfseqStatus1);
+		bcm_bprintf(b, " RfseqStatus_Ocl: 0x%x\n", phydbg->RfseqStatus_Ocl);
+		bcm_bprintf(b, " RfseqStatus_Ocl1: 0x%x\n", phydbg->RfseqStatus_Ocl1);
+		bcm_bprintf(b, " OCLControl1: 0x%x\n", phydbg->OCLControl1);
+		bcm_bprintf(b, " TxError: 0x%x\n", phydbg->TxError);
+		bcm_bprintf(b, " bphyTxError: 0x%x\n", phydbg->bphyTxError);
+		bcm_bprintf(b, " TxCCKError: 0x%x\n", phydbg->TxCCKError);
+		bcm_bprintf(b, " TxCtrlWrd0: 0x%x\n", phydbg->TxCtrlWrd0);
+		bcm_bprintf(b, " TxCtrlWrd1: 0x%x\n", phydbg->TxCtrlWrd1);
+		bcm_bprintf(b, " TxCtrlWrd2: 0x%x\n", phydbg->TxCtrlWrd2);
+		bcm_bprintf(b, " TxLsig0: 0x%x\n", phydbg->TxLsig0);
+		bcm_bprintf(b, " TxLsig1: 0x%x\n", phydbg->TxLsig1);
+		bcm_bprintf(b, " TxVhtSigA10: 0x%x\n", phydbg->TxVhtSigA10);
+		bcm_bprintf(b, " TxVhtSigA11: 0x%x\n", phydbg->TxVhtSigA11);
+		bcm_bprintf(b, " TxVhtSigA20: 0x%x\n", phydbg->TxVhtSigA20);
+		bcm_bprintf(b, " TxVhtSigA21: 0x%x\n", phydbg->TxVhtSigA21);
+		bcm_bprintf(b, " txPktLength: 0x%x\n", phydbg->txPktLength);
+		bcm_bprintf(b, " txPsdulengthCtr: 0x%x\n", phydbg->txPsdulengthCtr);
+		bcm_bprintf(b, " gpioClkControl: 0x%x\n", phydbg->gpioClkControl);
+		bcm_bprintf(b, " gpioSel: 0x%x\n", phydbg->gpioSel);
+		bcm_bprintf(b, " pktprocdebug: 0x%x\n", phydbg->pktprocdebug);
+		for (i = 0; i < 3; i++)
+			bcm_bprintf(b, " gpioOut[%d]: 0x%x\n", i, phydbg->gpioOut[i]);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_PSM_WD);
+	if (tlv)
+	{
+		const hnd_ext_trap_psmwd_t* psmwd;
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_PSM_WD), tlv->len);
+		psmwd = (const hnd_ext_trap_psmwd_t *)tlv;
+		bcm_bprintf(b, " version: 0x%x\n", psmwd->version);
+		bcm_bprintf(b, " maccontrol: 0x%x\n", psmwd->i32_maccontrol);
+		bcm_bprintf(b, " maccommand: 0x%x\n", psmwd->i32_maccommand);
+		bcm_bprintf(b, " macintstatus: 0x%x\n", psmwd->i32_macintstatus);
+		bcm_bprintf(b, " phydebug: 0x%x\n", psmwd->i32_phydebug);
+		bcm_bprintf(b, " clk_ctl_st: 0x%x\n", psmwd->i32_clk_ctl_st);
+		for (i = 0; i < 3; i++)
+			bcm_bprintf(b, " psmdebug[%d]: 0x%x\n", i, psmwd->i32_psmdebug[i]);
+		bcm_bprintf(b, " gated clock en: 0x%x\n", psmwd->i16_0x1a8);
+		bcm_bprintf(b, " Rcv Fifo Ctrl: 0x%x\n", psmwd->i16_0x406);
+		bcm_bprintf(b, " Rx ctrl 1: 0x%x\n", psmwd->i16_0x408);
+		bcm_bprintf(b, " Rxe Status 1: 0x%x\n", psmwd->i16_0x41a);
+		bcm_bprintf(b, " Rxe Status 2: 0x%x\n", psmwd->i16_0x41c);
+		bcm_bprintf(b, " rcv wrd count 0: 0x%x\n", psmwd->i16_0x424);
+		bcm_bprintf(b, " rcv wrd count 1: 0x%x\n", psmwd->i16_0x426);
+		bcm_bprintf(b, " RCV_LFIFO_STS: 0x%x\n", psmwd->i16_0x456);
+		bcm_bprintf(b, " PSM_SLP_TMR: 0x%x\n", psmwd->i16_0x480);
+		bcm_bprintf(b, " PSM BRC: 0x%x\n", psmwd->i16_0x490);
+		bcm_bprintf(b, " TXE CTRL: 0x%x\n", psmwd->i16_0x500);
+		bcm_bprintf(b, " TXE Status: 0x%x\n", psmwd->i16_0x50e);
+		bcm_bprintf(b, " TXE_xmtdmabusy: 0x%x\n", psmwd->i16_0x55e);
+		bcm_bprintf(b, " TXE_XMTfifosuspflush: 0x%x\n", psmwd->i16_0x566);
+		bcm_bprintf(b, " IFS Stat: 0x%x\n", psmwd->i16_0x690);
+		bcm_bprintf(b, " IFS_MEDBUSY_CTR: 0x%x\n", psmwd->i16_0x692);
+		bcm_bprintf(b, " IFS_TX_DUR: 0x%x\n", psmwd->i16_0x694);
+		bcm_bprintf(b, " SLow_CTL: 0x%x\n", psmwd->i16_0x6a0);
+		bcm_bprintf(b, " TXE_AQM fifo Ready: 0x%x\n", psmwd->i16_0x838);
+		bcm_bprintf(b, " Dagg ctrl: 0x%x\n", psmwd->i16_0x8c0);
+		bcm_bprintf(b, " shm_prewds_cnt: 0x%x\n", psmwd->shm_prewds_cnt);
+		bcm_bprintf(b, " shm_txtplufl_cnt: 0x%x\n", psmwd->shm_txtplufl_cnt);
+		bcm_bprintf(b, " shm_txphyerr_cnt: 0x%x\n", psmwd->shm_txphyerr_cnt);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_MAC_SUSP);
+	if (tlv)
+	{
+		const hnd_ext_trap_macsusp_t* macsusp;
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_MAC_SUSP), tlv->len);
+		macsusp = (const hnd_ext_trap_macsusp_t *)tlv;
+		bcm_bprintf(b, " version: %d\n", macsusp->version);
+		bcm_bprintf(b, " trap_reason: %d\n", macsusp->trap_reason);
+		bcm_bprintf(b, " maccontrol: 0x%x\n", macsusp->i32_maccontrol);
+		bcm_bprintf(b, " maccommand: 0x%x\n", macsusp->i32_maccommand);
+		bcm_bprintf(b, " macintstatus: 0x%x\n", macsusp->i32_macintstatus);
+		for (i = 0; i < 4; i++)
+			bcm_bprintf(b, " phydebug[%d]: 0x%x\n", i, macsusp->i32_phydebug[i]);
+		for (i = 0; i < 8; i++)
+			bcm_bprintf(b, " psmdebug[%d]: 0x%x\n", i, macsusp->i32_psmdebug[i]);
+		bcm_bprintf(b, " Rxe Status_1: 0x%x\n", macsusp->i16_0x41a);
+		bcm_bprintf(b, " Rxe Status_2: 0x%x\n", macsusp->i16_0x41c);
+		bcm_bprintf(b, " PSM BRC: 0x%x\n", macsusp->i16_0x490);
+		bcm_bprintf(b, " TXE Status: 0x%x\n", macsusp->i16_0x50e);
+		bcm_bprintf(b, " TXE xmtdmabusy: 0x%x\n", macsusp->i16_0x55e);
+		bcm_bprintf(b, " TXE XMTfifosuspflush: 0x%x\n", macsusp->i16_0x566);
+		bcm_bprintf(b, " IFS Stat: 0x%x\n", macsusp->i16_0x690);
+		bcm_bprintf(b, " IFS MEDBUSY CTR: 0x%x\n", macsusp->i16_0x692);
+		bcm_bprintf(b, " IFS TX DUR: 0x%x\n", macsusp->i16_0x694);
+		bcm_bprintf(b, " WEP CTL: 0x%x\n", macsusp->i16_0x7c0);
+		bcm_bprintf(b, " TXE AQM fifo Ready: 0x%x\n", macsusp->i16_0x838);
+		bcm_bprintf(b, " MHP status: 0x%x\n", macsusp->i16_0x880);
+		bcm_bprintf(b, " shm_prewds_cnt: 0x%x\n", macsusp->shm_prewds_cnt);
+		bcm_bprintf(b, " shm_ucode_dbgst: 0x%x\n", macsusp->shm_ucode_dbgst);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_MAC_WAKE);
+	if (tlv)
+	{
+		const hnd_ext_trap_macenab_t* macwake;
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_MAC_WAKE), tlv->len);
+		macwake = (const hnd_ext_trap_macenab_t *)tlv;
+		bcm_bprintf(b, " version: 0x%x\n", macwake->version);
+		bcm_bprintf(b, " trap_reason: 0x%x\n", macwake->trap_reason);
+		bcm_bprintf(b, " maccontrol: 0x%x\n", macwake->i32_maccontrol);
+		bcm_bprintf(b, " maccommand: 0x%x\n", macwake->i32_maccommand);
+		bcm_bprintf(b, " macintstatus: 0x%x\n", macwake->i32_macintstatus);
+		for (i = 0; i < 8; i++)
+			bcm_bprintf(b, " psmdebug[%d]: 0x%x\n", i, macwake->i32_psmdebug[i]);
+		bcm_bprintf(b, " clk_ctl_st: 0x%x\n", macwake->i32_clk_ctl_st);
+		bcm_bprintf(b, " powerctl: 0x%x\n", macwake->i32_powerctl);
+		bcm_bprintf(b, " gated clock en: 0x%x\n", macwake->i16_0x1a8);
+		bcm_bprintf(b, " PSM_SLP_TMR: 0x%x\n", macwake->i16_0x480);
+		bcm_bprintf(b, " PSM BRC: 0x%x\n", macwake->i16_0x490);
+		bcm_bprintf(b, " TSF CTL: 0x%x\n", macwake->i16_0x600);
+		bcm_bprintf(b, " IFS Stat: 0x%x\n", macwake->i16_0x690);
+		bcm_bprintf(b, " IFS_MEDBUSY_CTR: 0x%x\n", macwake->i16_0x692);
+		bcm_bprintf(b, " Slow_CTL: 0x%x\n", macwake->i16_0x6a0);
+		bcm_bprintf(b, " Slow_FRAC: 0x%x\n", macwake->i16_0x6a6);
+		bcm_bprintf(b, " fast power up delay: 0x%x\n", macwake->i16_0x6a8);
+		bcm_bprintf(b, " Slow_PER: 0x%x\n", macwake->i16_0x6aa);
+		bcm_bprintf(b, " shm_ucode_dbgst: 0x%x\n", macwake->shm_ucode_dbgst);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_BUS);
+	if (tlv)
+	{
+		const bcm_dngl_pcie_hc_t* hc;
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_BUS), tlv->len);
+		hc = (const bcm_dngl_pcie_hc_t *)tlv->data;
+		bcm_bprintf(b, " version: 0x%x\n", hc->version);
+		bcm_bprintf(b, " reserved: 0x%x\n", hc->reserved);
+		bcm_bprintf(b, " pcie_err_ind_type: 0x%x\n", hc->pcie_err_ind_type);
+		bcm_bprintf(b, " pcie_flag: 0x%x\n", hc->pcie_flag);
+		bcm_bprintf(b, " pcie_control_reg: 0x%x\n", hc->pcie_control_reg);
+		for (i = 0; i < HC_PCIEDEV_CONFIG_REGLIST_MAX; i++)
+			bcm_bprintf(b, " pcie_config_regs[%d]: 0x%x\n", i, hc->pcie_config_regs[i]);
+	}
+
+	tlv = bcm_parse_tlvs(hdr->data, hdr->len, TAG_TRAP_HMAP);
+	if (tlv)
+	{
+		const pcie_hmapviolation_t* hmap;
+		hmap = (const pcie_hmapviolation_t *)tlv->data;
+		bcm_bprintf(b, "\n%s len: %d\n", etd_trap_name(TAG_TRAP_HMAP), tlv->len);
+		bcm_bprintf(b, " HMAP Vio Addr Low: 0x%x\n", hmap->hmap_violationaddr_lo);
+		bcm_bprintf(b, " HMAP Vio Addr Hi: 0x%x\n", hmap->hmap_violationaddr_hi);
+		bcm_bprintf(b, " HMAP Vio Info: 0x%x\n", hmap->hmap_violation_info);
+	}
+
+	return BCME_OK;
+}
+
+#ifdef BCMPCIE
+int
+dhd_prot_send_host_timestamp(dhd_pub_t *dhdp, uchar *tlvs, uint16 tlv_len,
+	uint16 seqnum, uint16 xt_id)
+{
+	dhd_prot_t *prot = dhdp->prot;
+	host_timestamp_msg_t *ts_req;
+	unsigned long flags;
+	uint16 alloced = 0;
+	uchar *ts_tlv_buf;
+	msgbuf_ring_t *ctrl_ring = &prot->h2dring_ctrl_subn;
+
+	if ((tlvs == NULL) || (tlv_len == 0)) {
+		DHD_ERROR(("%s: argument error tlv: %p, tlv_len %d\n",
+			__FUNCTION__, tlvs, tlv_len));
+		return -1;
+	}
+
+	DHD_RING_LOCK(ctrl_ring->ring_lock, flags);
+
+	/* if Host TS req already pending go away */
+	if (prot->hostts_req_buf_inuse == TRUE) {
+		DHD_ERROR(("one host TS request already pending at device\n"));
+		DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+		return -1;
+	}
+
+	/* Request for cbuf space */
+	ts_req = (host_timestamp_msg_t*)dhd_prot_alloc_ring_space(dhdp, ctrl_ring,
+		DHD_FLOWRING_DEFAULT_NITEMS_POSTED_H2D,	&alloced, FALSE);
+	if (ts_req == NULL) {
+		DHD_ERROR(("couldn't allocate space on msgring to send host TS request\n"));
+		DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+		return -1;
+	}
+
+	/* Common msg buf hdr */
+	ts_req->msg.msg_type = MSG_TYPE_HOSTTIMSTAMP;
+	ts_req->msg.if_id = 0;
+	ts_req->msg.flags =  ctrl_ring->current_phase;
+	ts_req->msg.request_id = DHD_H2D_HOSTTS_REQ_PKTID;
+
+	ts_req->msg.epoch = ctrl_ring->seqnum % H2D_EPOCH_MODULO;
+	ctrl_ring->seqnum++;
+
+	ts_req->xt_id = xt_id;
+	ts_req->seqnum = seqnum;
+	/* populate TS req buffer info */
+	ts_req->input_data_len = htol16(tlv_len);
+	ts_req->host_buf_addr.high = htol32(PHYSADDRHI(prot->hostts_req_buf.pa));
+	ts_req->host_buf_addr.low = htol32(PHYSADDRLO(prot->hostts_req_buf.pa));
+	/* copy ioct payload */
+	ts_tlv_buf = (void *) prot->hostts_req_buf.va;
+	prot->hostts_req_buf_inuse = TRUE;
+	memcpy(ts_tlv_buf, tlvs, tlv_len);
+
+	OSL_CACHE_FLUSH((void *) prot->hostts_req_buf.va, tlv_len);
+
+	if (ISALIGNED(ts_tlv_buf, DMA_ALIGN_LEN) == FALSE) {
+		DHD_ERROR(("host TS req buffer address unaligned !!!!! \n"));
+	}
+
+	DHD_CTL(("submitted Host TS request request_id %d, data_len %d, tx_id %d, seq %d\n",
+		ts_req->msg.request_id, ts_req->input_data_len,
+		ts_req->xt_id, ts_req->seqnum));
+
+	/* upd wrt ptr and raise interrupt */
+	dhd_prot_ring_write_complete(dhdp, ctrl_ring, ts_req,
+		DHD_FLOWRING_DEFAULT_NITEMS_POSTED_H2D);
+
+	DHD_RING_UNLOCK(ctrl_ring->ring_lock, flags);
+
+	return 0;
+} /* dhd_prot_send_host_timestamp */
+
+bool
+dhd_prot_data_path_tx_timestamp_logging(dhd_pub_t *dhd,  bool enable, bool set)
+{
+	if (set)
+		dhd->prot->tx_ts_log_enabled = enable;
+
+	return dhd->prot->tx_ts_log_enabled;
+}
+
+bool
+dhd_prot_data_path_rx_timestamp_logging(dhd_pub_t *dhd,  bool enable, bool set)
+{
+	if (set)
+		dhd->prot->rx_ts_log_enabled = enable;
+
+	return dhd->prot->rx_ts_log_enabled;
+}
+
+bool
+dhd_prot_pkt_noretry(dhd_pub_t *dhd, bool enable, bool set)
+{
+	if (set)
+		dhd->prot->no_retry = enable;
+
+	return dhd->prot->no_retry;
+}
+
+bool
+dhd_prot_pkt_noaggr(dhd_pub_t *dhd, bool enable, bool set)
+{
+	if (set)
+		dhd->prot->no_aggr = enable;
+
+	return dhd->prot->no_aggr;
+}
+
+bool
+dhd_prot_pkt_fixed_rate(dhd_pub_t *dhd, bool enable, bool set)
+{
+	if (set)
+		dhd->prot->fixed_rate = enable;
+
+	return dhd->prot->fixed_rate;
+}
+#endif /* BCMPCIE */
+
+void
+dhd_prot_dma_indx_free(dhd_pub_t *dhd)
+{
+	dhd_prot_t *prot = dhd->prot;
+
+	dhd_dma_buf_free(dhd, &prot->h2d_dma_indx_wr_buf);
+	dhd_dma_buf_free(dhd, &prot->d2h_dma_indx_rd_buf);
+}
+
+void
+dhd_msgbuf_delay_post_ts_bufs(dhd_pub_t *dhd)
+{
+	if (dhd->prot->max_tsbufpost > 0)
+		dhd_msgbuf_rxbuf_post_ts_bufs(dhd);
+}
+
+static void BCMFASTPATH
+dhd_prot_process_fw_timestamp(dhd_pub_t *dhd, void* buf)
+{
+	DHD_ERROR(("Timesunc feature not compiled in but GOT FW TS message\n"));
+
+}
+
+uint16
+dhd_prot_get_ioctl_trans_id(dhd_pub_t *dhdp)
+{
+	return dhdp->prot->ioctl_trans_id;
+}
+
+int dhd_get_hscb_info(dhd_pub_t *dhd, void ** va, uint32 *len)
+{
+	if (!dhd->hscb_enable) {
+		if (len) {
+			/* prevent "Operation not supported" dhd message */
+			*len = 0;
+			return BCME_OK;
+		}
+		return BCME_UNSUPPORTED;
+	}
+
+	if (va) {
+		*va = dhd->prot->host_scb_buf.va;
+	}
+	if (len) {
+		*len = dhd->prot->host_scb_buf.len;
+	}
+
+	return BCME_OK;
+}
+
+#ifdef DHD_HP2P
+uint32
+dhd_prot_pkt_threshold(dhd_pub_t *dhd, bool set, uint32 val)
+{
+	if (set)
+		dhd->pkt_thresh = (uint16)val;
+
+	val = dhd->pkt_thresh;
+
+	return val;
+}
+
+uint32
+dhd_prot_time_threshold(dhd_pub_t *dhd, bool set, uint32 val)
+{
+	if (set)
+		dhd->time_thresh = (uint16)val;
+
+	val = dhd->time_thresh;
+
+	return val;
+}
+
+uint32
+dhd_prot_pkt_expiry(dhd_pub_t *dhd, bool set, uint32 val)
+{
+	if (set)
+		dhd->pkt_expiry = (uint16)val;
+
+	val = dhd->pkt_expiry;
+
+	return val;
+}
+
+uint8
+dhd_prot_hp2p_enable(dhd_pub_t *dhd, bool set, int enable)
+{
+	uint8 ret = 0;
+	if (set) {
+		dhd->hp2p_enable = (enable & 0xf) ? TRUE : FALSE;
+		dhd->hp2p_infra_enable = ((enable >> 4) & 0xf) ? TRUE : FALSE;
+
+		if (enable) {
+			dhd_update_flow_prio_map(dhd, DHD_FLOW_PRIO_TID_MAP);
+		} else {
+			dhd_update_flow_prio_map(dhd, DHD_FLOW_PRIO_AC_MAP);
+		}
+	}
+	ret = dhd->hp2p_infra_enable ? 0x1:0x0;
+	ret <<= 4;
+	ret |= dhd->hp2p_enable ? 0x1:0x0;
+
+	return ret;
+}
+
+static void
+dhd_update_hp2p_rxstats(dhd_pub_t *dhd, host_rxbuf_cmpl_t *rxstatus)
+{
+	ts_timestamp_t *ts = (ts_timestamp_t *)&rxstatus->ts;
+	hp2p_info_t *hp2p_info;
+	uint32 dur1;
+
+	hp2p_info = &dhd->hp2p_info[0];
+	dur1 = ((ts->high & 0x3FF) * HP2P_TIME_SCALE) / 100;
+
+	if (dur1 > (MAX_RX_HIST_BIN - 1)) {
+		dur1 = MAX_RX_HIST_BIN - 1;
+		DHD_ERROR(("%s: 0x%x 0x%x\n",
+			__FUNCTION__, ts->low, ts->high));
+	}
+
+	hp2p_info->rx_t0[dur1 % MAX_RX_HIST_BIN]++;
+	return;
+}
+
+static void
+dhd_update_hp2p_txstats(dhd_pub_t *dhd, host_txbuf_cmpl_t *txstatus)
+{
+	ts_timestamp_t *ts = (ts_timestamp_t *)&txstatus->ts;
+	uint16 flowid = txstatus->compl_hdr.flow_ring_id;
+	uint32 hp2p_flowid, dur1, dur2;
+	hp2p_info_t *hp2p_info;
+
+	hp2p_flowid = dhd->bus->max_submission_rings -
+		dhd->bus->max_cmn_rings - flowid + 1;
+	hp2p_info = &dhd->hp2p_info[hp2p_flowid];
+	ts = (ts_timestamp_t *)&(txstatus->ts);
+
+	dur1 = ((ts->high & 0x3FF) * HP2P_TIME_SCALE) / 1000;
+	if (dur1 > (MAX_TX_HIST_BIN - 1)) {
+		dur1 = MAX_TX_HIST_BIN - 1;
+		DHD_ERROR(("%s: 0x%x 0x%x\n", __FUNCTION__, ts->low, ts->high));
+	}
+	hp2p_info->tx_t0[dur1 % MAX_TX_HIST_BIN]++;
+
+	dur2 = (((ts->high >> 10) & 0x3FF) * HP2P_TIME_SCALE) / 1000;
+	if (dur2 > (MAX_TX_HIST_BIN - 1)) {
+		dur2 = MAX_TX_HIST_BIN - 1;
+		DHD_ERROR(("%s: 0x%x 0x%x\n", __FUNCTION__, ts->low, ts->high));
+	}
+
+	hp2p_info->tx_t1[dur2 % MAX_TX_HIST_BIN]++;
+	return;
+}
+
+enum hrtimer_restart dhd_hp2p_write(struct hrtimer *timer)
+{
+	hp2p_info_t *hp2p_info;
+	unsigned long flags;
+	dhd_pub_t *dhdp;
+
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif // endif
+	hp2p_info = container_of(timer, hp2p_info_t, timer.timer);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif // endif
+	dhdp = hp2p_info->dhd_pub;
+	if (!dhdp) {
+		goto done;
+	}
+
+	DHD_INFO(("%s: pend_item = %d flowid = %d\n",
+		__FUNCTION__, ((msgbuf_ring_t *)hp2p_info->ring)->pend_items_count,
+		hp2p_info->flowid));
+
+	flags = dhd_os_hp2plock(dhdp);
+
+	dhd_prot_txdata_write_flush(dhdp, hp2p_info->flowid);
+	hp2p_info->hrtimer_init = FALSE;
+	hp2p_info->num_timer_limit++;
+
+	dhd_os_hp2punlock(dhdp, flags);
+done:
+	return HRTIMER_NORESTART;
+}
+
+static void
+dhd_calc_hp2p_burst(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint16 flowid)
+{
+	hp2p_info_t *hp2p_info;
+	uint16 hp2p_flowid;
+
+	hp2p_flowid = dhd->bus->max_submission_rings -
+		dhd->bus->max_cmn_rings - flowid + 1;
+	hp2p_info = &dhd->hp2p_info[hp2p_flowid];
+
+	if (ring->pend_items_count == dhd->pkt_thresh) {
+		dhd_prot_txdata_write_flush(dhd, flowid);
+
+		hp2p_info->hrtimer_init = FALSE;
+		hp2p_info->ring = NULL;
+		hp2p_info->num_pkt_limit++;
+		hrtimer_cancel(&hp2p_info->timer.timer);
+
+		DHD_INFO(("%s: cancel hrtimer for flowid = %d \n"
+			"hp2p_flowid = %d pkt_thresh = %d\n",
+			__FUNCTION__, flowid, hp2p_flowid, dhd->pkt_thresh));
+	} else {
+		if (hp2p_info->hrtimer_init == FALSE) {
+			hp2p_info->hrtimer_init = TRUE;
+			hp2p_info->flowid = flowid;
+			hp2p_info->dhd_pub = dhd;
+			hp2p_info->ring = ring;
+			hp2p_info->num_timer_start++;
+
+			tasklet_hrtimer_start(&hp2p_info->timer,
+				ktime_set(0, dhd->time_thresh * 1000), HRTIMER_MODE_REL);
+
+			DHD_INFO(("%s: start hrtimer for flowid = %d hp2_flowid = %d\n",
+					__FUNCTION__, flowid, hp2p_flowid));
+		}
+	}
+	return;
+}
+
+static void
+dhd_update_hp2p_txdesc(dhd_pub_t *dhd, host_txbuf_post_t *txdesc)
+{
+	uint64 ts;
+
+	ts = local_clock();
+	do_div(ts, 1000);
+
+	txdesc->metadata_buf_len = 0;
+	txdesc->metadata_buf_addr.high_addr = htol32((ts >> 32) & 0xFFFFFFFF);
+	txdesc->metadata_buf_addr.low_addr = htol32(ts & 0xFFFFFFFF);
+	txdesc->exp_time = dhd->pkt_expiry;
+
+	DHD_INFO(("%s: metadata_high = 0x%x metadata_low = 0x%x exp_time = %x\n",
+		__FUNCTION__, txdesc->metadata_buf_addr.high_addr,
+		txdesc->metadata_buf_addr.low_addr,
+		txdesc->exp_time));
+
+	return;
+}
+#endif /* DHD_HP2P */
+
+#ifdef DHD_MAP_LOGGING
+void
+dhd_prot_smmu_fault_dump(dhd_pub_t *dhdp)
+{
+	dhd_prot_debug_info_print(dhdp);
+	OSL_DMA_MAP_DUMP(dhdp->osh);
+#ifdef DHD_MAP_PKTID_LOGGING
+	dhd_pktid_logging_dump(dhdp);
+#endif /* DHD_MAP_PKTID_LOGGING */
+#ifdef DHD_FW_COREDUMP
+	dhdp->memdump_type = DUMP_TYPE_SMMU_FAULT;
+#ifdef DNGL_AXI_ERROR_LOGGING
+	dhdp->memdump_enabled = DUMP_MEMFILE;
+	dhd_bus_get_mem_dump(dhdp);
+#else
+	dhdp->memdump_enabled = DUMP_MEMONLY;
+	dhd_bus_mem_dump(dhdp);
+#endif /* DNGL_AXI_ERROR_LOGGING */
+#endif /* DHD_FW_COREDUMP */
+}
+#endif /* DHD_MAP_LOGGING */
