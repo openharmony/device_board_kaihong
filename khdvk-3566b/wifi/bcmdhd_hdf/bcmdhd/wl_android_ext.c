@@ -3554,3 +3554,517 @@ exit:
 
 	return error;
 }
+
+void
+wl_update_rssi_cache(wl_rssi_cache_ctrl_t *rssi_cache_ctrl,
+	wl_scan_results_t *ss_list)
+{
+	wl_rssi_cache_t *node, *prev, *leaf, **rssi_head;
+	wl_bss_info_t *bi = NULL;
+	int i, j, k;
+	struct osl_timespec now, timeout;
+
+	if (!ss_list->count)
+		return;
+
+	osl_do_gettimeofday(&now);
+	timeout.tv_sec = now.tv_sec + RSSICACHE_TIMEOUT;
+	if (timeout.tv_sec < now.tv_sec) {
+		/*
+		 * Integer overflow - assume long enough timeout to be assumed
+		 * to be infinite, i.e., the timeout would never happen.
+		 */
+		AEXT_TRACE("wlan",
+			"Too long timeout (secs=%d) to ever happen - now=%lu, timeout=%lu\n",
+			RSSICACHE_TIMEOUT, now.tv_sec, timeout.tv_sec);
+	}
+
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+
+	/* update RSSI */
+	for (i = 0; i < ss_list->count; i++) {
+		node = *rssi_head;
+		prev = NULL;
+		k = 0;
+		bi = bi ? (wl_bss_info_t *)((uintptr)bi + dtoh32(bi->length)) : ss_list->bss_info;
+		for (;node;) {
+			if (!memcmp(&node->BSSID, &bi->BSSID, ETHER_ADDR_LEN)) {
+				AEXT_INFO("wlan", "Update %d with BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+					k, &bi->BSSID, dtoh16(bi->RSSI), bi->SSID);
+				for (j=0; j<RSSIAVG_LEN-1; j++)
+					node->RSSI[j] = node->RSSI[j+1];
+				node->RSSI[j] = dtoh16(bi->RSSI);
+				node->dirty = 0;
+				node->tv = timeout;
+				break;
+			}
+			prev = node;
+			node = node->next;
+			k++;
+		}
+
+		if (node)
+			continue;
+
+		leaf = kmalloc(sizeof(wl_rssi_cache_t), GFP_KERNEL);
+		if (!leaf) {
+			AEXT_ERROR("wlan", "Memory alloc failure %d\n",
+				(int)sizeof(wl_rssi_cache_t));
+			return;
+		}
+		AEXT_INFO("wlan", "Add %d with cached BSSID %pM, RSSI=%3d, SSID \"%s\" in the leaf\n",
+			k, &bi->BSSID, dtoh16(bi->RSSI), bi->SSID);
+
+		leaf->next = NULL;
+		leaf->dirty = 0;
+		leaf->tv = timeout;
+		memcpy(&leaf->BSSID, &bi->BSSID, ETHER_ADDR_LEN);
+		for (j=0; j<RSSIAVG_LEN; j++)
+			leaf->RSSI[j] = dtoh16(bi->RSSI);
+
+		if (!prev)
+			*rssi_head = leaf;
+		else
+			prev->next = leaf;
+	}
+}
+
+int16
+wl_get_avg_rssi(wl_rssi_cache_ctrl_t *rssi_cache_ctrl, void *addr)
+{
+	wl_rssi_cache_t *node, **rssi_head;
+	int j, rssi_sum, rssi=RSSI_MINVAL;
+
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+
+	node = *rssi_head;
+	for (;node;) {
+		if (!memcmp(&node->BSSID, addr, ETHER_ADDR_LEN)) {
+			rssi_sum = 0;
+			rssi = 0;
+			for (j=0; j<RSSIAVG_LEN; j++)
+				rssi_sum += node->RSSI[RSSIAVG_LEN-j-1];
+			rssi = rssi_sum / j;
+			break;
+		}
+		node = node->next;
+	}
+	rssi = MIN(rssi, RSSI_MAXVAL);
+	if (rssi == RSSI_MINVAL) {
+		AEXT_ERROR("wlan", "BSSID %pM does not in RSSI cache\n", addr);
+	}
+	return (int16)rssi;
+}
+#endif /* RSSIAVG */
+
+#if defined(RSSIOFFSET)
+int
+wl_update_rssi_offset(struct net_device *net, int rssi)
+{
+#if defined(RSSIOFFSET_NEW)
+	int j;
+#endif /* RSSIOFFSET_NEW */
+
+	if (!g_wifi_on)
+		return rssi;
+
+#if defined(RSSIOFFSET_NEW)
+	for (j=0; j<RSSI_OFFSET; j++) {
+		if (rssi - (RSSI_OFFSET_MINVAL+RSSI_OFFSET_INTVAL*(j+1)) < 0)
+			break;
+	}
+	rssi += j;
+#else
+	rssi += RSSI_OFFSET;
+#endif /* RSSIOFFSET_NEW */
+	return MIN(rssi, RSSI_MAXVAL);
+}
+#endif /* RSSIOFFSET */
+
+#if defined(BSSCACHE)
+void
+wl_free_bss_cache(wl_bss_cache_ctrl_t *bss_cache_ctrl)
+{
+	wl_bss_cache_t *node, *cur, **bss_head;
+	int i=0;
+
+	AEXT_TRACE("wlan", "called\n");
+
+	bss_head = &bss_cache_ctrl->m_cache_head;
+	node = *bss_head;
+
+	for (;node;) {
+		AEXT_TRACE("wlan", "Free %d with BSSID %pM\n",
+			i, &node->results.bss_info->BSSID);
+		cur = node;
+		node = cur->next;
+		kfree(cur);
+		i++;
+	}
+	*bss_head = NULL;
+}
+
+void
+wl_delete_dirty_bss_cache(wl_bss_cache_ctrl_t *bss_cache_ctrl)
+{
+	wl_bss_cache_t *node, *prev, **bss_head;
+	int i = -1, tmp = 0;
+	struct osl_timespec now;
+
+	osl_do_gettimeofday(&now);
+
+	bss_head = &bss_cache_ctrl->m_cache_head;
+	node = *bss_head;
+	prev = node;
+	for (;node;) {
+		i++;
+		if (now.tv_sec > node->tv.tv_sec) {
+			if (node == *bss_head) {
+				tmp = 1;
+				*bss_head = node->next;
+			} else {
+				tmp = 0;
+				prev->next = node->next;
+			}
+			AEXT_TRACE("wlan", "Del %d with BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+				i, &node->results.bss_info->BSSID,
+				dtoh16(node->results.bss_info->RSSI), node->results.bss_info->SSID);
+			kfree(node);
+			if (tmp == 1) {
+				node = *bss_head;
+				prev = node;
+			} else {
+				node = prev->next;
+			}
+			continue;
+		}
+		prev = node;
+		node = node->next;
+	}
+}
+
+void
+wl_delete_disconnected_bss_cache(wl_bss_cache_ctrl_t *bss_cache_ctrl,
+	u8 *bssid)
+{
+	wl_bss_cache_t *node, *prev, **bss_head;
+	int i = -1, tmp = 0;
+
+	bss_head = &bss_cache_ctrl->m_cache_head;
+	node = *bss_head;
+	prev = node;
+	for (;node;) {
+		i++;
+		if (!memcmp(&node->results.bss_info->BSSID, bssid, ETHER_ADDR_LEN)) {
+			if (node == *bss_head) {
+				tmp = 1;
+				*bss_head = node->next;
+			} else {
+				tmp = 0;
+				prev->next = node->next;
+			}
+			AEXT_TRACE("wlan", "Del %d with BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+				i, &node->results.bss_info->BSSID,
+				dtoh16(node->results.bss_info->RSSI), node->results.bss_info->SSID);
+			kfree(node);
+			if (tmp == 1) {
+				node = *bss_head;
+				prev = node;
+			} else {
+				node = prev->next;
+			}
+			continue;
+		}
+		prev = node;
+		node = node->next;
+	}
+}
+
+int
+wl_bss_cache_size(wl_bss_cache_ctrl_t *bss_cache_ctrl)
+{
+	wl_bss_cache_t *node, **bss_head;
+	int bss_num = 0;
+
+	bss_head = &bss_cache_ctrl->m_cache_head;
+
+	node = *bss_head;
+	for (;node;) {
+		if (node->dirty > 1) {
+			bss_num++;
+		}
+		node = node->next;
+	}
+	return bss_num;
+}
+
+void
+wl_reset_bss_cache(wl_bss_cache_ctrl_t *bss_cache_ctrl)
+{
+	wl_bss_cache_t *node, **bss_head;
+
+	bss_head = &bss_cache_ctrl->m_cache_head;
+
+	/* reset dirty */
+	node = *bss_head;
+	for (;node;) {
+		node->dirty += 1;
+		node = node->next;
+	}
+}
+
+static void
+wl_bss_cache_dump(
+#if defined(RSSIAVG)
+	wl_rssi_cache_ctrl_t *rssi_cache_ctrl,
+#endif /* RSSIAVG */
+	wl_bss_cache_t *node)
+{
+	int k = 0;
+	int16 rssi;
+
+	for (;node;) {
+#if defined(RSSIAVG)
+		rssi = wl_get_avg_rssi(rssi_cache_ctrl, &node->results.bss_info->BSSID);
+#else
+		rssi = dtoh16(node->results.bss_info->RSSI);
+#endif /* RSSIAVG */
+		k++;
+		AEXT_TRACE("wlan", "dump %d with cached BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+			k, &node->results.bss_info->BSSID, rssi, node->results.bss_info->SSID);
+		node = node->next;
+	}
+}
+
+#if defined(SORT_BSS_CHANNEL)
+static wl_bss_cache_t *
+wl_bss_cache_sort_channel(wl_bss_cache_t **bss_head, wl_bss_cache_t *leaf)
+{
+	wl_bss_cache_t *node, *prev;
+	uint16 channel, channel_node;
+
+	node = *bss_head;
+	channel = wf_chspec_ctlchan(leaf->results.bss_info->chanspec);
+	for (;node;) {
+		channel_node = wf_chspec_ctlchan(node->results.bss_info->chanspec);
+		if (channel_node > channel) {
+			leaf->next = node;
+			if (node == *bss_head)
+				*bss_head = leaf;
+			else
+				prev->next = leaf;
+			break;
+		}
+		prev = node;
+		node = node->next;
+	}
+	if (node == NULL)
+		prev->next = leaf;
+
+	return *bss_head;
+}
+#endif /* SORT_BSS_CHANNEL */
+
+#if defined(SORT_BSS_RSSI)
+static wl_bss_cache_t *
+wl_bss_cache_sort_rssi(wl_bss_cache_t **bss_head, wl_bss_cache_t *leaf
+#if defined(RSSIAVG)
+, wl_rssi_cache_ctrl_t *rssi_cache_ctrl
+#endif /* RSSIAVG */
+)
+{
+	wl_bss_cache_t *node, *prev;
+	int16 rssi, rssi_node;
+
+	node = *bss_head;
+#if defined(RSSIAVG)
+	rssi = wl_get_avg_rssi(rssi_cache_ctrl, &leaf->results.bss_info->BSSID);
+#else
+	rssi = dtoh16(leaf->results.bss_info->RSSI);
+#endif /* RSSIAVG */
+	for (;node;) {
+#if defined(RSSIAVG)
+		rssi_node = wl_get_avg_rssi(rssi_cache_ctrl,
+			&node->results.bss_info->BSSID);
+#else
+		rssi_node = dtoh16(node->results.bss_info->RSSI);
+#endif /* RSSIAVG */
+		if (rssi > rssi_node) {
+			leaf->next = node;
+			if (node == *bss_head)
+				*bss_head = leaf;
+			else
+				prev->next = leaf;
+			break;
+		}
+		prev = node;
+		node = node->next;
+	}
+	if (node == NULL)
+		prev->next = leaf;
+
+	return *bss_head;
+}
+#endif /* SORT_BSS_BY_RSSI */
+
+void
+wl_update_bss_cache(wl_bss_cache_ctrl_t *bss_cache_ctrl,
+#if defined(RSSIAVG)
+	wl_rssi_cache_ctrl_t *rssi_cache_ctrl,
+#endif /* RSSIAVG */
+	wl_scan_results_t *ss_list)
+{
+	wl_bss_cache_t *node, *node_target = NULL, *prev, *leaf, **bss_head;
+	wl_bss_cache_t *node_rssi_prev = NULL, *node_rssi = NULL;
+	wl_bss_info_t *bi = NULL;
+	int i, k=0, bss_num = 0;
+	struct osl_timespec now, timeout;
+	int16 rssi_min;
+	bool rssi_replace = FALSE;
+
+	if (!ss_list->count)
+		return;
+
+	osl_do_gettimeofday(&now);
+	timeout.tv_sec = now.tv_sec + BSSCACHE_TIMEOUT;
+	if (timeout.tv_sec < now.tv_sec) {
+		/*
+		 * Integer overflow - assume long enough timeout to be assumed
+		 * to be infinite, i.e., the timeout would never happen.
+		 */
+		AEXT_TRACE("wlan",
+			"Too long timeout (secs=%d) to ever happen - now=%lu, timeout=%lu\n",
+			BSSCACHE_TIMEOUT, now.tv_sec, timeout.tv_sec);
+	}
+
+	bss_head = &bss_cache_ctrl->m_cache_head;
+
+	// get the num of bss cache
+	node = *bss_head;
+	for (;node;) {
+		node = node->next;
+		bss_num++;
+	}
+
+	for (i=0; i < ss_list->count; i++) {
+		node = *bss_head;
+		prev = NULL;
+		node_target = NULL;
+		node_rssi_prev = NULL;
+		bi = bi ? (wl_bss_info_t *)((uintptr)bi + dtoh32(bi->length)) : ss_list->bss_info;
+
+		// find the bss with same BSSID
+		for (;node;) {
+			if (!memcmp(&node->results.bss_info->BSSID, &bi->BSSID, ETHER_ADDR_LEN)) {
+				if (node == *bss_head)
+					*bss_head = node->next;
+				else {
+					prev->next = node->next;
+				}
+				break;
+			}
+			prev = node;
+			node = node->next;
+		}
+		if (node)
+			node_target = node;
+
+		// find the bss with lowest RSSI
+		if (!node_target && bss_num >= BSSCACHE_MAXCNT) {
+			node = *bss_head;
+			prev = NULL;
+			rssi_min = dtoh16(bi->RSSI);
+			for (;node;) {
+				if (dtoh16(node->results.bss_info->RSSI) < rssi_min) {
+					node_rssi = node;
+					node_rssi_prev = prev;
+					rssi_min = dtoh16(node->results.bss_info->RSSI);
+				}
+				prev = node;
+				node = node->next;
+			}
+			if (dtoh16(bi->RSSI) > rssi_min) {
+				rssi_replace = TRUE;
+				node_target = node_rssi;
+				if (node_rssi == *bss_head)
+					*bss_head = node_rssi->next;
+				else if (node_rssi) {
+					node_rssi_prev->next = node_rssi->next;
+				}
+			}
+		}
+
+		k++;
+		if (bss_num < BSSCACHE_MAXCNT) {
+			bss_num++;
+			AEXT_TRACE("wlan",
+				"Add %d with cached BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+				k, &bi->BSSID, dtoh16(bi->RSSI), bi->SSID);
+		} else if (node_target) {
+			if (rssi_replace) {
+				AEXT_TRACE("wlan",
+					"Replace %d with cached BSSID %pM(%3d) => %pM(%3d), "\
+					"SSID \"%s\" => \"%s\"\n",
+					k, &node_target->results.bss_info->BSSID,
+					dtoh16(node_target->results.bss_info->RSSI),
+					&bi->BSSID, dtoh16(bi->RSSI),
+					node_target->results.bss_info->SSID, bi->SSID);
+			} else {
+				AEXT_TRACE("wlan",
+					"Update %d with cached BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+					k, &bi->BSSID, dtoh16(bi->RSSI), bi->SSID);
+			}
+			kfree(node_target);
+			node_target = NULL;
+		} else {
+			AEXT_TRACE("wlan", "Skip %d BSSID %pM, RSSI=%3d, SSID \"%s\"\n",
+				k, &bi->BSSID, dtoh16(bi->RSSI), bi->SSID);
+			continue;
+		}
+
+		leaf = kmalloc(dtoh32(bi->length) + sizeof(wl_bss_cache_t), GFP_KERNEL);
+		if (!leaf) {
+			AEXT_ERROR("wlan", "Memory alloc failure %d\n",
+				dtoh32(bi->length) + (int)sizeof(wl_bss_cache_t));
+			return;
+		}
+
+		memcpy(leaf->results.bss_info, bi, dtoh32(bi->length));
+		leaf->next = NULL;
+		leaf->dirty = 0;
+		leaf->tv = timeout;
+		leaf->results.count = 1;
+		leaf->results.version = ss_list->version;
+
+		if (*bss_head == NULL)
+			*bss_head = leaf;
+		else {
+#if defined(SORT_BSS_CHANNEL)
+			*bss_head = wl_bss_cache_sort_channel(bss_head, leaf);
+#elif defined(SORT_BSS_RSSI)
+			*bss_head = wl_bss_cache_sort_rssi(bss_head, leaf
+#if defined(RSSIAVG)
+				, rssi_cache_ctrl
+#endif /* RSSIAVG */
+				);
+#else
+			leaf->next = *bss_head;
+			*bss_head = leaf;
+#endif /* SORT_BSS_BY_RSSI */
+		}
+	}
+	wl_bss_cache_dump(
+#if defined(RSSIAVG)
+		rssi_cache_ctrl,
+#endif /* RSSIAVG */
+		*bss_head);
+}
+
+void
+wl_release_bss_cache_ctrl(wl_bss_cache_ctrl_t *bss_cache_ctrl)
+{
+	AEXT_TRACE("wlan", "Enter\n");
+	wl_free_bss_cache(bss_cache_ctrl);
+}
+#endif /* BSSCACHE */
+
