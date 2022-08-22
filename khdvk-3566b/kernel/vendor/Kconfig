@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config VENDOR_KHDVK_3566B_DRIVER
+	bool "vendor board drivers"
+	default y
+config VENDOR_RK3566_DRIVER
+	bool "vendor soc drivers"
+	default y
+
+menu "Vendor Drivers"
+if VENDOR_KHDVK_3566B_DRIVER
+source "vendor/drivers/Kconfig"
+endif
+
+if VENDOR_RK3566_DRIVER
+source "vendor/rk3566/Kconfig"
+endif
+
+endmenu
