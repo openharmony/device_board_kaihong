@@ -1,0 +1,7 @@
+VENDOR_BOARD_DMABUF_INCLUDE := -I$(srctree)/vendor/include
+
+EXTRA_CFLAGS += $(VENDOR_BOARD_DMABUF_INCLUDE)
+
+
+
+obj-$(CONFIG_VENDOR_DMABUF_HEAPS)	+= heaps/
