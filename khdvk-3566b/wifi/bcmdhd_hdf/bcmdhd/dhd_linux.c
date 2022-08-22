@@ -20984,3 +20984,1963 @@ dhd_write_file_and_check(const char *filepath, char *buf, int buf_len)
 	return ret;
 }
 
+#ifdef FILTER_IE
+int dhd_read_from_file(dhd_pub_t *dhd)
+{
+	int ret = 0, nread = 0;
+	void *fd;
+	uint8 *buf;
+	NULL_CHECK(dhd, "dhd is NULL", ret);
+
+	buf = MALLOCZ(dhd->osh, FILE_BLOCK_READ_SIZE);
+	if (!buf) {
+		DHD_ERROR(("error: failed to alllocate buf.\n"));
+		return BCME_NOMEM;
+	}
+
+	/* open file to read */
+	fd = dhd_os_open_image1(dhd, FILTER_IE_PATH);
+	if (!fd) {
+		DHD_ERROR(("error: failed to open %s\n", FILTER_IE_PATH));
+		ret = BCME_EPERM;
+		goto exit;
+	}
+	nread = dhd_os_get_image_block(buf, (FILE_BLOCK_READ_SIZE - 1), fd);
+	if (nread > 0) {
+		buf[nread] = '\0';
+		if ((ret = dhd_parse_filter_ie(dhd, buf)) < 0) {
+			DHD_ERROR(("error: failed to parse filter ie\n"));
+		}
+	} else {
+		DHD_ERROR(("error: zero length file.failed to read\n"));
+		ret = BCME_ERROR;
+	}
+	dhd_os_close_image1(dhd, fd);
+exit:
+	if (buf) {
+		MFREE(dhd->osh, buf, FILE_BLOCK_READ_SIZE);
+		buf = NULL;
+	}
+	return ret;
+}
+
+int dhd_get_filter_ie_count(dhd_pub_t *dhdp, uint8* buf)
+{
+	uint8* pstr = buf;
+	int element_count = 0;
+
+	if (buf == NULL) {
+		return BCME_ERROR;
+	}
+
+	while (*pstr != '\0') {
+		if (*pstr == '\n') {
+			element_count++;
+		}
+		pstr++;
+	}
+	/*
+	 * New line character must not be present after last line.
+	 * To count last line
+	 */
+	element_count++;
+
+	return element_count;
+}
+
+int dhd_parse_oui(dhd_pub_t *dhd, uint8 *inbuf, uint8 *oui, int len)
+{
+	uint8 i, j, msb, lsb, oui_len = 0;
+	/*
+	 * OUI can vary from 3 bytes to 5 bytes.
+	 * While reading from file as ascii input it can
+	 * take maximum size of 14 bytes and minumum size of
+	 * 8 bytes including ":"
+	 * Example 5byte OUI <AB:DE:BE:CD:FA>
+	 * Example 3byte OUI <AB:DC:EF>
+	 */
+
+	if ((inbuf == NULL) || (len < 8) || (len > 14)) {
+		DHD_ERROR(("error: failed to parse OUI \n"));
+		return BCME_ERROR;
+	}
+
+	for (j = 0, i = 0; i < len; i += 3, ++j) {
+		if (!bcm_isxdigit(inbuf[i]) || !bcm_isxdigit(inbuf[i + 1])) {
+			DHD_ERROR(("error: invalid OUI format \n"));
+			return BCME_ERROR;
+		}
+		msb = inbuf[i] > '9' ? bcm_toupper(inbuf[i]) - 'A' + 10 : inbuf[i] - '0';
+		lsb = inbuf[i + 1] > '9' ? bcm_toupper(inbuf[i + 1]) -
+			'A' + 10 : inbuf[i + 1] - '0';
+		oui[j] = (msb << 4) | lsb;
+	}
+	/* Size of oui.It can vary from 3/4/5 */
+	oui_len = j;
+
+	return oui_len;
+}
+
+int dhd_check_valid_ie(dhd_pub_t *dhdp, uint8* buf, int len)
+{
+	int i = 0;
+
+	while (i < len) {
+		if (!bcm_isdigit(buf[i])) {
+			DHD_ERROR(("error: non digit value found in filter_ie \n"));
+			return BCME_ERROR;
+		}
+		i++;
+	}
+	if (bcm_atoi((char*)buf) > 255) {
+		DHD_ERROR(("error: element id cannot be greater than 255 \n"));
+		return BCME_ERROR;
+	}
+
+	return BCME_OK;
+}
+
+int dhd_parse_filter_ie(dhd_pub_t *dhd, uint8 *buf)
+{
+	int element_count = 0, i = 0, oui_size = 0, ret = 0;
+	uint16 bufsize, buf_space_left, id = 0, len = 0;
+	uint16 filter_iovsize, all_tlvsize;
+	wl_filter_ie_tlv_t *p_ie_tlv = NULL;
+	wl_filter_ie_iov_v1_t *p_filter_iov = (wl_filter_ie_iov_v1_t *) NULL;
+	char *token = NULL, *ele_token = NULL, *oui_token = NULL, *type = NULL;
+	uint8 data[20];
+
+	element_count = dhd_get_filter_ie_count(dhd, buf);
+	DHD_INFO(("total element count %d \n", element_count));
+	/* Calculate the whole buffer size */
+	filter_iovsize = sizeof(wl_filter_ie_iov_v1_t) + FILTER_IE_BUFSZ;
+	p_filter_iov = MALLOCZ(dhd->osh, filter_iovsize);
+
+	if (p_filter_iov == NULL) {
+		DHD_ERROR(("error: failed to allocate %d bytes of memory\n", filter_iovsize));
+		return BCME_ERROR;
+	}
+
+	/* setup filter iovar header */
+	p_filter_iov->version = WL_FILTER_IE_VERSION;
+	p_filter_iov->len = filter_iovsize;
+	p_filter_iov->fixed_length = p_filter_iov->len - FILTER_IE_BUFSZ;
+	p_filter_iov->pktflag = FC_PROBE_REQ;
+	p_filter_iov->option = WL_FILTER_IE_CHECK_SUB_OPTION;
+	/* setup TLVs */
+	bufsize = filter_iovsize - WL_FILTER_IE_IOV_HDR_SIZE; /* adjust available size for TLVs */
+	p_ie_tlv = (wl_filter_ie_tlv_t *)&p_filter_iov->tlvs[0];
+	buf_space_left = bufsize;
+
+	while ((i < element_count) && (buf != NULL)) {
+		len = 0;
+		/* token contains one line of input data */
+		token = bcmstrtok((char**)&buf, "\n", NULL);
+		if (token == NULL) {
+			break;
+		}
+		if ((ele_token = bcmstrstr(token, ",")) == NULL) {
+		/* only element id is present */
+			if (dhd_check_valid_ie(dhd, token, strlen(token)) == BCME_ERROR) {
+				DHD_ERROR(("error: Invalid element id \n"));
+				ret = BCME_ERROR;
+				goto exit;
+			}
+			id = bcm_atoi((char*)token);
+			data[len++] = WL_FILTER_IE_SET;
+		} else {
+			/* oui is present */
+			ele_token = bcmstrtok(&token, ",", NULL);
+			if ((ele_token == NULL) || (dhd_check_valid_ie(dhd, ele_token,
+				strlen(ele_token)) == BCME_ERROR)) {
+				DHD_ERROR(("error: Invalid element id \n"));
+				ret = BCME_ERROR;
+				goto exit;
+			}
+			id =  bcm_atoi((char*)ele_token);
+			data[len++] = WL_FILTER_IE_SET;
+			if ((oui_token = bcmstrstr(token, ",")) == NULL) {
+				oui_size = dhd_parse_oui(dhd, token, &(data[len]), strlen(token));
+				if (oui_size == BCME_ERROR) {
+					DHD_ERROR(("error: Invalid OUI \n"));
+					ret = BCME_ERROR;
+					goto exit;
+				}
+				len += oui_size;
+			} else {
+				/* type is present */
+				oui_token = bcmstrtok(&token, ",", NULL);
+				if ((oui_token == NULL) || ((oui_size =
+					dhd_parse_oui(dhd, oui_token,
+					&(data[len]), strlen(oui_token))) == BCME_ERROR)) {
+					DHD_ERROR(("error: Invalid OUI \n"));
+					ret = BCME_ERROR;
+					goto exit;
+				}
+				len += oui_size;
+				if ((type = bcmstrstr(token, ",")) == NULL) {
+					if (dhd_check_valid_ie(dhd, token,
+						strlen(token)) == BCME_ERROR) {
+						DHD_ERROR(("error: Invalid type \n"));
+						ret = BCME_ERROR;
+						goto exit;
+					}
+					data[len++] = bcm_atoi((char*)token);
+				} else {
+					/* subtype is present */
+					type = bcmstrtok(&token, ",", NULL);
+					if ((type == NULL) || (dhd_check_valid_ie(dhd, type,
+						strlen(type)) == BCME_ERROR)) {
+						DHD_ERROR(("error: Invalid type \n"));
+						ret = BCME_ERROR;
+						goto exit;
+					}
+					data[len++] = bcm_atoi((char*)type);
+					/* subtype is last element */
+					if ((token == NULL) || (*token == '\0') ||
+						(dhd_check_valid_ie(dhd, token,
+						strlen(token)) == BCME_ERROR)) {
+						DHD_ERROR(("error: Invalid subtype \n"));
+						ret = BCME_ERROR;
+						goto exit;
+					}
+					data[len++] = bcm_atoi((char*)token);
+				}
+			}
+		}
+		ret = bcm_pack_xtlv_entry((uint8 **)&p_ie_tlv,
+			&buf_space_left, id, len, data, BCM_XTLV_OPTION_ALIGN32);
+		if (ret != BCME_OK) {
+			DHD_ERROR(("%s : bcm_pack_xtlv_entry() failed ,"
+				"status=%d\n", __FUNCTION__, ret));
+			goto exit;
+		}
+		i++;
+	}
+	if (i == 0) {
+		/* file is empty or first line is blank */
+		DHD_ERROR(("error: filter_ie file is empty or first line is blank \n"));
+		ret = BCME_ERROR;
+		goto exit;
+	}
+	/* update the iov header, set len to include all TLVs + header */
+	all_tlvsize = (bufsize - buf_space_left);
+	p_filter_iov->len = htol16(all_tlvsize + WL_FILTER_IE_IOV_HDR_SIZE);
+	ret = dhd_iovar(dhd, 0, "filter_ie", (void *)p_filter_iov,
+			p_filter_iov->len, NULL, 0, TRUE);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("error: IOVAR failed, status=%d\n", ret));
+	}
+exit:
+	/* clean up */
+	if (p_filter_iov) {
+		MFREE(dhd->osh, p_filter_iov, filter_iovsize);
+		p_filter_iov = NULL;
+	}
+	return ret;
+}
+#endif /* FILTER_IE */
+#ifdef DHD_WAKE_STATUS
+wake_counts_t*
+dhd_get_wakecount(dhd_pub_t *dhdp)
+{
+#ifdef BCMDBUS
+	return NULL;
+#else
+	return dhd_bus_get_wakecount(dhdp);
+#endif /* BCMDBUS */
+}
+#endif /* DHD_WAKE_STATUS */
+
+int
+dhd_get_random_bytes(uint8 *buf, uint len)
+{
+#ifdef BCMPCIE
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+	int rndlen = get_random_bytes_arch(buf, len);
+	if (rndlen != len) {
+		bzero(buf, len);
+		get_random_bytes(buf, len);
+	}
+#else
+	get_random_bytes_arch(buf, len);
+#endif // endif
+#endif /* BCMPCIE */
+	return BCME_OK;
+}
+
+#ifdef DHD_ERPOM
+static void
+dhd_error_recovery(void *handle, void *event_info, u8 event)
+{
+	dhd_info_t *dhd = handle;
+	dhd_pub_t *dhdp;
+	int ret = 0;
+
+	if (!dhd) {
+		DHD_ERROR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	dhdp = &dhd->pub;
+
+	if (!(dhd->dhd_state & DHD_ATTACH_STATE_DONE)) {
+		DHD_ERROR(("%s: init not completed, cannot initiate recovery\n",
+			__FUNCTION__));
+		return;
+	}
+
+	ret = dhd_bus_perform_flr_with_quiesce(dhdp, dhdp->bus, FALSE);
+	if (ret != BCME_DNGL_DEVRESET) {
+		DHD_ERROR(("%s: dhd_bus_perform_flr_with_quiesce failed with ret: %d,"
+			"toggle REG_ON\n", __FUNCTION__, ret));
+		/* toggle REG_ON */
+		dhdp->pom_toggle_reg_on(WLAN_FUNC_ID, BY_WLAN_DUE_TO_WLAN);
+		return;
+	}
+}
+
+void
+dhd_schedule_reset(dhd_pub_t *dhdp)
+{
+	if (dhdp->enable_erpom) {
+		dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq, NULL,
+			DHD_WQ_WORK_ERROR_RECOVERY, dhd_error_recovery, DHD_WQ_WORK_PRIORITY_HIGH);
+	}
+}
+#endif /* DHD_ERPOM */
+
+void
+get_debug_dump_time(char *str)
+{
+	struct osl_timespec curtime;
+	unsigned long local_time;
+	struct rtc_time tm;
+
+	if (!strlen(str)) {
+		osl_do_gettimeofday(&curtime);
+		local_time = (u32)(curtime.tv_sec -
+				(sys_tz.tz_minuteswest * DHD_LOG_DUMP_TS_MULTIPLIER_VALUE));
+		rtc_time_to_tm(local_time, &tm);
+
+		snprintf(str, DEBUG_DUMP_TIME_BUF_LEN, DHD_LOG_DUMP_TS_FMT_YYMMDDHHMMSSMSMS,
+				tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
+				tm.tm_sec, (int)(curtime.tv_usec/NSEC_PER_USEC));
+	}
+}
+
+void
+clear_debug_dump_time(char *str)
+{
+	memset(str, 0, DEBUG_DUMP_TIME_BUF_LEN);
+}
+
+void
+dhd_print_tasklet_status(dhd_pub_t *dhd)
+{
+	dhd_info_t *dhdinfo;
+
+	if (!dhd) {
+		DHD_ERROR(("%s : DHD is null\n", __FUNCTION__));
+		return;
+	}
+
+	dhdinfo = dhd->info;
+
+	if (!dhdinfo) {
+		DHD_ERROR(("%s : DHD INFO is null \n", __FUNCTION__));
+		return;
+	}
+
+	DHD_ERROR(("DHD Tasklet status : 0x%lx\n", dhdinfo->tasklet.state));
+}
+
+/*
+ * DHD RING
+ */
+#define DHD_RING_ERR_INTERNAL(fmt, ...) DHD_ERROR(("EWPF-" fmt, ##__VA_ARGS__))
+#define DHD_RING_TRACE_INTERNAL(fmt, ...) DHD_INFO(("EWPF-" fmt, ##__VA_ARGS__))
+
+#define DHD_RING_ERR(x) DHD_RING_ERR_INTERNAL x
+#define DHD_RING_TRACE(x) DHD_RING_TRACE_INTERNAL x
+
+#define DHD_RING_MAGIC 0x20170910
+#define DHD_RING_IDX_INVALID	0xffffffff
+
+#define DHD_RING_SYNC_LOCK_INIT(osh)		dhd_os_spin_lock_init(osh)
+#define DHD_RING_SYNC_LOCK_DEINIT(osh, lock)	dhd_os_spin_lock_deinit(osh, lock)
+#define DHD_RING_SYNC_LOCK(lock, flags)		(flags) = dhd_os_spin_lock(lock)
+#define DHD_RING_SYNC_UNLOCK(lock, flags)	dhd_os_spin_unlock(lock, flags)
+
+typedef struct {
+	uint32 elem_size;
+	uint32 elem_cnt;
+	uint32 write_idx;	/* next write index, -1 : not started */
+	uint32 read_idx;	/* next read index, -1 : not start */
+
+	/* protected elements during serialization */
+	int lock_idx;	/* start index of locked, element will not be overried */
+	int lock_count; /* number of locked, from lock idx */
+
+	/* saved data elements */
+	void *elem;
+} dhd_fixed_ring_info_t;
+
+typedef struct {
+	uint32 elem_size;
+	uint32 elem_cnt;
+	uint32 idx;		/* -1 : not started */
+	uint32 rsvd;		/* reserved for future use */
+
+	/* protected elements during serialization */
+	atomic_t ring_locked;
+	/* check the overwriting */
+	uint32 ring_overwrited;
+
+	/* saved data elements */
+	void *elem;
+} dhd_singleidx_ring_info_t;
+
+typedef struct {
+	uint32 magic;
+	uint32 type;
+	void *ring_sync; /* spinlock for sync */
+	union {
+		dhd_fixed_ring_info_t fixed;
+		dhd_singleidx_ring_info_t single;
+	};
+} dhd_ring_info_t;
+
+uint32
+dhd_ring_get_hdr_size(void)
+{
+	return sizeof(dhd_ring_info_t);
+}
+
+void *
+dhd_ring_init(dhd_pub_t *dhdp, uint8 *buf, uint32 buf_size, uint32 elem_size,
+	uint32 elem_cnt, uint32 type)
+{
+	dhd_ring_info_t *ret_ring;
+
+	if (!buf) {
+		DHD_RING_ERR(("NO RING BUFFER\n"));
+		return NULL;
+	}
+
+	if (buf_size < dhd_ring_get_hdr_size() + elem_size * elem_cnt) {
+		DHD_RING_ERR(("RING SIZE IS TOO SMALL\n"));
+		return NULL;
+	}
+
+	if (type != DHD_RING_TYPE_FIXED && type != DHD_RING_TYPE_SINGLE_IDX) {
+		DHD_RING_ERR(("UNSUPPORTED RING TYPE\n"));
+		return NULL;
+	}
+
+	ret_ring = (dhd_ring_info_t *)buf;
+	ret_ring->type = type;
+	ret_ring->ring_sync = DHD_RING_SYNC_LOCK_INIT(dhdp->osh);
+	ret_ring->magic = DHD_RING_MAGIC;
+
+	if (type == DHD_RING_TYPE_FIXED) {
+		ret_ring->fixed.read_idx = DHD_RING_IDX_INVALID;
+		ret_ring->fixed.write_idx = DHD_RING_IDX_INVALID;
+		ret_ring->fixed.lock_idx = DHD_RING_IDX_INVALID;
+		ret_ring->fixed.elem = buf + sizeof(dhd_ring_info_t);
+		ret_ring->fixed.elem_size = elem_size;
+		ret_ring->fixed.elem_cnt = elem_cnt;
+	} else {
+		ret_ring->single.idx = DHD_RING_IDX_INVALID;
+		atomic_set(&ret_ring->single.ring_locked, 0);
+		ret_ring->single.ring_overwrited = 0;
+		ret_ring->single.rsvd = 0;
+		ret_ring->single.elem = buf + sizeof(dhd_ring_info_t);
+		ret_ring->single.elem_size = elem_size;
+		ret_ring->single.elem_cnt = elem_cnt;
+	}
+
+	return ret_ring;
+}
+
+void
+dhd_ring_deinit(dhd_pub_t *dhdp, void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	if (!ring) {
+		return;
+	}
+
+	if (ring->magic != DHD_RING_MAGIC) {
+		return;
+	}
+
+	if (ring->type != DHD_RING_TYPE_FIXED &&
+		ring->type != DHD_RING_TYPE_SINGLE_IDX) {
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK_DEINIT(dhdp->osh, ring->ring_sync);
+	ring->ring_sync = NULL;
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		dhd_fixed_ring_info_t *fixed = &ring->fixed;
+		memset(fixed->elem, 0, fixed->elem_size * fixed->elem_cnt);
+		fixed->elem_size = fixed->elem_cnt = 0;
+	} else {
+		dhd_singleidx_ring_info_t *single = &ring->single;
+		memset(single->elem, 0, single->elem_size * single->elem_cnt);
+		single->elem_size = single->elem_cnt = 0;
+	}
+	ring->type = 0;
+	ring->magic = 0;
+}
+
+static inline uint32
+__dhd_ring_ptr2idx(void *ring, void *ptr, char *sig, uint32 type)
+{
+	uint32 diff;
+	uint32 ret_idx = (uint32)DHD_RING_IDX_INVALID;
+	uint32 elem_size, elem_cnt;
+	void *elem;
+
+	if (type == DHD_RING_TYPE_FIXED) {
+		dhd_fixed_ring_info_t *fixed = (dhd_fixed_ring_info_t *)ring;
+		elem_size = fixed->elem_size;
+		elem_cnt = fixed->elem_cnt;
+		elem = fixed->elem;
+	} else if (type == DHD_RING_TYPE_SINGLE_IDX) {
+		dhd_singleidx_ring_info_t *single = (dhd_singleidx_ring_info_t *)ring;
+		elem_size = single->elem_size;
+		elem_cnt = single->elem_cnt;
+		elem = single->elem;
+	} else {
+		DHD_RING_ERR(("UNSUPPORTED RING TYPE %d\n", type));
+		return ret_idx;
+	}
+
+	if (ptr < elem) {
+		DHD_RING_ERR(("INVALID POINTER %s:%p, ring->elem:%p\n", sig, ptr, elem));
+		return ret_idx;
+	}
+	diff = (uint32)((uint8 *)ptr - (uint8 *)elem);
+	if (diff % elem_size != 0) {
+		DHD_RING_ERR(("INVALID POINTER %s:%p, ring->elem:%p\n", sig, ptr, elem));
+		return ret_idx;
+	}
+	ret_idx = diff / elem_size;
+	if (ret_idx >= elem_cnt) {
+		DHD_RING_ERR(("INVALID POINTER max:%d cur:%d\n", elem_cnt, ret_idx));
+	}
+	return ret_idx;
+}
+
+/* Sub functions for fixed ring */
+/* get counts between two indexes of ring buffer (internal only) */
+static inline int
+__dhd_fixed_ring_get_count(dhd_fixed_ring_info_t *ring, int start, int end)
+{
+	if (start == DHD_RING_IDX_INVALID || end == DHD_RING_IDX_INVALID) {
+		return 0;
+	}
+
+	return (ring->elem_cnt + end - start) % ring->elem_cnt + 1;
+}
+
+static inline int
+__dhd_fixed_ring_get_cur_size(dhd_fixed_ring_info_t *ring)
+{
+	return __dhd_fixed_ring_get_count(ring, ring->read_idx, ring->write_idx);
+}
+
+static inline void *
+__dhd_fixed_ring_get_first(dhd_fixed_ring_info_t *ring)
+{
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		return NULL;
+	}
+	return (uint8 *)ring->elem + (ring->elem_size * ring->read_idx);
+}
+
+static inline void
+__dhd_fixed_ring_free_first(dhd_fixed_ring_info_t *ring)
+{
+	uint32 next_idx;
+
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return;
+	}
+
+	next_idx = (ring->read_idx + 1) % ring->elem_cnt;
+	if (ring->read_idx == ring->write_idx) {
+		/* Become empty */
+		ring->read_idx = ring->write_idx = DHD_RING_IDX_INVALID;
+		return;
+	}
+
+	ring->read_idx = next_idx;
+	return;
+}
+
+static inline void *
+__dhd_fixed_ring_get_last(dhd_fixed_ring_info_t *ring)
+{
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		return NULL;
+	}
+	return (uint8 *)ring->elem + (ring->elem_size * ring->write_idx);
+}
+
+static inline void *
+__dhd_fixed_ring_get_empty(dhd_fixed_ring_info_t *ring)
+{
+	uint32 tmp_idx;
+
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		ring->read_idx = ring->write_idx = 0;
+		return (uint8 *)ring->elem;
+	}
+
+	/* check next index is not locked */
+	tmp_idx = (ring->write_idx + 1) % ring->elem_cnt;
+	if (ring->lock_idx == tmp_idx) {
+		return NULL;
+	}
+
+	ring->write_idx = tmp_idx;
+	if (ring->write_idx == ring->read_idx) {
+		/* record is full, drop oldest one */
+		ring->read_idx = (ring->read_idx + 1) % ring->elem_cnt;
+
+	}
+	return (uint8 *)ring->elem + (ring->elem_size * ring->write_idx);
+}
+
+static inline void *
+__dhd_fixed_ring_get_next(dhd_fixed_ring_info_t *ring, void *prev, uint32 type)
+{
+	uint32 cur_idx;
+
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return NULL;
+	}
+
+	cur_idx = __dhd_ring_ptr2idx(ring, prev, "NEXT", type);
+	if (cur_idx >= ring->elem_cnt) {
+		return NULL;
+	}
+
+	if (cur_idx == ring->write_idx) {
+		/* no more new record */
+		return NULL;
+	}
+
+	cur_idx = (cur_idx + 1) % ring->elem_cnt;
+	return (uint8 *)ring->elem + ring->elem_size * cur_idx;
+}
+
+static inline void *
+__dhd_fixed_ring_get_prev(dhd_fixed_ring_info_t *ring, void *prev, uint32 type)
+{
+	uint32 cur_idx;
+
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return NULL;
+	}
+	cur_idx = __dhd_ring_ptr2idx(ring, prev, "PREV", type);
+	if (cur_idx >= ring->elem_cnt) {
+		return NULL;
+	}
+	if (cur_idx == ring->read_idx) {
+		/* no more new record */
+		return NULL;
+	}
+
+	cur_idx = (cur_idx + ring->elem_cnt - 1) % ring->elem_cnt;
+	return (uint8 *)ring->elem + ring->elem_size * cur_idx;
+}
+
+static inline void
+__dhd_fixed_ring_lock(dhd_fixed_ring_info_t *ring, void *first_ptr, void *last_ptr, uint32 type)
+{
+	uint32 first_idx;
+	uint32 last_idx;
+	uint32 ring_filled_cnt;
+	uint32 tmp_cnt;
+
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return;
+	}
+
+	if (first_ptr) {
+		first_idx = __dhd_ring_ptr2idx(ring, first_ptr, "LCK FIRST", type);
+		if (first_idx >= ring->elem_cnt) {
+			return;
+		}
+	} else {
+		first_idx = ring->read_idx;
+	}
+
+	if (last_ptr) {
+		last_idx = __dhd_ring_ptr2idx(ring, last_ptr, "LCK LAST", type);
+		if (last_idx >= ring->elem_cnt) {
+			return;
+		}
+	} else {
+		last_idx = ring->write_idx;
+	}
+
+	ring_filled_cnt = __dhd_fixed_ring_get_count(ring, ring->read_idx, ring->write_idx);
+	tmp_cnt = __dhd_fixed_ring_get_count(ring, ring->read_idx, first_idx);
+	if (tmp_cnt > ring_filled_cnt) {
+		DHD_RING_ERR(("LOCK FIRST IS TO EMPTY ELEM: write: %d read: %d cur:%d\n",
+			ring->write_idx, ring->read_idx, first_idx));
+		return;
+	}
+
+	tmp_cnt = __dhd_fixed_ring_get_count(ring, ring->read_idx, last_idx);
+	if (tmp_cnt > ring_filled_cnt) {
+		DHD_RING_ERR(("LOCK LAST IS TO EMPTY ELEM: write: %d read: %d cur:%d\n",
+			ring->write_idx, ring->read_idx, last_idx));
+		return;
+	}
+
+	ring->lock_idx = first_idx;
+	ring->lock_count = __dhd_fixed_ring_get_count(ring, first_idx, last_idx);
+	return;
+}
+
+static inline void
+__dhd_fixed_ring_lock_free(dhd_fixed_ring_info_t *ring)
+{
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return;
+	}
+
+	ring->lock_idx = DHD_RING_IDX_INVALID;
+	ring->lock_count = 0;
+	return;
+}
+static inline void *
+__dhd_fixed_ring_lock_get_first(dhd_fixed_ring_info_t *ring)
+{
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return NULL;
+	}
+	if (ring->lock_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("NO LOCK POINT\n"));
+		return NULL;
+	}
+	return (uint8 *)ring->elem + ring->elem_size * ring->lock_idx;
+}
+
+static inline void *
+__dhd_fixed_ring_lock_get_last(dhd_fixed_ring_info_t *ring)
+{
+	int lock_last_idx;
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return NULL;
+	}
+	if (ring->lock_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("NO LOCK POINT\n"));
+		return NULL;
+	}
+
+	lock_last_idx = (ring->lock_idx + ring->lock_count - 1) % ring->elem_cnt;
+	return (uint8 *)ring->elem + ring->elem_size * lock_last_idx;
+}
+
+static inline int
+__dhd_fixed_ring_lock_get_count(dhd_fixed_ring_info_t *ring)
+{
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return BCME_ERROR;
+	}
+	if (ring->lock_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("NO LOCK POINT\n"));
+		return BCME_ERROR;
+	}
+	return ring->lock_count;
+}
+
+static inline void
+__dhd_fixed_ring_lock_free_first(dhd_fixed_ring_info_t *ring)
+{
+	if (ring->read_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return;
+	}
+	if (ring->lock_idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("NO LOCK POINT\n"));
+		return;
+	}
+
+	ring->lock_count--;
+	if (ring->lock_count <= 0) {
+		ring->lock_idx = DHD_RING_IDX_INVALID;
+	} else {
+		ring->lock_idx = (ring->lock_idx + 1) % ring->elem_cnt;
+	}
+	return;
+}
+
+static inline void
+__dhd_fixed_ring_set_read_idx(dhd_fixed_ring_info_t *ring, uint32 idx)
+{
+	ring->read_idx = idx;
+}
+
+static inline void
+__dhd_fixed_ring_set_write_idx(dhd_fixed_ring_info_t *ring, uint32 idx)
+{
+	ring->write_idx = idx;
+}
+
+static inline uint32
+__dhd_fixed_ring_get_read_idx(dhd_fixed_ring_info_t *ring)
+{
+	return ring->read_idx;
+}
+
+static inline uint32
+__dhd_fixed_ring_get_write_idx(dhd_fixed_ring_info_t *ring)
+{
+	return ring->write_idx;
+}
+
+/* Sub functions for single index ring */
+static inline void *
+__dhd_singleidx_ring_get_first(dhd_singleidx_ring_info_t *ring)
+{
+	uint32 tmp_idx = 0;
+
+	if (ring->idx == DHD_RING_IDX_INVALID) {
+		return NULL;
+	}
+
+	if (ring->ring_overwrited) {
+		tmp_idx = (ring->idx + 1) % ring->elem_cnt;
+	}
+
+	return (uint8 *)ring->elem + (ring->elem_size * tmp_idx);
+}
+
+static inline void *
+__dhd_singleidx_ring_get_last(dhd_singleidx_ring_info_t *ring)
+{
+	if (ring->idx == DHD_RING_IDX_INVALID) {
+		return NULL;
+	}
+
+	return (uint8 *)ring->elem + (ring->elem_size * ring->idx);
+}
+
+static inline void *
+__dhd_singleidx_ring_get_empty(dhd_singleidx_ring_info_t *ring)
+{
+	if (ring->idx == DHD_RING_IDX_INVALID) {
+		ring->idx = 0;
+		return (uint8 *)ring->elem;
+	}
+
+	/* check the lock is held */
+	if (atomic_read(&ring->ring_locked)) {
+		return NULL;
+	}
+
+	/* check the index rollover */
+	if (!ring->ring_overwrited && ring->idx == (ring->elem_cnt - 1)) {
+		ring->ring_overwrited = 1;
+	}
+
+	ring->idx = (ring->idx + 1) % ring->elem_cnt;
+
+	return (uint8 *)ring->elem + (ring->elem_size * ring->idx);
+}
+
+static inline void *
+__dhd_singleidx_ring_get_next(dhd_singleidx_ring_info_t *ring, void *prev, uint32 type)
+{
+	uint32 cur_idx;
+
+	if (ring->idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return NULL;
+	}
+
+	cur_idx = __dhd_ring_ptr2idx(ring, prev, "NEXT", type);
+	if (cur_idx >= ring->elem_cnt) {
+		return NULL;
+	}
+
+	if (cur_idx == ring->idx) {
+		/* no more new record */
+		return NULL;
+	}
+
+	cur_idx = (cur_idx + 1) % ring->elem_cnt;
+
+	return (uint8 *)ring->elem + ring->elem_size * cur_idx;
+}
+
+static inline void *
+__dhd_singleidx_ring_get_prev(dhd_singleidx_ring_info_t *ring, void *prev, uint32 type)
+{
+	uint32 cur_idx;
+
+	if (ring->idx == DHD_RING_IDX_INVALID) {
+		DHD_RING_ERR(("EMPTY RING\n"));
+		return NULL;
+	}
+	cur_idx = __dhd_ring_ptr2idx(ring, prev, "PREV", type);
+	if (cur_idx >= ring->elem_cnt) {
+		return NULL;
+	}
+
+	if (!ring->ring_overwrited && cur_idx == 0) {
+		/* no more new record */
+		return NULL;
+	}
+
+	cur_idx = (cur_idx + ring->elem_cnt - 1) % ring->elem_cnt;
+	if (ring->ring_overwrited && cur_idx == ring->idx) {
+		/* no more new record */
+		return NULL;
+	}
+
+	return (uint8 *)ring->elem + ring->elem_size * cur_idx;
+}
+
+static inline void
+__dhd_singleidx_ring_whole_lock(dhd_singleidx_ring_info_t *ring)
+{
+	if (!atomic_read(&ring->ring_locked)) {
+		atomic_set(&ring->ring_locked, 1);
+	}
+}
+
+static inline void
+__dhd_singleidx_ring_whole_unlock(dhd_singleidx_ring_info_t *ring)
+{
+	if (atomic_read(&ring->ring_locked)) {
+		atomic_set(&ring->ring_locked, 0);
+	}
+}
+
+/* Get first element : oldest element */
+void *
+dhd_ring_get_first(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_get_first(&ring->fixed);
+	}
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		ret = __dhd_singleidx_ring_get_first(&ring->single);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+/* Free first element : oldest element */
+void
+dhd_ring_free_first(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		__dhd_fixed_ring_free_first(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+void
+dhd_ring_set_read_idx(void *_ring, uint32 read_idx)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		__dhd_fixed_ring_set_read_idx(&ring->fixed, read_idx);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+void
+dhd_ring_set_write_idx(void *_ring, uint32 write_idx)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		__dhd_fixed_ring_set_write_idx(&ring->fixed, write_idx);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+uint32
+dhd_ring_get_read_idx(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	uint32 read_idx = DHD_RING_IDX_INVALID;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return read_idx;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		read_idx = __dhd_fixed_ring_get_read_idx(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+
+	return read_idx;
+}
+
+uint32
+dhd_ring_get_write_idx(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	uint32 write_idx = DHD_RING_IDX_INVALID;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return write_idx;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		write_idx = __dhd_fixed_ring_get_write_idx(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+
+	return write_idx;
+}
+
+/* Get latest element */
+void *
+dhd_ring_get_last(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_get_last(&ring->fixed);
+	}
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		ret = __dhd_singleidx_ring_get_last(&ring->single);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+/* Get next point can be written
+ * will overwrite which doesn't read
+ * will return NULL if next pointer is locked
+ */
+void *
+dhd_ring_get_empty(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_get_empty(&ring->fixed);
+	}
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		ret = __dhd_singleidx_ring_get_empty(&ring->single);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+void *
+dhd_ring_get_next(void *_ring, void *cur)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_get_next(&ring->fixed, cur, ring->type);
+	}
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		ret = __dhd_singleidx_ring_get_next(&ring->single, cur, ring->type);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+void *
+dhd_ring_get_prev(void *_ring, void *cur)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_get_prev(&ring->fixed, cur, ring->type);
+	}
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		ret = __dhd_singleidx_ring_get_prev(&ring->single, cur, ring->type);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+int
+dhd_ring_get_cur_size(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	int cnt = 0;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return cnt;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		cnt = __dhd_fixed_ring_get_cur_size(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return cnt;
+}
+
+/* protect element between lock_ptr and write_idx */
+void
+dhd_ring_lock(void *_ring, void *first_ptr, void *last_ptr)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		__dhd_fixed_ring_lock(&ring->fixed, first_ptr, last_ptr, ring->type);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+/* free all lock */
+void
+dhd_ring_lock_free(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		__dhd_fixed_ring_lock_free(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+void *
+dhd_ring_lock_get_first(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_lock_get_first(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+void *
+dhd_ring_lock_get_last(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	void *ret = NULL;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return NULL;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_lock_get_last(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+int
+dhd_ring_lock_get_count(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	int ret = BCME_ERROR;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return ret;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		ret = __dhd_fixed_ring_lock_get_count(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+	return ret;
+}
+
+/* free first locked element */
+void
+dhd_ring_lock_free_first(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_FIXED) {
+		__dhd_fixed_ring_lock_free_first(&ring->fixed);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+void
+dhd_ring_whole_lock(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		__dhd_singleidx_ring_whole_lock(&ring->single);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+void
+dhd_ring_whole_unlock(void *_ring)
+{
+	dhd_ring_info_t *ring = (dhd_ring_info_t *)_ring;
+	unsigned long flags;
+
+	if (!ring || ring->magic != DHD_RING_MAGIC) {
+		DHD_RING_ERR(("%s :INVALID RING INFO\n", __FUNCTION__));
+		return;
+	}
+
+	DHD_RING_SYNC_LOCK(ring->ring_sync, flags);
+	if (ring->type == DHD_RING_TYPE_SINGLE_IDX) {
+		__dhd_singleidx_ring_whole_unlock(&ring->single);
+	}
+	DHD_RING_SYNC_UNLOCK(ring->ring_sync, flags);
+}
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0))
+#define DHD_VFS_INODE(dir) (dir->d_inode)
+#else
+#define DHD_VFS_INODE(dir) d_inode(dir)
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) */
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0))
+#define DHD_VFS_UNLINK(dir, b, c) vfs_unlink(DHD_VFS_INODE(dir), b)
+#else
+#define DHD_VFS_UNLINK(dir, b, c) vfs_unlink(DHD_VFS_INODE(dir), b, c)
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0) */
+
+#if ((defined DHD_DUMP_MNGR) || (defined DNGL_AXI_ERROR_LOGGING))
+int
+dhd_file_delete(char *path)
+{
+	struct path file_path;
+	int err;
+	struct dentry *dir;
+
+	err = kern_path(path, 0, &file_path);
+
+	if (err < 0) {
+		DHD_ERROR(("Failed to get kern-path delete file: %s error: %d\n", path, err));
+		return err;
+	}
+	if (
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0))
+		!d_is_file(file_path.dentry) ||
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 1, 0))
+		d_really_is_negative(file_path.dentry) ||
+#endif /* LINUX_VERSION_CODE > KERNEL_VERSION(4, 1, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0) */
+		FALSE)
+	{
+		err = -EINVAL;
+	} else {
+		dir = dget_parent(file_path.dentry);
+
+		if (!IS_ERR(dir)) {
+			err = DHD_VFS_UNLINK(dir, file_path.dentry, NULL);
+			dput(dir);
+		} else {
+			err = PTR_ERR(dir);
+		}
+	}
+
+	path_put(&file_path);
+
+	if (err < 0) {
+		DHD_ERROR(("Failed to delete file: %s error: %d\n", path, err));
+	}
+
+	return err;
+}
+#endif
+
+#ifdef DHD_DUMP_MNGR
+static int
+dhd_dump_file_manage_idx(dhd_dump_file_manage_t *fm_ptr, char *fname)
+{
+	int i;
+	int fm_idx = -1;
+
+	for (i = 0; i < DHD_DUMP_TYPE_COUNT_MAX; i++) {
+		if (strlen(fm_ptr->elems[i].type_name) == 0) {
+			fm_idx = i;
+			break;
+		}
+		if (!(strncmp(fname, fm_ptr->elems[i].type_name, strlen(fname)))) {
+			fm_idx = i;
+			break;
+		}
+	}
+
+	if (fm_idx == -1) {
+		return fm_idx;
+	}
+
+	if (strlen(fm_ptr->elems[fm_idx].type_name) == 0) {
+		strncpy(fm_ptr->elems[fm_idx].type_name, fname, DHD_DUMP_TYPE_NAME_SIZE);
+		fm_ptr->elems[fm_idx].type_name[DHD_DUMP_TYPE_NAME_SIZE - 1] = '\0';
+		fm_ptr->elems[fm_idx].file_idx = 0;
+	}
+
+	return fm_idx;
+}
+
+/*
+ * dhd_dump_file_manage_enqueue - enqueue dump file path
+ * and delete odest file if file count is max.
+*/
+void
+dhd_dump_file_manage_enqueue(dhd_pub_t *dhd, char *dump_path, char *fname)
+{
+	int fm_idx;
+	int fp_idx;
+	dhd_dump_file_manage_t *fm_ptr;
+	DFM_elem_t *elem;
+
+	if (!dhd || !dhd->dump_file_manage) {
+		DHD_ERROR(("%s(): dhdp=%p dump_file_manage=%p\n",
+			__FUNCTION__, dhd, (dhd ? dhd->dump_file_manage : NULL)));
+		return;
+	}
+
+	fm_ptr = dhd->dump_file_manage;
+
+	/* find file_manage idx */
+	DHD_INFO(("%s(): fname: %s dump_path: %s\n", __FUNCTION__, fname, dump_path));
+	if ((fm_idx = dhd_dump_file_manage_idx(fm_ptr, fname)) < 0) {
+		DHD_ERROR(("%s(): Out of file manager entries, fname: %s\n",
+			__FUNCTION__, fname));
+		return;
+	}
+
+	elem = &fm_ptr->elems[fm_idx];
+	fp_idx = elem->file_idx;
+	DHD_INFO(("%s(): fm_idx: %d fp_idx: %d path: %s\n",
+		__FUNCTION__, fm_idx, fp_idx, elem->file_path[fp_idx]));
+
+	/* delete oldest file */
+	if (strlen(elem->file_path[fp_idx]) != 0) {
+		if (dhd_file_delete(elem->file_path[fp_idx]) < 0) {
+			DHD_ERROR(("%s(): Failed to delete file: %s\n",
+				__FUNCTION__, elem->file_path[fp_idx]));
+		} else {
+			DHD_ERROR(("%s(): Successed to delete file: %s\n",
+				__FUNCTION__, elem->file_path[fp_idx]));
+		}
+	}
+
+	/* save dump file path */
+	strncpy(elem->file_path[fp_idx], dump_path, DHD_DUMP_FILE_PATH_SIZE);
+	elem->file_path[fp_idx][DHD_DUMP_FILE_PATH_SIZE - 1] = '\0';
+
+	/* change file index to next file index */
+	elem->file_idx = (elem->file_idx + 1) % DHD_DUMP_FILE_COUNT_MAX;
+}
+#endif /* DHD_DUMP_MNGR */
+
+#ifdef DHD_MAP_LOGGING
+/* Will be called from SMMU fault handler */
+void
+dhd_smmu_fault_handler(uint32 axid, ulong fault_addr)
+{
+	dhd_pub_t *dhdp = (dhd_pub_t *)g_dhd_pub;
+	uint32 irq = (uint32)-1;
+
+	DHD_ERROR(("%s: Trigger SMMU Fault\n", __FUNCTION__));
+	DHD_ERROR(("%s: axid:0x%x, fault_addr:0x%lx", __FUNCTION__, axid, fault_addr));
+	dhdp->smmu_fault_occurred = TRUE;
+#ifdef DNGL_AXI_ERROR_LOGGING
+	dhdp->axi_error = TRUE;
+	dhdp->axi_err_dump->axid = axid;
+	dhdp->axi_err_dump->fault_address = fault_addr;
+#endif /* DNGL_AXI_ERROR_LOGGING */
+
+	/* Disable PCIe IRQ */
+	dhdpcie_get_pcieirq(dhdp->bus, &irq);
+	if (irq != (uint32)-1) {
+		disable_irq_nosync(irq);
+	}
+
+	/* Take debug information first */
+	DHD_OS_WAKE_LOCK(dhdp);
+	dhd_prot_smmu_fault_dump(dhdp);
+	DHD_OS_WAKE_UNLOCK(dhdp);
+
+	/* Take AXI information if possible */
+#ifdef DNGL_AXI_ERROR_LOGGING
+#ifdef DHD_USE_WQ_FOR_DNGL_AXI_ERROR
+	dhd_axi_error_dispatch(dhdp);
+#else
+	dhd_axi_error(dhdp);
+#endif /* DHD_USE_WQ_FOR_DNGL_AXI_ERROR */
+#endif /* DNGL_AXI_ERROR_LOGGING */
+}
+EXPORT_SYMBOL(dhd_smmu_fault_handler);
+#endif /* DHD_MAP_LOGGING */
+
+#ifdef DHD_WIFI_SHUTDOWN
+void wifi_plat_dev_drv_shutdown(struct platform_device *pdev)
+{
+	dhd_pub_t *dhd_pub = NULL;
+	dhd_info_t *dhd_info = NULL;
+	dhd_if_t *dhd_if = NULL;
+
+	DHD_ERROR(("%s enter\n", __FUNCTION__));
+	dhd_pub = g_dhd_pub;
+
+	if (dhd_os_check_if_up(dhd_pub)) {
+		dhd_info = (dhd_info_t *)dhd_pub->info;
+		dhd_if = dhd_info->iflist[0];
+		ASSERT(dhd_if);
+		ASSERT(dhd_if->net);
+		if (dhd_if && dhd_if->net) {
+			dhd_stop(dhd_if->net);
+		}
+	}
+}
+#endif /* DHD_WIFI_SHUTDOWN */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
+int
+compat_kernel_read(struct file *file, loff_t offset, char *addr, unsigned long count)
+{
+	return (int)kernel_read(file, addr, (size_t)count, &offset);
+}
+int
+compat_vfs_write(struct file *file, char *addr, int count, loff_t *offset)
+{
+	return (int)kernel_write(file, addr, count, offset);
+}
+#else
+int
+compat_kernel_read(struct file *file, loff_t offset, char *addr, unsigned long count)
+{
+	return kernel_read(file, offset, addr, count);
+}
+int
+compat_vfs_write(struct file *file, char *addr, int count, loff_t *offset)
+{
+	return (int)vfs_write(file, addr, count, offset);
+}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)) */
+
+#ifdef DHDTCPSYNC_FLOOD_BLK
+static void dhd_blk_tsfl_handler(struct work_struct * work)
+{
+	dhd_if_t *ifp = NULL;
+	dhd_pub_t *dhdp = NULL;
+	/* Ignore compiler warnings due to -Werror=cast-qual */
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif /* STRICT_GCC_WARNINGS  && __GNUC__ */
+	ifp = container_of(work, dhd_if_t, blk_tsfl_work);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif /* STRICT_GCC_WARNINGS  && __GNUC__ */
+	if (ifp) {
+		dhdp = &ifp->info->pub;
+		if (dhdp) {
+			if ((dhdp->op_mode & DHD_FLAG_P2P_GO_MODE)||
+				(dhdp->op_mode & DHD_FLAG_HOSTAP_MODE)) {
+				DHD_ERROR(("Disassoc due to TCP SYNC FLOOD ATTACK\n"));
+				wl_cfg80211_del_all_sta(ifp->net, WLAN_REASON_UNSPECIFIED);
+			} else if ((dhdp->op_mode & DHD_FLAG_P2P_GC_MODE)||
+				(dhdp->op_mode & DHD_FLAG_STA_MODE)) {
+				DHD_ERROR(("Diconnect due to TCP SYNC FLOOD ATTACK\n"));
+				wl_cfg80211_disassoc(ifp->net, WLAN_REASON_UNSPECIFIED);
+			}
+		}
+	}
+}
+void dhd_reset_tcpsync_info_by_ifp(dhd_if_t *ifp)
+{
+	ifp->tsync_rcvd = 0;
+	ifp->tsyncack_txed = 0;
+	ifp->last_sync = DIV_U64_BY_U32(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
+}
+void dhd_reset_tcpsync_info_by_dev(struct net_device *dev)
+{
+	dhd_if_t *ifp = NULL;
+	if (dev) {
+		ifp = DHD_DEV_IFP(dev);
+	}
+	if (ifp) {
+		ifp->tsync_rcvd = 0;
+		ifp->tsyncack_txed = 0;
+		ifp->last_sync = DIV_U64_BY_U32(OSL_LOCALTIME_NS(), NSEC_PER_SEC);
+	}
+}
+#endif /* DHDTCPSYNC_FLOOD_BLK */
+
+#ifdef DHD_4WAYM4_FAIL_DISCONNECT
+static void dhd_m4_state_handler(struct work_struct *work)
+{
+	dhd_if_t *ifp = NULL;
+	/* Ignore compiler warnings due to -Werror=cast-qual */
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif // endif
+	struct delayed_work *dw = to_delayed_work(work);
+	ifp = container_of(dw, dhd_if_t, m4state_work);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif // endif
+
+	if (ifp && ifp->net &&
+		(OSL_ATOMIC_READ(ifp->info->pub->osh, &ifp->m4state) == M4_TXFAILED)) {
+		DHD_ERROR(("Disassoc for 4WAY_HANDSHAKE_TIMEOUT at %s\n",
+				ifp->net->name));
+		wl_cfg80211_disassoc(ifp->net, WLAN_REASON_4WAY_HANDSHAKE_TIMEOUT);
+	}
+}
+
+void
+dhd_eap_txcomplete(dhd_pub_t *dhdp, void *txp, bool success, int ifidx)
+{
+	dhd_info_t *dhd = (dhd_info_t *)(dhdp->info);
+	struct ether_header *eh;
+	uint16 type;
+
+	if (!success) {
+		dhd_prot_hdrpull(dhdp, NULL, txp, NULL, NULL);
+
+		eh = (struct ether_header *)PKTDATA(dhdp->osh, txp);
+		type  = ntoh16(eh->ether_type);
+		if (type == ETHER_TYPE_802_1X) {
+			if (dhd_is_4way_msg((uint8 *)eh) == EAPOL_4WAY_M4) {
+				dhd_if_t *ifp = NULL;
+				ifp = dhd->iflist[ifidx];
+				if (!ifp || !ifp->net) {
+					return;
+				}
+
+				DHD_INFO(("%s: M4 TX failed on %d.\n",
+						__FUNCTION__, ifidx));
+
+				OSL_ATOMIC_SET(dhdp->osh, &ifp->m4state, M4_TXFAILED);
+				schedule_delayed_work(&ifp->m4state_work,
+						msecs_to_jiffies(MAX_4WAY_TIMEOUT_MS));
+			}
+		}
+	}
+}
+
+void
+dhd_cleanup_m4_state_work(dhd_pub_t *dhdp, int ifidx)
+{
+	dhd_info_t *dhdinfo;
+	dhd_if_t *ifp;
+
+	if ((ifidx < 0) || (ifidx >= DHD_MAX_IFS)) {
+		DHD_ERROR(("%s: invalid ifidx %d\n", __FUNCTION__, ifidx));
+		return;
+	}
+
+	dhdinfo = (dhd_info_t *)(dhdp->info);
+	if (!dhdinfo) {
+		DHD_ERROR(("%s: dhdinfo is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	ifp = dhdinfo->iflist[ifidx];
+	if (ifp) {
+		cancel_delayed_work_sync(&ifp->m4state_work);
+	}
+}
+#endif /* DHD_4WAYM4_FAIL_DISCONNECT */
+
+#ifdef DHD_HP2P
+unsigned long
+dhd_os_hp2plock(dhd_pub_t *pub)
+{
+	dhd_info_t *dhd;
+	unsigned long flags = 0;
+
+	dhd = (dhd_info_t *)(pub->info);
+
+	if (dhd) {
+		spin_lock_irqsave(&dhd->hp2p_lock, flags);
+	}
+
+	return flags;
+}
+
+void
+dhd_os_hp2punlock(dhd_pub_t *pub, unsigned long flags)
+{
+	dhd_info_t *dhd;
+
+	dhd = (dhd_info_t *)(pub->info);
+
+	if (dhd) {
+		spin_unlock_irqrestore(&dhd->hp2p_lock, flags);
+	}
+}
+#endif /* DHD_HP2P */
+#ifdef DNGL_AXI_ERROR_LOGGING
+static void
+dhd_axi_error_dump(void *handle, void *event_info, u8 event)
+{
+	dhd_info_t *dhd = (dhd_info_t *)handle;
+	dhd_pub_t *dhdp = NULL;
+
+	if (!dhd) {
+		DHD_ERROR(("%s: dhd is NULL\n", __FUNCTION__));
+		goto exit;
+	}
+
+	dhdp = &dhd->pub;
+	if (!dhdp) {
+		DHD_ERROR(("%s: dhdp is NULL\n", __FUNCTION__));
+		goto exit;
+	}
+
+	/**
+	 * First save axi error information to a file
+	 * because panic should happen right after this.
+	 * After dhd reset, dhd reads the file, and do hang event process
+	 * to send axi error stored on the file to Bigdata server
+	 */
+	if (dhdp->axi_err_dump->etd_axi_error_v1.version != HND_EXT_TRAP_AXIERROR_VERSION_1) {
+		DHD_ERROR(("%s: Invalid AXI version: 0x%x\n",
+			__FUNCTION__, dhdp->axi_err_dump->etd_axi_error_v1.version));
+	}
+
+	DHD_OS_WAKE_LOCK(dhdp);
+#ifdef DHD_FW_COREDUMP
+#ifdef DHD_SSSR_DUMP
+	dhdp->collect_sssr = TRUE;
+#endif /* DHD_SSSR_DUMP */
+	DHD_ERROR(("%s: scheduling mem dump.. \n", __FUNCTION__));
+	dhd_schedule_memdump(dhdp, dhdp->soc_ram, dhdp->soc_ram_length);
+#endif /* DHD_FW_COREDUMP */
+	DHD_OS_WAKE_UNLOCK(dhdp);
+
+exit:
+	/* Trigger kernel panic after taking necessary dumps */
+	BUG_ON(1);
+}
+
+void dhd_schedule_axi_error_dump(dhd_pub_t *dhdp, void *type)
+{
+	DHD_ERROR(("%s: scheduling axi_error_dump.. \n", __FUNCTION__));
+	dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq,
+		type, DHD_WQ_WORK_AXI_ERROR_DUMP,
+		dhd_axi_error_dump, DHD_WQ_WORK_PRIORITY_HIGH);
+}
+#endif /* DNGL_AXI_ERROR_LOGGING */
+
+#ifdef BCMPCIE
+static void
+dhd_cto_recovery_handler(void *handle, void *event_info, u8 event)
+{
+	dhd_info_t *dhd = handle;
+	dhd_pub_t *dhdp = NULL;
+
+	if (!dhd) {
+		DHD_ERROR(("%s: dhd is NULL\n", __FUNCTION__));
+		BUG_ON(1);
+		return;
+	}
+
+	dhdp = &dhd->pub;
+	dhdpcie_cto_recovery_handler(dhdp);
+}
+
+void
+dhd_schedule_cto_recovery(dhd_pub_t *dhdp)
+{
+	DHD_ERROR(("%s: scheduling cto recovery.. \n", __FUNCTION__));
+	dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq,
+		NULL, DHD_WQ_WORK_CTO_RECOVERY,
+		dhd_cto_recovery_handler, DHD_WQ_WORK_PRIORITY_HIGH);
+}
+#endif /* BCMPCIE */
+
+#ifdef SUPPORT_SET_TID
+/*
+ * Set custom TID value for UDP frame based on UID value.
+ * This will be triggered by android private command below.
+ * DRIVER SET_TID <Mode:uint8> <Target UID:uint32> <Custom TID:uint8>
+ * Mode 0(SET_TID_OFF) : Disable changing TID
+ * Mode 1(SET_TID_ALL_UDP) : Change TID for all UDP frames
+ * Mode 2(SET_TID_BASED_ON_UID) : Change TID for UDP frames based on target UID
+*/
+void
+dhd_set_tid_based_on_uid(dhd_pub_t *dhdp, void *pkt)
+{
+	struct ether_header *eh = NULL;
+	struct sock *sk = NULL;
+	uint8 *pktdata = NULL;
+	uint8 *ip_hdr = NULL;
+	uint8 cur_prio;
+	uint8 prio;
+	uint32 uid;
+
+	if (dhdp->tid_mode == SET_TID_OFF) {
+		return;
+	}
+
+	pktdata = (uint8 *)PKTDATA(dhdp->osh, pkt);
+	eh = (struct ether_header *) pktdata;
+	ip_hdr = (uint8 *)eh + ETHER_HDR_LEN;
+
+	if (IPV4_PROT(ip_hdr) != IP_PROT_UDP) {
+		return;
+	}
+
+	cur_prio = PKTPRIO(pkt);
+	prio = dhdp->target_tid;
+	uid = dhdp->target_uid;
+
+	if ((cur_prio == prio) ||
+		(cur_prio != PRIO_8021D_BE)) {
+			return;
+	}
+
+	sk = ((struct sk_buff*)(pkt))->sk;
+
+	if ((dhdp->tid_mode == SET_TID_ALL_UDP) ||
+		(sk && (uid == __kuid_val(sock_i_uid(sk))))) {
+		PKTSETPRIO(pkt, prio);
+	}
+}
+#endif /* SUPPORT_SET_TID */
+
+void *dhd_get_pub(struct net_device *dev)
+{
+#ifdef CONFIG_AP6XXX_WIFI6_HDF
+	dhd_info_t *dhdinfo = *(dhd_info_t **)DHD_DEV_PRIV(dev);
+#else
+	dhd_info_t *dhdinfo = *(dhd_info_t **)netdev_priv(dev);
+#endif
+	if (dhdinfo)
+		return (void *)&dhdinfo->pub;
+	else {
+		printf("%s: null dhdinfo\n", __FUNCTION__);
+		return NULL;
+	}
+}
+
+void *dhd_get_conf(struct net_device *dev)
+{
+#ifdef CONFIG_AP6XXX_WIFI6_HDF
+	dhd_info_t *dhdinfo = *(dhd_info_t **)DHD_DEV_PRIV(dev);
+#else
+	dhd_info_t *dhdinfo = *(dhd_info_t **)netdev_priv(dev);
+#endif
+	if (dhdinfo)
+		return (void *)dhdinfo->pub.conf;
+	else {
+		printf("%s: null dhdinfo\n", __FUNCTION__);
+		return NULL;
+	}
+}
+
+bool dhd_os_wd_timer_enabled(void *bus)
+{
+	dhd_pub_t *pub = bus;
+	dhd_info_t *dhd = (dhd_info_t *)pub->info;
+
+	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
+	if (!dhd) {
+		DHD_ERROR(("%s: dhd NULL\n", __FUNCTION__));
+		return FALSE;
+	}
+	return dhd->wd_timer_valid;
+}
+
+#if defined(WLDWDS) && defined(FOURADDR_AUTO_BRG)
+/* This function is to automatically add/del interface to the bridged dev that priamy dev is in */
+static void dhd_bridge_dev_set(dhd_info_t *dhd, int ifidx, struct net_device *dev)
+{
+	struct net_device *primary_ndev = NULL, *br_dev = NULL;
+	int cmd;
+	struct ifreq ifr;
+
+	/* add new interface to bridge dev */
+	if (dev) {
+		int found = 0, i;
+		DHD_ERROR(("bssidx %d\n", dhd->pub.info->iflist[ifidx]->bssidx));
+		for (i = 0 ; i < ifidx; i++) {
+			DHD_ERROR(("bssidx %d %d\n", i, dhd->pub.info->iflist[i]->bssidx));
+			/* search the primary interface */
+			if (dhd->pub.info->iflist[i]->bssidx == dhd->pub.info->iflist[ifidx]->bssidx) {
+				primary_ndev = dhd->pub.info->iflist[i]->net;
+				DHD_ERROR(("%dst is primary dev %s\n", i, primary_ndev->name));
+				found = 1;
+				break;
+			}
+		}
+		if (found == 0) {
+			DHD_ERROR(("Can not find primary dev %s\n", dev->name));
+			return;
+		}
+		cmd = SIOCBRADDIF;
+		ifr.ifr_ifindex = dev->ifindex;
+	} else { /* del interface from bridge dev */
+		primary_ndev = dhd->pub.info->iflist[ifidx]->net;
+		cmd = SIOCBRDELIF;
+		ifr.ifr_ifindex = primary_ndev->ifindex;
+	}
+	/* if primary net device is bridged */
+	if (primary_ndev->priv_flags & IFF_BRIDGE_PORT) {
+		rtnl_lock();
+		/* get bridge device */
+		br_dev = netdev_master_upper_dev_get(primary_ndev);
+		if (br_dev) {
+			const struct net_device_ops *ops = br_dev->netdev_ops;
+			DHD_ERROR(("br %s pri %s\n", br_dev->name, primary_ndev->name));
+			if (ops) {
+				if (cmd == SIOCBRADDIF) {
+					DHD_ERROR(("br call ndo_add_slave\n"));
+					ops->ndo_add_slave(br_dev, dev);
+					/* Also bring wds0.x interface up automatically */
+					dev_change_flags(dev, dev->flags | IFF_UP);
+				}
+				else {
+					DHD_ERROR(("br call ndo_del_slave\n"));
+					ops->ndo_del_slave(br_dev, primary_ndev);
+				}
+			}
+		}
+		else {
+			DHD_ERROR(("no br dev\n"));
+		}
+		rtnl_unlock();
+	}
+	else {
+		DHD_ERROR(("device %s is not bridged\n", primary_ndev->name));
+	}
+}
+#endif /* defiend(WLDWDS) && defined(FOURADDR_AUTO_BRG) */
