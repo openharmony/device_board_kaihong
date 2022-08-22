@@ -4139,3 +4139,795 @@ static irqreturn_t vop_isr(int irq, void *data)
 
 	if (active_irqs & DSP_HOLD_VALID_INTR) {
 		complete(&vop->dsp_hold_completion);
+		active_irqs &= ~DSP_HOLD_VALID_INTR;
+		ret = IRQ_HANDLED;
+	}
+
+	if (active_irqs & LINE_FLAG_INTR) {
+		complete(&vop->line_flag_completion);
+		active_irqs &= ~LINE_FLAG_INTR;
+		ret = IRQ_HANDLED;
+	}
+
+	if ((active_irqs & FS_INTR) || (active_irqs & FS_FIELD_INTR)) {
+		/* This is IC design not reasonable, this two register bit need
+		 * frame effective, but actually it's effective immediately, so
+		 * we config this register at frame start.
+		 */
+		spin_lock_irqsave(&vop->irq_lock, flags);
+		VOP_CTRL_SET(vop, level2_overlay_en, vop->pre_overlay);
+		VOP_CTRL_SET(vop, alpha_hard_calc, vop->pre_overlay);
+		spin_unlock_irqrestore(&vop->irq_lock, flags);
+		drm_crtc_handle_vblank(crtc);
+		vop_handle_vblank(vop);
+		active_irqs &= ~(FS_INTR | FS_FIELD_INTR);
+		ret = IRQ_HANDLED;
+	}
+
+#define ERROR_HANDLER(x) \
+	do { \
+		if (active_irqs & x##_INTR) {\
+			DRM_DEV_ERROR_RATELIMITED(vop->dev, #x " irq err\n"); \
+			active_irqs &= ~x##_INTR; \
+			ret = IRQ_HANDLED; \
+		} \
+	} while (0)
+
+	ERROR_HANDLER(BUS_ERROR);
+	ERROR_HANDLER(WIN0_EMPTY);
+	ERROR_HANDLER(WIN1_EMPTY);
+	ERROR_HANDLER(WIN2_EMPTY);
+	ERROR_HANDLER(WIN3_EMPTY);
+	ERROR_HANDLER(HWC_EMPTY);
+	ERROR_HANDLER(POST_BUF_EMPTY);
+
+	/* Unhandled irqs are spurious. */
+	if (active_irqs)
+		DRM_ERROR("Unknown VOP IRQs: %#02x\n", active_irqs);
+
+out_disable:
+	vop_core_clks_disable(vop);
+out:
+	pm_runtime_put(vop->dev);
+	return ret;
+}
+
+static void vop_plane_add_properties(struct vop *vop,
+				     struct drm_plane *plane,
+				     const struct vop_win *win)
+{
+	unsigned int flags = 0;
+
+	flags |= (VOP_WIN_SUPPORT(vop, win, xmirror)) ? DRM_MODE_REFLECT_X : 0;
+	flags |= (VOP_WIN_SUPPORT(vop, win, ymirror)) ? DRM_MODE_REFLECT_Y : 0;
+
+	if (flags)
+		drm_plane_create_rotation_property(plane, DRM_MODE_ROTATE_0,
+						   DRM_MODE_ROTATE_0 | flags);
+}
+
+static int vop_plane_create_name_property(struct vop *vop, struct vop_win *win)
+{
+	struct drm_prop_enum_list *props = vop->plane_name_list;
+	struct drm_property *prop;
+	uint64_t bits = BIT_ULL(win->plane_id);
+
+	prop = drm_property_create_bitmask(vop->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "NAME",
+					   props, vop->num_wins, bits);
+	if (!prop) {
+		DRM_DEV_ERROR(vop->dev, "create Name prop for %s failed\n", win->name);
+		return -ENOMEM;
+	}
+	win->name_prop = prop;
+	drm_object_attach_property(&win->base.base, win->name_prop, bits);
+
+	return 0;
+}
+
+static int vop_plane_init(struct vop *vop, struct vop_win *win,
+			  unsigned long possible_crtcs)
+{
+	struct rockchip_drm_private *private = vop->drm_dev->dev_private;
+	unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) | BIT(DRM_MODE_BLEND_PREMULTI) |
+				  BIT(DRM_MODE_BLEND_COVERAGE);
+	const struct vop_data *vop_data = vop->data;
+	uint64_t feature = 0;
+	int ret;
+
+	ret = drm_universal_plane_init(vop->drm_dev, &win->base, possible_crtcs, &vop_plane_funcs,
+				       win->data_formats, win->nformats, win->format_modifiers,
+				       win->type, win->name);
+	if (ret) {
+		DRM_ERROR("failed to initialize plane %d\n", ret);
+		return ret;
+	}
+	drm_plane_helper_add(&win->base, &plane_helper_funcs);
+
+	if (win->phy->scl)
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_SCALE);
+	if (VOP_WIN_SUPPORT(vop, win, src_alpha_ctl) ||
+	    VOP_WIN_SUPPORT(vop, win, alpha_en))
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_ALPHA);
+	if (win->feature & WIN_FEATURE_HDR2SDR)
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_HDR2SDR);
+	if (win->feature & WIN_FEATURE_SDR2HDR)
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_SDR2HDR);
+	if (win->feature & WIN_FEATURE_AFBDC)
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_AFBDC);
+
+	drm_object_attach_property(&win->base.base, vop->plane_feature_prop,
+				   feature);
+	drm_object_attach_property(&win->base.base, private->eotf_prop, 0);
+	drm_object_attach_property(&win->base.base,
+				   private->color_space_prop, 0);
+	if (VOP_WIN_SUPPORT(vop, win, global_alpha_val))
+		drm_plane_create_alpha_property(&win->base);
+	drm_object_attach_property(&win->base.base,
+				   private->async_commit_prop, 0);
+
+	if (win->parent)
+		drm_object_attach_property(&win->base.base, private->share_id_prop,
+					   win->parent->base.base.id);
+	else
+		drm_object_attach_property(&win->base.base, private->share_id_prop,
+					   win->base.base.id);
+
+	drm_plane_create_blend_mode_property(&win->base, blend_caps);
+	drm_plane_create_zpos_property(&win->base, win->win_id, 0, vop->num_wins - 1);
+	vop_plane_create_name_property(vop, win);
+
+
+	win->input_width_prop = drm_property_create_range(vop->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							  "INPUT_WIDTH", 0, vop_data->max_input.width);
+	win->input_height_prop = drm_property_create_range(vop->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							   "INPUT_HEIGHT", 0, vop_data->max_input.height);
+
+	win->output_width_prop = drm_property_create_range(vop->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							   "OUTPUT_WIDTH", 0, vop_data->max_input.width);
+	win->output_height_prop = drm_property_create_range(vop->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							    "OUTPUT_HEIGHT", 0, vop_data->max_input.height);
+
+	win->scale_prop = drm_property_create_range(vop->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+						    "SCALE_RATE", 8, 8);
+	/*
+	 * Support 24 bit(RGB888) or 16 bit(rgb565) color key.
+	 * Bit 31 is used as a flag to disable (0) or enable
+	 * color keying (1).
+	 */
+	win->color_key_prop = drm_property_create_range(vop->drm_dev, 0,
+							"colorkey", 0, 0x80ffffff);
+	if (!win->input_width_prop || !win->input_height_prop ||
+	    !win->scale_prop || !win->color_key_prop) {
+		DRM_ERROR("failed to create property\n");
+		return -ENOMEM;
+	}
+
+	drm_object_attach_property(&win->base.base, win->input_width_prop, 0);
+	drm_object_attach_property(&win->base.base, win->input_height_prop, 0);
+	drm_object_attach_property(&win->base.base, win->output_width_prop, 0);
+	drm_object_attach_property(&win->base.base, win->output_height_prop, 0);
+	drm_object_attach_property(&win->base.base, win->scale_prop, 0);
+	drm_object_attach_property(&win->base.base, win->color_key_prop, 0);
+
+	return 0;
+}
+
+static int vop_of_init_display_lut(struct vop *vop)
+{
+	struct device_node *node = vop->dev->of_node;
+	struct device_node *dsp_lut;
+	u32 lut_len = vop->lut_len;
+	struct property *prop;
+	int length, i, j;
+	int ret;
+
+	if (!vop->lut)
+		return -ENOMEM;
+
+	dsp_lut = of_parse_phandle(node, "dsp-lut", 0);
+	if (!dsp_lut)
+		return -ENXIO;
+
+	prop = of_find_property(dsp_lut, "gamma-lut", &length);
+	if (!prop) {
+		dev_err(vop->dev, "failed to find gamma_lut\n");
+		return -ENXIO;
+	}
+
+	length >>= 2;
+
+	if (length != lut_len) {
+		u32 r, g, b;
+		u32 *lut = kmalloc_array(length, sizeof(*lut), GFP_KERNEL);
+
+		if (!lut)
+			return -ENOMEM;
+		ret = of_property_read_u32_array(dsp_lut, "gamma-lut", lut,
+						 length);
+		if (ret) {
+			dev_err(vop->dev, "load gamma-lut failed\n");
+			kfree(lut);
+			return -EINVAL;
+		}
+
+		for (i = 0; i < lut_len; i++) {
+			j = i * length / lut_len;
+			r = lut[j] / length / length * lut_len / length;
+			g = lut[j] / length % length * lut_len / length;
+			b = lut[j] % length * lut_len / length;
+
+			vop->lut[i] = r * lut_len * lut_len + g * lut_len + b;
+		}
+
+		kfree(lut);
+	} else {
+		of_property_read_u32_array(dsp_lut, "gamma-lut",
+					   vop->lut, vop->lut_len);
+	}
+	vop->lut_active = true;
+
+	return 0;
+}
+
+static int vop_crtc_create_plane_mask_property(struct vop *vop, struct drm_crtc *crtc)
+{
+	struct drm_property *prop;
+
+	static const struct drm_prop_enum_list props[] = {
+		{ ROCKCHIP_VOP_WIN0, "Win0" },
+		{ ROCKCHIP_VOP_WIN1, "Win1" },
+		{ ROCKCHIP_VOP_WIN2, "Win2" },
+		{ ROCKCHIP_VOP_WIN3, "Win3" },
+	};
+
+	prop = drm_property_create_bitmask(vop->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "PLANE_MASK",
+					   props, ARRAY_SIZE(props),
+					   0xffffffff);
+	if (!prop) {
+		DRM_DEV_ERROR(vop->dev, "create plane_mask prop for vp%d failed\n", vop->id);
+		return -ENOMEM;
+	}
+
+	vop->plane_mask_prop = prop;
+	drm_object_attach_property(&crtc->base, vop->plane_mask_prop, vop->plane_mask);
+
+	return 0;
+}
+
+static int vop_crtc_create_feature_property(struct vop *vop, struct drm_crtc *crtc)
+{
+	const struct vop_data *vop_data = vop->data;
+
+	struct drm_property *prop;
+	u64 feature = 0;
+
+	static const struct drm_prop_enum_list props[] = {
+		{ ROCKCHIP_DRM_CRTC_FEATURE_ALPHA_SCALE, "ALPHA_SCALE" },
+		{ ROCKCHIP_DRM_CRTC_FEATURE_HDR10, "HDR10" },
+		{ ROCKCHIP_DRM_CRTC_FEATURE_NEXT_HDR, "NEXT_HDR" },
+	};
+
+	if (vop_data->feature & VOP_FEATURE_ALPHA_SCALE)
+		feature |= BIT(ROCKCHIP_DRM_CRTC_FEATURE_ALPHA_SCALE);
+	if (vop_data->feature & VOP_FEATURE_HDR10)
+		feature |= BIT(ROCKCHIP_DRM_CRTC_FEATURE_HDR10);
+	if (vop_data->feature & VOP_FEATURE_NEXT_HDR)
+		feature |= BIT(ROCKCHIP_DRM_CRTC_FEATURE_NEXT_HDR);
+
+	prop = drm_property_create_bitmask(vop->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "FEATURE",
+					   props, ARRAY_SIZE(props),
+					   0xffffffff);
+	if (!prop) {
+		DRM_DEV_ERROR(vop->dev, "create FEATURE prop for vop%d failed\n", vop->id);
+		return -ENOMEM;
+	}
+
+	vop->feature_prop = prop;
+	drm_object_attach_property(&crtc->base, vop->feature_prop, feature);
+
+	return 0;
+}
+
+static int vop_create_crtc(struct vop *vop)
+{
+	struct device *dev = vop->dev;
+	struct drm_device *drm_dev = vop->drm_dev;
+	struct rockchip_drm_private *private = drm_dev->dev_private;
+	struct drm_plane *primary = NULL, *cursor = NULL, *plane, *tmp;
+	struct drm_crtc *crtc = &vop->rockchip_crtc.crtc;
+	struct device_node *port;
+	int ret = 0;
+	int i;
+
+	/*
+	 * Create drm_plane for primary and cursor planes first, since we need
+	 * to pass them to drm_crtc_init_with_planes, which sets the
+	 * "possible_crtcs" to the newly initialized crtc.
+	 */
+	for (i = 0; i < vop->num_wins; i++) {
+		struct vop_win *win = &vop->win[i];
+
+		if (win->type != DRM_PLANE_TYPE_PRIMARY &&
+		    win->type != DRM_PLANE_TYPE_CURSOR)
+			continue;
+
+		if (vop_plane_init(vop, win, 0)) {
+			DRM_DEV_ERROR(vop->dev, "failed to init plane\n");
+			goto err_cleanup_planes;
+		}
+
+		plane = &win->base;
+		if (plane->type == DRM_PLANE_TYPE_PRIMARY)
+			primary = plane;
+		else if (plane->type == DRM_PLANE_TYPE_CURSOR)
+			cursor = plane;
+	}
+
+	ret = drm_crtc_init_with_planes(drm_dev, crtc, primary, cursor,
+					&vop_crtc_funcs, NULL);
+	if (ret)
+		goto err_cleanup_planes;
+
+	drm_crtc_helper_add(crtc, &vop_crtc_helper_funcs);
+
+	/*
+	 * Create drm_planes for overlay windows with possible_crtcs restricted
+	 * to the newly created crtc.
+	 */
+	for (i = 0; i < vop->num_wins; i++) {
+		struct vop_win *win = &vop->win[i];
+		unsigned long possible_crtcs = drm_crtc_mask(crtc);
+
+		if (win->type != DRM_PLANE_TYPE_OVERLAY)
+			continue;
+
+		if (vop_plane_init(vop, win, possible_crtcs)) {
+			DRM_DEV_ERROR(vop->dev, "failed to init overlay\n");
+			goto err_cleanup_crtc;
+		}
+		vop_plane_add_properties(vop, &win->base, win);
+	}
+
+	port = of_get_child_by_name(dev->of_node, "port");
+	if (!port) {
+		DRM_DEV_ERROR(vop->dev, "no port node found in %pOF\n",
+			      dev->of_node);
+		ret = -ENOENT;
+		goto err_cleanup_crtc;
+	}
+
+	drm_flip_work_init(&vop->fb_unref_work, "fb_unref",
+			   vop_fb_unref_worker);
+
+	init_completion(&vop->dsp_hold_completion);
+	init_completion(&vop->line_flag_completion);
+	crtc->port = port;
+	rockchip_register_crtc_funcs(crtc, &private_crtc_funcs);
+
+	drm_object_attach_property(&crtc->base, private->soc_id_prop, vop->soc_id);
+	drm_object_attach_property(&crtc->base, private->port_id_prop, vop->id);
+	drm_object_attach_property(&crtc->base, private->aclk_prop, 0);
+	drm_object_attach_property(&crtc->base, private->bg_prop, 0);
+	drm_object_attach_property(&crtc->base, private->line_flag_prop, 0);
+
+#define VOP_ATTACH_MODE_CONFIG_PROP(prop, v) \
+	drm_object_attach_property(&crtc->base, drm_dev->mode_config.prop, v)
+
+	VOP_ATTACH_MODE_CONFIG_PROP(tv_left_margin_property, 100);
+	VOP_ATTACH_MODE_CONFIG_PROP(tv_right_margin_property, 100);
+	VOP_ATTACH_MODE_CONFIG_PROP(tv_top_margin_property, 100);
+	VOP_ATTACH_MODE_CONFIG_PROP(tv_bottom_margin_property, 100);
+#undef VOP_ATTACH_MODE_CONFIG_PROP
+	vop_crtc_create_plane_mask_property(vop, crtc);
+	vop_crtc_create_feature_property(vop, crtc);
+
+	if (vop->lut_regs) {
+		u16 *r_base, *g_base, *b_base;
+		u32 lut_len = vop->lut_len;
+
+		vop->lut = devm_kmalloc_array(dev, lut_len, sizeof(*vop->lut),
+					      GFP_KERNEL);
+		if (!vop->lut)
+			goto err_unregister_crtc_funcs;
+
+		if (vop_of_init_display_lut(vop)) {
+			for (i = 0; i < lut_len; i++) {
+				u32 r = i * lut_len * lut_len;
+				u32 g = i * lut_len;
+				u32 b = i;
+
+				vop->lut[i] = r | g | b;
+			}
+		}
+
+		drm_mode_crtc_set_gamma_size(crtc, lut_len);
+		drm_crtc_enable_color_mgmt(crtc, 0, false, lut_len);
+		r_base = crtc->gamma_store;
+		g_base = r_base + crtc->gamma_size;
+		b_base = g_base + crtc->gamma_size;
+
+		for (i = 0; i < lut_len; i++) {
+			rockchip_vop_crtc_fb_gamma_get(crtc, &r_base[i],
+						       &g_base[i], &b_base[i],
+						       i);
+		}
+	}
+	return 0;
+
+err_unregister_crtc_funcs:
+	rockchip_unregister_crtc_funcs(crtc);
+err_cleanup_crtc:
+	drm_crtc_cleanup(crtc);
+err_cleanup_planes:
+	list_for_each_entry_safe(plane, tmp, &drm_dev->mode_config.plane_list,
+				 head)
+		drm_plane_cleanup(plane);
+	return ret;
+}
+
+static void vop_destroy_crtc(struct vop *vop)
+{
+	struct drm_crtc *crtc = &vop->rockchip_crtc.crtc;
+	struct drm_device *drm_dev = vop->drm_dev;
+	struct drm_plane *plane, *tmp;
+
+	of_node_put(crtc->port);
+
+	/*
+	 * We need to cleanup the planes now.  Why?
+	 *
+	 * The planes are "&vop->win[i].base".  That means the memory is
+	 * all part of the big "struct vop" chunk of memory.  That memory
+	 * was devm allocated and associated with this component.  We need to
+	 * free it ourselves before vop_unbind() finishes.
+	 */
+	list_for_each_entry_safe(plane, tmp, &drm_dev->mode_config.plane_list,
+				 head)
+		vop_plane_destroy(plane);
+
+	/*
+	 * Destroy CRTC after vop_plane_destroy() since vop_disable_plane()
+	 * references the CRTC.
+	 */
+	drm_crtc_cleanup(crtc);
+	drm_flip_work_cleanup(&vop->fb_unref_work);
+}
+
+/*
+ * Win_id is the order in vop_win_data array.
+ * This is related to the actual hardware plane.
+ * But in the Linux platform, such as video hardware and camera preview,
+ * it can only be played on the nv12 plane.
+ * So set the order of zpos to PRIMARY < OVERLAY (if have) < CURSOR (if have).
+ */
+static int vop_plane_get_zpos(enum drm_plane_type type, unsigned int size)
+{
+	switch (type) {
+	case DRM_PLANE_TYPE_PRIMARY:
+		return 0;
+	case DRM_PLANE_TYPE_OVERLAY:
+		return 1;
+	case DRM_PLANE_TYPE_CURSOR:
+		return size - 1;
+	}
+	return 0;
+}
+
+/*
+ * Initialize the vop->win array elements.
+ */
+static int vop_win_init(struct vop *vop)
+{
+	const struct vop_data *vop_data = vop->data;
+	unsigned int i, j;
+	unsigned int num_wins = 0;
+	char name[DRM_PROP_NAME_LEN];
+	uint8_t plane_id = 0;
+	struct drm_prop_enum_list *plane_name_list;
+	static const struct drm_prop_enum_list props[] = {
+		{ ROCKCHIP_DRM_PLANE_FEATURE_SCALE, "scale" },
+		{ ROCKCHIP_DRM_PLANE_FEATURE_ALPHA, "alpha" },
+		{ ROCKCHIP_DRM_PLANE_FEATURE_HDR2SDR, "hdr2sdr" },
+		{ ROCKCHIP_DRM_PLANE_FEATURE_SDR2HDR, "sdr2hdr" },
+		{ ROCKCHIP_DRM_PLANE_FEATURE_AFBDC, "afbdc" },
+	};
+
+	for (i = 0; i < vop_data->win_size; i++) {
+		struct vop_win *vop_win = &vop->win[num_wins];
+		const struct vop_win_data *win_data = &vop_data->win[i];
+
+		if (!win_data->phy)
+			continue;
+
+		vop_win->phy = win_data->phy;
+		vop_win->csc = win_data->csc;
+		vop_win->offset = win_data->base;
+		vop_win->type = win_data->type;
+		vop_win->data_formats = win_data->phy->data_formats;
+		vop_win->nformats = win_data->phy->nformats;
+		vop_win->format_modifiers = win_data->format_modifiers;
+		vop_win->feature = win_data->feature;
+		vop_win->vop = vop;
+		vop_win->win_id = i;
+		vop_win->area_id = 0;
+		vop_win->plane_id = plane_id++;
+		snprintf(name, sizeof(name), "VOP%d-win%d-%d", vop->id, vop_win->win_id, vop_win->area_id);
+		vop_win->name = devm_kstrdup(vop->dev, name, GFP_KERNEL);
+		vop_win->zpos = vop_plane_get_zpos(win_data->type,
+						   vop_data->win_size);
+
+		num_wins++;
+
+		if (!vop->support_multi_area)
+			continue;
+
+		for (j = 0; j < win_data->area_size; j++) {
+			struct vop_win *vop_area = &vop->win[num_wins];
+			const struct vop_win_phy *area = win_data->area[j];
+
+			vop_area->parent = vop_win;
+			vop_area->offset = vop_win->offset;
+			vop_area->phy = area;
+			vop_area->type = DRM_PLANE_TYPE_OVERLAY;
+			vop_area->data_formats = vop_win->data_formats;
+			vop_area->nformats = vop_win->nformats;
+			vop_area->format_modifiers = win_data->format_modifiers;
+			vop_area->vop = vop;
+			vop_area->win_id = i;
+			vop_area->area_id = j + 1;
+			vop_area->plane_id = plane_id++;
+			snprintf(name, sizeof(name), "VOP%d-win%d-%d", vop->id, vop_area->win_id, vop_area->area_id);
+			vop_area->name = devm_kstrdup(vop->dev, name, GFP_KERNEL);
+			num_wins++;
+		}
+		vop->plane_mask |= BIT(vop_win->win_id);
+	}
+
+	vop->num_wins = num_wins;
+
+	vop->plane_feature_prop = drm_property_create_bitmask(vop->drm_dev,
+				DRM_MODE_PROP_IMMUTABLE, "FEATURE",
+				props, ARRAY_SIZE(props),
+				BIT(ROCKCHIP_DRM_PLANE_FEATURE_SCALE) |
+				BIT(ROCKCHIP_DRM_PLANE_FEATURE_ALPHA) |
+				BIT(ROCKCHIP_DRM_PLANE_FEATURE_HDR2SDR) |
+				BIT(ROCKCHIP_DRM_PLANE_FEATURE_SDR2HDR) |
+				BIT(ROCKCHIP_DRM_PLANE_FEATURE_AFBDC));
+	if (!vop->plane_feature_prop) {
+		DRM_ERROR("failed to create feature property\n");
+		return -EINVAL;
+	}
+
+	plane_name_list = devm_kzalloc(vop->dev,
+				       vop->num_wins * sizeof(*plane_name_list),
+				       GFP_KERNEL);
+	if (!plane_name_list) {
+		DRM_DEV_ERROR(vop->dev, "failed to alloc memory for plane_name_list\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < vop->num_wins; i++) {
+		struct vop_win *vop_win = &vop->win[i];
+
+		plane_name_list[i].type = vop_win->plane_id;
+		plane_name_list[i].name = vop_win->name;
+	}
+
+	vop->plane_name_list = plane_name_list;
+
+	return 0;
+}
+
+/**
+ * rockchip_drm_wait_vact_end
+ * @crtc: CRTC to enable line flag
+ * @mstimeout: millisecond for timeout
+ *
+ * Wait for vact_end line flag irq or timeout.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+int rockchip_drm_wait_vact_end(struct drm_crtc *crtc, unsigned int mstimeout)
+{
+	struct vop *vop = to_vop(crtc);
+	unsigned long jiffies_left;
+	int ret = 0;
+
+	if (!crtc || !vop->is_enabled)
+		return -ENODEV;
+
+	mutex_lock(&vop->vop_lock);
+	if (mstimeout <= 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (vop_line_flag_irq_is_enabled(vop)) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	reinit_completion(&vop->line_flag_completion);
+	vop_line_flag_irq_enable(vop);
+
+	jiffies_left = wait_for_completion_timeout(&vop->line_flag_completion,
+						   msecs_to_jiffies(mstimeout));
+	vop_line_flag_irq_disable(vop);
+
+	if (jiffies_left == 0) {
+		DRM_DEV_ERROR(vop->dev, "Timeout waiting for IRQ\n");
+		ret = -ETIMEDOUT;
+		goto out;
+	}
+
+out:
+	mutex_unlock(&vop->vop_lock);
+	return ret;
+}
+EXPORT_SYMBOL(rockchip_drm_wait_vact_end);
+
+static int vop_bind(struct device *dev, struct device *master, void *data)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	const struct vop_data *vop_data;
+	struct drm_device *drm_dev = data;
+	struct vop *vop;
+	struct resource *res;
+	size_t alloc_size;
+	int ret, irq, i;
+	int num_wins = 0;
+	bool dual_channel_swap = false;
+	struct device_node *mcu = NULL;
+
+	vop_data = of_device_get_match_data(dev);
+	if (!vop_data)
+		return -ENODEV;
+
+	for (i = 0; i < vop_data->win_size; i++) {
+		const struct vop_win_data *win_data = &vop_data->win[i];
+
+		num_wins += win_data->area_size + 1;
+	}
+
+	/* Allocate vop struct and its vop_win array */
+	alloc_size = sizeof(*vop) + sizeof(*vop->win) * num_wins;
+	vop = devm_kzalloc(dev, alloc_size, GFP_KERNEL);
+	if (!vop)
+		return -ENOMEM;
+
+	vop->dev = dev;
+	vop->data = vop_data;
+	vop->drm_dev = drm_dev;
+	vop->num_wins = num_wins;
+	vop->version = vop_data->version;
+	vop->soc_id = vop_data->soc_id;
+	vop->id = vop_data->vop_id;
+	dev_set_drvdata(dev, vop);
+	vop->support_multi_area = of_property_read_bool(dev->of_node, "support-multi-area");
+
+	ret = vop_win_init(vop);
+	if (ret)
+		return ret;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "regs");
+	if (!res) {
+		dev_warn(vop->dev, "failed to get vop register byname\n");
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	}
+	vop->regs = devm_ioremap_resource(dev, res);
+	if (IS_ERR(vop->regs))
+		return PTR_ERR(vop->regs);
+	vop->len = resource_size(res);
+
+	vop->regsbak = devm_kzalloc(dev, vop->len, GFP_KERNEL);
+	if (!vop->regsbak)
+		return -ENOMEM;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "gamma_lut");
+	if (res) {
+		vop->lut_len = resource_size(res) / sizeof(*vop->lut);
+		if (vop->lut_len != 256 && vop->lut_len != 1024) {
+			dev_err(vop->dev, "unsupported lut sizes %d\n",
+				vop->lut_len);
+			return -EINVAL;
+		}
+
+		vop->lut_regs = devm_ioremap_resource(dev, res);
+		if (IS_ERR(vop->lut_regs))
+			return PTR_ERR(vop->lut_regs);
+	}
+	vop->grf = syscon_regmap_lookup_by_phandle(dev->of_node,
+						   "rockchip,grf");
+	if (IS_ERR(vop->grf))
+		dev_err(dev, "missing rockchip,grf property\n");
+	vop->hclk = devm_clk_get(vop->dev, "hclk_vop");
+	if (IS_ERR(vop->hclk)) {
+		dev_err(vop->dev, "failed to get hclk source\n");
+		return PTR_ERR(vop->hclk);
+	}
+	vop->aclk = devm_clk_get(vop->dev, "aclk_vop");
+	if (IS_ERR(vop->aclk)) {
+		dev_err(vop->dev, "failed to get aclk source\n");
+		return PTR_ERR(vop->aclk);
+	}
+	vop->dclk = devm_clk_get(vop->dev, "dclk_vop");
+	if (IS_ERR(vop->dclk)) {
+		dev_err(vop->dev, "failed to get dclk source\n");
+		return PTR_ERR(vop->dclk);
+	}
+	vop->dclk_source = devm_clk_get(vop->dev, "dclk_source");
+	if (PTR_ERR(vop->dclk_source) == -ENOENT) {
+		vop->dclk_source = NULL;
+	} else if (PTR_ERR(vop->dclk_source) == -EPROBE_DEFER) {
+		return -EPROBE_DEFER;
+	} else if (IS_ERR(vop->dclk_source)) {
+		dev_err(vop->dev, "failed to get dclk source parent\n");
+		return PTR_ERR(vop->dclk_source);
+	}
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
+		DRM_DEV_ERROR(dev, "cannot find irq for vop\n");
+		return irq;
+	}
+	vop->irq = (unsigned int)irq;
+
+	spin_lock_init(&vop->reg_lock);
+	spin_lock_init(&vop->irq_lock);
+	mutex_init(&vop->vop_lock);
+
+	ret = devm_request_irq(dev, vop->irq, vop_isr,
+			       IRQF_SHARED, dev_name(dev), vop);
+	if (ret)
+		return ret;
+	ret = vop_create_crtc(vop);
+	if (ret)
+		return ret;
+
+	pm_runtime_enable(&pdev->dev);
+
+
+	mcu = of_get_child_by_name(dev->of_node, "mcu-timing");
+	if (!mcu) {
+		dev_dbg(dev, "no mcu-timing node found in %s\n",
+			dev->of_node->full_name);
+	} else {
+		u32 val;
+
+		if (!of_property_read_u32(mcu, "mcu-pix-total", &val))
+			vop->mcu_timing.mcu_pix_total = val;
+		if (!of_property_read_u32(mcu, "mcu-cs-pst", &val))
+			vop->mcu_timing.mcu_cs_pst = val;
+		if (!of_property_read_u32(mcu, "mcu-cs-pend", &val))
+			vop->mcu_timing.mcu_cs_pend = val;
+		if (!of_property_read_u32(mcu, "mcu-rw-pst", &val))
+			vop->mcu_timing.mcu_rw_pst = val;
+		if (!of_property_read_u32(mcu, "mcu-rw-pend", &val))
+			vop->mcu_timing.mcu_rw_pend = val;
+		if (!of_property_read_u32(mcu, "mcu-hold-mode", &val))
+			vop->mcu_timing.mcu_hold_mode = val;
+	}
+
+	dual_channel_swap = of_property_read_bool(dev->of_node,
+						  "rockchip,dual-channel-swap");
+	vop->dual_channel_swap = dual_channel_swap;
+
+	return 0;
+}
+
+static void vop_unbind(struct device *dev, struct device *master, void *data)
+{
+	struct vop *vop = dev_get_drvdata(dev);
+
+	pm_runtime_disable(dev);
+	vop_destroy_crtc(vop);
+}
+
+const struct component_ops vop_component_ops = {
+	.bind = vop_bind,
+	.unbind = vop_unbind,
+};
+EXPORT_SYMBOL_GPL(vop_component_ops);
