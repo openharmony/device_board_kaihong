@@ -4104,3 +4104,1029 @@ static const struct panel_desc urt_umsh_8596md_parallel = {
 	.size = {
 		.width = 152,
 		.height = 91,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB666_1X18,
+};
+
+static const struct drm_display_mode vl050_8048nt_c01_mode = {
+	.clock = 33333,
+	.hdisplay = 800,
+	.hsync_start = 800 + 210,
+	.hsync_end = 800 + 210 + 20,
+	.htotal = 800 + 210 + 20 + 46,
+	.vdisplay =  480,
+	.vsync_start = 480 + 22,
+	.vsync_end = 480 + 22 + 10,
+	.vtotal = 480 + 22 + 10 + 23,
+	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+};
+
+static const struct panel_desc vl050_8048nt_c01 = {
+	.modes = &vl050_8048nt_c01_mode,
+	.num_modes = 1,
+	.bpc = 8,
+	.size = {
+		.width = 120,
+		.height = 76,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE,
+};
+
+static const struct drm_display_mode winstar_wf35ltiacd_mode = {
+	.clock = 6410,
+	.hdisplay = 320,
+	.hsync_start = 320 + 20,
+	.hsync_end = 320 + 20 + 30,
+	.htotal = 320 + 20 + 30 + 38,
+	.vdisplay = 240,
+	.vsync_start = 240 + 4,
+	.vsync_end = 240 + 4 + 3,
+	.vtotal = 240 + 4 + 3 + 15,
+	.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
+};
+
+static const struct panel_desc winstar_wf35ltiacd = {
+	.modes = &winstar_wf35ltiacd_mode,
+	.num_modes = 1,
+	.bpc = 8,
+	.size = {
+		.width = 70,
+		.height = 53,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+};
+
+static const struct drm_display_mode arm_rtsm_mode[] = {
+	{
+		.clock = 65000,
+		.hdisplay = 1024,
+		.hsync_start = 1024 + 24,
+		.hsync_end = 1024 + 24 + 136,
+		.htotal = 1024 + 24 + 136 + 160,
+		.vdisplay = 768,
+		.vsync_start = 768 + 3,
+		.vsync_end = 768 + 3 + 6,
+		.vtotal = 768 + 3 + 6 + 29,
+		.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
+	},
+};
+
+static const struct panel_desc arm_rtsm = {
+	.modes = arm_rtsm_mode,
+	.num_modes = 1,
+	.bpc = 8,
+	.size = {
+		.width = 400,
+		.height = 300,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+};
+
+static const struct of_device_id platform_of_match[] = {
+	{
+		.compatible = "simple-panel",
+		.data = NULL,
+	}, {
+		.compatible = "ampire,am-1280800n3tzqw-t00h",
+		.data = &ampire_am_1280800n3tzqw_t00h,
+	}, {
+		.compatible = "ampire,am-480272h3tmqw-t01h",
+		.data = &ampire_am_480272h3tmqw_t01h,
+	}, {
+		.compatible = "ampire,am800480r3tmqwa1h",
+		.data = &ampire_am800480r3tmqwa1h,
+	}, {
+		.compatible = "arm,rtsm-display",
+		.data = &arm_rtsm,
+	}, {
+		.compatible = "armadeus,st0700-adapt",
+		.data = &armadeus_st0700_adapt,
+	}, {
+		.compatible = "auo,b101aw03",
+		.data = &auo_b101aw03,
+	}, {
+		.compatible = "auo,b101ean01",
+		.data = &auo_b101ean01,
+	}, {
+		.compatible = "auo,b101xtn01",
+		.data = &auo_b101xtn01,
+	}, {
+		.compatible = "auo,b116xa01",
+		.data = &auo_b116xak01,
+	}, {
+		.compatible = "auo,b116xw03",
+		.data = &auo_b116xw03,
+	}, {
+		.compatible = "auo,b133htn01",
+		.data = &auo_b133htn01,
+	}, {
+		.compatible = "auo,b133xtn01",
+		.data = &auo_b133xtn01,
+	}, {
+		.compatible = "auo,g070vvn01",
+		.data = &auo_g070vvn01,
+	}, {
+		.compatible = "auo,g101evn010",
+		.data = &auo_g101evn010,
+	}, {
+		.compatible = "auo,g104sn02",
+		.data = &auo_g104sn02,
+	}, {
+		.compatible = "auo,g121ean01",
+		.data = &auo_g121ean01,
+	}, {
+		.compatible = "auo,g133han01",
+		.data = &auo_g133han01,
+	}, {
+		.compatible = "auo,g156xtn01",
+		.data = &auo_g156xtn01,
+	}, {
+		.compatible = "auo,g185han01",
+		.data = &auo_g185han01,
+	}, {
+		.compatible = "auo,g190ean01",
+		.data = &auo_g190ean01,
+	}, {
+		.compatible = "auo,p320hvn03",
+		.data = &auo_p320hvn03,
+	}, {
+		.compatible = "auo,t215hvn01",
+		.data = &auo_t215hvn01,
+	}, {
+		.compatible = "avic,tm070ddh03",
+		.data = &avic_tm070ddh03,
+	}, {
+		.compatible = "bananapi,s070wv20-ct16",
+		.data = &bananapi_s070wv20_ct16,
+	}, {
+		.compatible = "boe,hv070wsa-100",
+		.data = &boe_hv070wsa
+	}, {
+		.compatible = "boe,nv101wxmn51",
+		.data = &boe_nv101wxmn51,
+	}, {
+		.compatible = "boe,nv133fhm-n61",
+		.data = &boe_nv133fhm_n61,
+	}, {
+		.compatible = "boe,nv133fhm-n62",
+		.data = &boe_nv133fhm_n61,
+	}, {
+		.compatible = "boe,nv140fhmn49",
+		.data = &boe_nv140fhmn49,
+	}, {
+		.compatible = "cdtech,s043wq26h-ct7",
+		.data = &cdtech_s043wq26h_ct7,
+	}, {
+		.compatible = "cdtech,s070pws19hp-fc21",
+		.data = &cdtech_s070pws19hp_fc21,
+	}, {
+		.compatible = "cdtech,s070swv29hg-dc44",
+		.data = &cdtech_s070swv29hg_dc44,
+	}, {
+		.compatible = "cdtech,s070wv95-ct16",
+		.data = &cdtech_s070wv95_ct16,
+	}, {
+		.compatible = "chefree,ch101olhlwh-002",
+		.data = &chefree_ch101olhlwh_002,
+	}, {
+		.compatible = "chunghwa,claa070wp03xg",
+		.data = &chunghwa_claa070wp03xg,
+	}, {
+		.compatible = "chunghwa,claa101wa01a",
+		.data = &chunghwa_claa101wa01a
+	}, {
+		.compatible = "chunghwa,claa101wb01",
+		.data = &chunghwa_claa101wb01
+	}, {
+		.compatible = "dataimage,scf0700c48ggu18",
+		.data = &dataimage_scf0700c48ggu18,
+	}, {
+		.compatible = "dlc,dlc0700yzg-1",
+		.data = &dlc_dlc0700yzg_1,
+	}, {
+		.compatible = "dlc,dlc1010gig",
+		.data = &dlc_dlc1010gig,
+	}, {
+		.compatible = "edt,et035012dm6",
+		.data = &edt_et035012dm6,
+	}, {
+		.compatible = "edt,etm043080dh6gp",
+		.data = &edt_etm043080dh6gp,
+	}, {
+		.compatible = "edt,etm0430g0dh6",
+		.data = &edt_etm0430g0dh6,
+	}, {
+		.compatible = "edt,et057090dhu",
+		.data = &edt_et057090dhu,
+	}, {
+		.compatible = "edt,et070080dh6",
+		.data = &edt_etm0700g0dh6,
+	}, {
+		.compatible = "edt,etm0700g0dh6",
+		.data = &edt_etm0700g0dh6,
+	}, {
+		.compatible = "edt,etm0700g0bdh6",
+		.data = &edt_etm0700g0bdh6,
+	}, {
+		.compatible = "edt,etm0700g0edh6",
+		.data = &edt_etm0700g0bdh6,
+	}, {
+		.compatible = "evervision,vgg804821",
+		.data = &evervision_vgg804821,
+	}, {
+		.compatible = "foxlink,fl500wvr00-a0t",
+		.data = &foxlink_fl500wvr00_a0t,
+	}, {
+		.compatible = "frida,frd350h54004",
+		.data = &frida_frd350h54004,
+	}, {
+		.compatible = "friendlyarm,hd702e",
+		.data = &friendlyarm_hd702e,
+	}, {
+		.compatible = "giantplus,gpg482739qs5",
+		.data = &giantplus_gpg482739qs5
+	}, {
+		.compatible = "giantplus,gpm940b0",
+		.data = &giantplus_gpm940b0,
+	}, {
+		.compatible = "hannstar,hsd070pww1",
+		.data = &hannstar_hsd070pww1,
+	}, {
+		.compatible = "hannstar,hsd100pxn1",
+		.data = &hannstar_hsd100pxn1,
+	}, {
+		.compatible = "hit,tx23d38vm0caa",
+		.data = &hitachi_tx23d38vm0caa
+	}, {
+		.compatible = "innolux,at043tn24",
+		.data = &innolux_at043tn24,
+	}, {
+		.compatible = "innolux,at070tn92",
+		.data = &innolux_at070tn92,
+	}, {
+		.compatible = "innolux,g070y2-l01",
+		.data = &innolux_g070y2_l01,
+	}, {
+		.compatible = "innolux,g101ice-l01",
+		.data = &innolux_g101ice_l01
+	}, {
+		.compatible = "innolux,g121i1-l01",
+		.data = &innolux_g121i1_l01
+	}, {
+		.compatible = "innolux,g121x1-l03",
+		.data = &innolux_g121x1_l03,
+	}, {
+		.compatible = "innolux,n116bge",
+		.data = &innolux_n116bge,
+	}, {
+		.compatible = "innolux,n156bge-l21",
+		.data = &innolux_n156bge_l21,
+	}, {
+		.compatible = "innolux,p120zdg-bf1",
+		.data = &innolux_p120zdg_bf1,
+	}, {
+		.compatible = "innolux,zj070na-01p",
+		.data = &innolux_zj070na_01p,
+	}, {
+		.compatible = "ivo,m133nwf4-r0",
+		.data = &ivo_m133nwf4_r0,
+	}, {
+		.compatible = "kingdisplay,kd116n21-30nv-a010",
+		.data = &kingdisplay_kd116n21_30nv_a010,
+	}, {
+		.compatible = "koe,tx14d24vm1bpa",
+		.data = &koe_tx14d24vm1bpa,
+	}, {
+		.compatible = "koe,tx26d202vm0bwa",
+		.data = &koe_tx26d202vm0bwa,
+	}, {
+		.compatible = "koe,tx31d200vm0baa",
+		.data = &koe_tx31d200vm0baa,
+	}, {
+		.compatible = "kyo,tcg121xglp",
+		.data = &kyo_tcg121xglp,
+	}, {
+		.compatible = "lemaker,bl035-rgb-002",
+		.data = &lemaker_bl035_rgb_002,
+	}, {
+		.compatible = "lg,lb070wv8",
+		.data = &lg_lb070wv8,
+	}, {
+		.compatible = "lg,lp079qx1-sp0v",
+		.data = &lg_lp079qx1_sp0v,
+	}, {
+		.compatible = "lg,lp097qx1-spa1",
+		.data = &lg_lp097qx1_spa1,
+	}, {
+		.compatible = "lg,lp120up1",
+		.data = &lg_lp120up1,
+	}, {
+		.compatible = "lg,lp129qe",
+		.data = &lg_lp129qe,
+	}, {
+		.compatible = "logicpd,type28",
+		.data = &logicpd_type_28,
+	}, {
+		.compatible = "logictechno,lt161010-2nhc",
+		.data = &logictechno_lt161010_2nh,
+	}, {
+		.compatible = "logictechno,lt161010-2nhr",
+		.data = &logictechno_lt161010_2nh,
+	}, {
+		.compatible = "logictechno,lt170410-2whc",
+		.data = &logictechno_lt170410_2whc,
+	}, {
+		.compatible = "mitsubishi,aa070mc01-ca1",
+		.data = &mitsubishi_aa070mc01,
+	}, {
+		.compatible = "nec,nl12880bc20-05",
+		.data = &nec_nl12880bc20_05,
+	}, {
+		.compatible = "nec,nl4827hc19-05b",
+		.data = &nec_nl4827hc19_05b,
+	}, {
+		.compatible = "netron-dy,e231732",
+		.data = &netron_dy_e231732,
+	}, {
+		.compatible = "neweast,wjfh116008a",
+		.data = &neweast_wjfh116008a,
+	}, {
+		.compatible = "newhaven,nhd-4.3-480272ef-atxl",
+		.data = &newhaven_nhd_43_480272ef_atxl,
+	}, {
+		.compatible = "nlt,nl192108ac18-02d",
+		.data = &nlt_nl192108ac18_02d,
+	}, {
+		.compatible = "nvd,9128",
+		.data = &nvd_9128,
+	}, {
+		.compatible = "okaya,rs800480t-7x0gp",
+		.data = &okaya_rs800480t_7x0gp,
+	}, {
+		.compatible = "olimex,lcd-olinuxino-43-ts",
+		.data = &olimex_lcd_olinuxino_43ts,
+	}, {
+		.compatible = "ontat,yx700wv03",
+		.data = &ontat_yx700wv03,
+	}, {
+		.compatible = "ortustech,com37h3m05dtc",
+		.data = &ortustech_com37h3m,
+	}, {
+		.compatible = "ortustech,com37h3m99dtc",
+		.data = &ortustech_com37h3m,
+	}, {
+		.compatible = "ortustech,com43h4m85ulc",
+		.data = &ortustech_com43h4m85ulc,
+	}, {
+		.compatible = "osddisplays,osd070t1718-19ts",
+		.data = &osddisplays_osd070t1718_19ts,
+	}, {
+		.compatible = "pda,91-00156-a0",
+		.data = &pda_91_00156_a0,
+	}, {
+		.compatible = "powertip,ph800480t013-idf02",
+		.data = &powertip_ph800480t013_idf02,
+	}, {
+		.compatible = "qiaodian,qd43003c0-40",
+		.data = &qd43003c0_40,
+	}, {
+		.compatible = "rocktech,rk070er9427",
+		.data = &rocktech_rk070er9427,
+	}, {
+		.compatible = "rocktech,rk101ii01d-ct",
+		.data = &rocktech_rk101ii01d_ct,
+	}, {
+		.compatible = "samsung,lsn122dl01-c01",
+		.data = &samsung_lsn122dl01_c01,
+	}, {
+		.compatible = "samsung,ltn101nt05",
+		.data = &samsung_ltn101nt05,
+	}, {
+		.compatible = "samsung,ltn140at29-301",
+		.data = &samsung_ltn140at29_301,
+	}, {
+		.compatible = "satoz,sat050at40h12r2",
+		.data = &satoz_sat050at40h12r2,
+	}, {
+		.compatible = "sharp,ld-d5116z01b",
+		.data = &sharp_ld_d5116z01b,
+	}, {
+		.compatible = "sharp,lq035q7db03",
+		.data = &sharp_lq035q7db03,
+	}, {
+		.compatible = "sharp,lq070y3dg3b",
+		.data = &sharp_lq070y3dg3b,
+	}, {
+		.compatible = "sharp,lq101k1ly04",
+		.data = &sharp_lq101k1ly04,
+	}, {
+		.compatible = "sharp,lq123p1jx31",
+		.data = &sharp_lq123p1jx31,
+	}, {
+		.compatible = "sharp,ls020b1dd01d",
+		.data = &sharp_ls020b1dd01d,
+	}, {
+		.compatible = "shelly,sca07010-bfn-lnn",
+		.data = &shelly_sca07010_bfn_lnn,
+	}, {
+		.compatible = "starry,kr070pe2t",
+		.data = &starry_kr070pe2t,
+	}, {
+		.compatible = "starry,kr122ea0sra",
+		.data = &starry_kr122ea0sra,
+	}, {
+		.compatible = "tfc,s9700rtwv43tr-01b",
+		.data = &tfc_s9700rtwv43tr_01b,
+	}, {
+		.compatible = "tianma,tm070jdhg30",
+		.data = &tianma_tm070jdhg30,
+	}, {
+		.compatible = "tianma,tm070jvhg33",
+		.data = &tianma_tm070jvhg33,
+	}, {
+		.compatible = "tianma,tm070rvhg71",
+		.data = &tianma_tm070rvhg71,
+	}, {
+		.compatible = "ti,nspire-cx-lcd-panel",
+		.data = &ti_nspire_cx_lcd_panel,
+	}, {
+		.compatible = "ti,nspire-classic-lcd-panel",
+		.data = &ti_nspire_classic_lcd_panel,
+	}, {
+		.compatible = "toshiba,lt089ac29000",
+		.data = &toshiba_lt089ac29000,
+	}, {
+		.compatible = "tpk,f07a-0102",
+		.data = &tpk_f07a_0102,
+	}, {
+		.compatible = "tpk,f10a-0102",
+		.data = &tpk_f10a_0102,
+	}, {
+		.compatible = "urt,umsh-8596md-t",
+		.data = &urt_umsh_8596md_parallel,
+	}, {
+		.compatible = "urt,umsh-8596md-1t",
+		.data = &urt_umsh_8596md_parallel,
+	}, {
+		.compatible = "urt,umsh-8596md-7t",
+		.data = &urt_umsh_8596md_parallel,
+	}, {
+		.compatible = "urt,umsh-8596md-11t",
+		.data = &urt_umsh_8596md_lvds,
+	}, {
+		.compatible = "urt,umsh-8596md-19t",
+		.data = &urt_umsh_8596md_lvds,
+	}, {
+		.compatible = "urt,umsh-8596md-20t",
+		.data = &urt_umsh_8596md_parallel,
+	}, {
+		.compatible = "vxt,vl050-8048nt-c01",
+		.data = &vl050_8048nt_c01,
+	}, {
+		.compatible = "winstar,wf35ltiacd",
+		.data = &winstar_wf35ltiacd,
+	}, {
+		/* Must be the last entry */
+		.compatible = "panel-dpi",
+		.data = &panel_dpi,
+	}, {
+		/* sentinel */
+	}
+};
+MODULE_DEVICE_TABLE(of, platform_of_match);
+
+static bool of_child_node_is_present(const struct device_node *node,
+				     const char *name)
+{
+	struct device_node *child;
+
+	child = of_get_child_by_name(node, name);
+	of_node_put(child);
+
+	return !!child;
+}
+
+static int panel_simple_of_get_desc_data(struct device *dev,
+					 struct panel_desc *desc)
+{
+	struct device_node *np = dev->of_node;
+	u32 bus_flags;
+	const void *data;
+	int len;
+	int err;
+
+	if (of_child_node_is_present(np, "display-timings")) {
+		struct drm_display_mode *mode;
+
+		mode = devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
+		if (!mode)
+			return -ENOMEM;
+
+		if (!of_get_drm_display_mode(np, mode, &bus_flags,
+					     OF_USE_NATIVE_MODE)) {
+			desc->modes = mode;
+			desc->num_modes = 1;
+			desc->bus_flags = bus_flags;
+		}
+	} else if (of_child_node_is_present(np, "panel-timing")) {
+		struct display_timing *timing;
+		struct videomode vm;
+
+		timing = devm_kzalloc(dev, sizeof(*timing), GFP_KERNEL);
+		if (!timing)
+			return -ENOMEM;
+
+		if (!of_get_display_timing(np, "panel-timing", timing)) {
+			desc->timings = timing;
+			desc->num_timings = 1;
+
+			bus_flags = 0;
+			vm.flags = timing->flags;
+			drm_bus_flags_from_videomode(&vm, &bus_flags);
+			desc->bus_flags = bus_flags;
+		}
+	}
+
+	if (desc->num_modes || desc->num_timings) {
+		of_property_read_u32(np, "bpc", &desc->bpc);
+		of_property_read_u32(np, "bus-format", &desc->bus_format);
+		of_property_read_u32(np, "width-mm", &desc->size.width);
+		of_property_read_u32(np, "height-mm", &desc->size.height);
+	}
+
+	of_property_read_u32(np, "prepare-delay-ms", &desc->delay.prepare);
+	of_property_read_u32(np, "enable-delay-ms", &desc->delay.enable);
+	of_property_read_u32(np, "disable-delay-ms", &desc->delay.disable);
+	of_property_read_u32(np, "unprepare-delay-ms", &desc->delay.unprepare);
+	of_property_read_u32(np, "reset-delay-ms", &desc->delay.reset);
+	of_property_read_u32(np, "init-delay-ms", &desc->delay.init);
+
+	data = of_get_property(np, "panel-init-sequence", &len);
+	if (data) {
+		desc->init_seq = devm_kzalloc(dev, sizeof(*desc->init_seq),
+					      GFP_KERNEL);
+		if (!desc->init_seq)
+			return -ENOMEM;
+
+		err = panel_simple_parse_cmd_seq(dev, data, len,
+						 desc->init_seq);
+		if (err) {
+			dev_err(dev, "failed to parse init sequence\n");
+			return err;
+		}
+	}
+
+	data = of_get_property(np, "panel-exit-sequence", &len);
+	if (data) {
+		desc->exit_seq = devm_kzalloc(dev, sizeof(*desc->exit_seq),
+					      GFP_KERNEL);
+		if (!desc->exit_seq)
+			return -ENOMEM;
+
+		err = panel_simple_parse_cmd_seq(dev, data, len,
+						 desc->exit_seq);
+		if (err) {
+			dev_err(dev, "failed to parse exit sequence\n");
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+static int panel_simple_platform_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	const struct of_device_id *id;
+	const struct panel_desc *desc;
+	struct panel_desc *d;
+	int err;
+
+	id = of_match_node(platform_of_match, pdev->dev.of_node);
+	if (!id)
+		return -ENODEV;
+
+	if (!id->data) {
+		d = devm_kzalloc(dev, sizeof(*d), GFP_KERNEL);
+		if (!d)
+			return -ENOMEM;
+
+		err = panel_simple_of_get_desc_data(dev, d);
+		if (err) {
+			dev_err(dev, "failed to get desc data: %d\n", err);
+			return err;
+		}
+	}
+
+	desc = id->data ? id->data : d;
+
+	return panel_simple_probe(&pdev->dev, desc);
+}
+
+static int panel_simple_platform_remove(struct platform_device *pdev)
+{
+	return panel_simple_remove(&pdev->dev);
+}
+
+static void panel_simple_platform_shutdown(struct platform_device *pdev)
+{
+	panel_simple_shutdown(&pdev->dev);
+}
+
+static struct platform_driver panel_simple_platform_driver = {
+	.driver = {
+		.name = "panel-simple",
+		.of_match_table = platform_of_match,
+	},
+	.probe = panel_simple_platform_probe,
+	.remove = panel_simple_platform_remove,
+	.shutdown = panel_simple_platform_shutdown,
+};
+
+struct panel_desc_dsi {
+	struct panel_desc desc;
+
+	unsigned long flags;
+	enum mipi_dsi_pixel_format format;
+	unsigned int lanes;
+};
+
+static const struct drm_display_mode auo_b080uan01_mode = {
+	.clock = 154500,
+	.hdisplay = 1200,
+	.hsync_start = 1200 + 62,
+	.hsync_end = 1200 + 62 + 4,
+	.htotal = 1200 + 62 + 4 + 62,
+	.vdisplay = 1920,
+	.vsync_start = 1920 + 9,
+	.vsync_end = 1920 + 9 + 2,
+	.vtotal = 1920 + 9 + 2 + 8,
+};
+
+static const struct panel_desc_dsi auo_b080uan01 = {
+	.desc = {
+		.modes = &auo_b080uan01_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 108,
+			.height = 272,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_CLOCK_NON_CONTINUOUS,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct drm_display_mode boe_tv080wum_nl0_mode = {
+	.clock = 160000,
+	.hdisplay = 1200,
+	.hsync_start = 1200 + 120,
+	.hsync_end = 1200 + 120 + 20,
+	.htotal = 1200 + 120 + 20 + 21,
+	.vdisplay = 1920,
+	.vsync_start = 1920 + 21,
+	.vsync_end = 1920 + 21 + 3,
+	.vtotal = 1920 + 21 + 3 + 18,
+	.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
+};
+
+static const struct panel_desc_dsi boe_tv080wum_nl0 = {
+	.desc = {
+		.modes = &boe_tv080wum_nl0_mode,
+		.num_modes = 1,
+		.size = {
+			.width = 107,
+			.height = 172,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO |
+		 MIPI_DSI_MODE_VIDEO_BURST |
+		 MIPI_DSI_MODE_VIDEO_SYNC_PULSE,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct drm_display_mode lg_ld070wx3_sl01_mode = {
+	.clock = 71000,
+	.hdisplay = 800,
+	.hsync_start = 800 + 32,
+	.hsync_end = 800 + 32 + 1,
+	.htotal = 800 + 32 + 1 + 57,
+	.vdisplay = 1280,
+	.vsync_start = 1280 + 28,
+	.vsync_end = 1280 + 28 + 1,
+	.vtotal = 1280 + 28 + 1 + 14,
+};
+
+static const struct panel_desc_dsi lg_ld070wx3_sl01 = {
+	.desc = {
+		.modes = &lg_ld070wx3_sl01_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 94,
+			.height = 151,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_CLOCK_NON_CONTINUOUS,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct drm_display_mode lg_lh500wx1_sd03_mode = {
+	.clock = 67000,
+	.hdisplay = 720,
+	.hsync_start = 720 + 12,
+	.hsync_end = 720 + 12 + 4,
+	.htotal = 720 + 12 + 4 + 112,
+	.vdisplay = 1280,
+	.vsync_start = 1280 + 8,
+	.vsync_end = 1280 + 8 + 4,
+	.vtotal = 1280 + 8 + 4 + 12,
+};
+
+static const struct panel_desc_dsi lg_lh500wx1_sd03 = {
+	.desc = {
+		.modes = &lg_lh500wx1_sd03_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 62,
+			.height = 110,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct drm_display_mode panasonic_vvx10f004b00_mode = {
+	.clock = 157200,
+	.hdisplay = 1920,
+	.hsync_start = 1920 + 154,
+	.hsync_end = 1920 + 154 + 16,
+	.htotal = 1920 + 154 + 16 + 32,
+	.vdisplay = 1200,
+	.vsync_start = 1200 + 17,
+	.vsync_end = 1200 + 17 + 2,
+	.vtotal = 1200 + 17 + 2 + 16,
+};
+
+static const struct panel_desc_dsi panasonic_vvx10f004b00 = {
+	.desc = {
+		.modes = &panasonic_vvx10f004b00_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 217,
+			.height = 136,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
+		 MIPI_DSI_CLOCK_NON_CONTINUOUS,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct drm_display_mode lg_acx467akm_7_mode = {
+	.clock = 150000,
+	.hdisplay = 1080,
+	.hsync_start = 1080 + 2,
+	.hsync_end = 1080 + 2 + 2,
+	.htotal = 1080 + 2 + 2 + 2,
+	.vdisplay = 1920,
+	.vsync_start = 1920 + 2,
+	.vsync_end = 1920 + 2 + 2,
+	.vtotal = 1920 + 2 + 2 + 2,
+};
+
+static const struct panel_desc_dsi lg_acx467akm_7 = {
+	.desc = {
+		.modes = &lg_acx467akm_7_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 62,
+			.height = 110,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = 0,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct drm_display_mode osd101t2045_53ts_mode = {
+	.clock = 154500,
+	.hdisplay = 1920,
+	.hsync_start = 1920 + 112,
+	.hsync_end = 1920 + 112 + 16,
+	.htotal = 1920 + 112 + 16 + 32,
+	.vdisplay = 1200,
+	.vsync_start = 1200 + 16,
+	.vsync_end = 1200 + 16 + 2,
+	.vtotal = 1200 + 16 + 2 + 16,
+	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+};
+
+static const struct panel_desc_dsi osd101t2045_53ts = {
+	.desc = {
+		.modes = &osd101t2045_53ts_mode,
+		.num_modes = 1,
+		.bpc = 8,
+		.size = {
+			.width = 217,
+			.height = 136,
+		},
+		.connector_type = DRM_MODE_CONNECTOR_DSI,
+	},
+	.flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+		 MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
+		 MIPI_DSI_MODE_EOT_PACKET,
+	.format = MIPI_DSI_FMT_RGB888,
+	.lanes = 4,
+};
+
+static const struct of_device_id dsi_of_match[] = {
+	{
+		.compatible = "simple-panel-dsi",
+		.data = NULL,
+	}, {
+		.compatible = "auo,b080uan01",
+		.data = &auo_b080uan01
+	}, {
+		.compatible = "boe,tv080wum-nl0",
+		.data = &boe_tv080wum_nl0
+	}, {
+		.compatible = "lg,ld070wx3-sl01",
+		.data = &lg_ld070wx3_sl01
+	}, {
+		.compatible = "lg,lh500wx1-sd03",
+		.data = &lg_lh500wx1_sd03
+	}, {
+		.compatible = "panasonic,vvx10f004b00",
+		.data = &panasonic_vvx10f004b00
+	}, {
+		.compatible = "lg,acx467akm-7",
+		.data = &lg_acx467akm_7
+	}, {
+		.compatible = "osddisplays,osd101t2045-53ts",
+		.data = &osd101t2045_53ts
+	}, {
+		/* sentinel */
+	}
+};
+MODULE_DEVICE_TABLE(of, dsi_of_match);
+
+static int panel_simple_dsi_of_get_desc_data(struct device *dev,
+					     struct panel_desc_dsi *desc)
+{
+	struct device_node *np = dev->of_node;
+	u32 val;
+	int err;
+
+	err = panel_simple_of_get_desc_data(dev, &desc->desc);
+	if (err)
+		return err;
+
+	if (!of_property_read_u32(np, "dsi,flags", &val))
+		desc->flags = val;
+	if (!of_property_read_u32(np, "dsi,format", &val))
+		desc->format = val;
+	if (!of_property_read_u32(np, "dsi,lanes", &val))
+		desc->lanes = val;
+
+	return 0;
+}
+
+static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
+{
+	struct panel_simple *panel;
+	struct device *dev = &dsi->dev;
+	const struct panel_desc_dsi *desc;
+	struct panel_desc_dsi *d;
+	const struct of_device_id *id;
+	int err;
+
+	id = of_match_node(dsi_of_match, dsi->dev.of_node);
+	if (!id)
+		return -ENODEV;
+
+	if (!id->data) {
+		d = devm_kzalloc(dev, sizeof(*d), GFP_KERNEL);
+		if (!d)
+			return -ENOMEM;
+
+		err = panel_simple_dsi_of_get_desc_data(dev, d);
+		if (err) {
+			dev_err(dev, "failed to get desc data: %d\n", err);
+			return err;
+		}
+	}
+
+	desc = id->data ? id->data : d;
+
+	err = panel_simple_probe(&dsi->dev, &desc->desc);
+	if (err < 0)
+		return err;
+
+	panel = dev_get_drvdata(dev);
+	panel->dsi = dsi;
+
+	if (!panel->base.backlight) {
+		struct backlight_properties props;
+
+		memset(&props, 0, sizeof(props));
+		props.type = BACKLIGHT_RAW;
+		props.brightness = 255;
+		props.max_brightness = 255;
+
+		panel->base.backlight =
+			devm_backlight_device_register(dev, "dcs-backlight",
+						       dev, panel, &dcs_bl_ops,
+						       &props);
+		if (IS_ERR(panel->base.backlight)) {
+			err = PTR_ERR(panel->base.backlight);
+			dev_err(dev, "failed to register dcs backlight: %d\n",
+				err);
+			return err;
+		}
+	}
+
+	dsi->mode_flags = desc->flags;
+	dsi->format = desc->format;
+	dsi->lanes = desc->lanes;
+
+	err = mipi_dsi_attach(dsi);
+	if (err) {
+		struct panel_simple *panel = dev_get_drvdata(&dsi->dev);
+
+		drm_panel_remove(&panel->base);
+	}
+
+	return err;
+}
+
+static int panel_simple_dsi_remove(struct mipi_dsi_device *dsi)
+{
+	int err;
+
+	err = mipi_dsi_detach(dsi);
+	if (err < 0)
+		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", err);
+
+	return panel_simple_remove(&dsi->dev);
+}
+
+static void panel_simple_dsi_shutdown(struct mipi_dsi_device *dsi)
+{
+	panel_simple_shutdown(&dsi->dev);
+}
+
+static struct mipi_dsi_driver panel_simple_dsi_driver = {
+	.driver = {
+		.name = "panel-simple-dsi",
+		.of_match_table = dsi_of_match,
+	},
+	.probe = panel_simple_dsi_probe,
+	.remove = panel_simple_dsi_remove,
+	.shutdown = panel_simple_dsi_shutdown,
+};
+
+static int __init panel_simple_init(void)
+{
+	int err;
+
+	err = platform_driver_register(&panel_simple_platform_driver);
+	if (err < 0)
+		return err;
+
+	if (IS_ENABLED(CONFIG_DRM_MIPI_DSI)) {
+		err = mipi_dsi_driver_register(&panel_simple_dsi_driver);
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+module_init(panel_simple_init);
+
+static void __exit panel_simple_exit(void)
+{
+	if (IS_ENABLED(CONFIG_DRM_MIPI_DSI))
+		mipi_dsi_driver_unregister(&panel_simple_dsi_driver);
+
+	platform_driver_unregister(&panel_simple_platform_driver);
+}
+module_exit(panel_simple_exit);
+
+MODULE_AUTHOR("Thierry Reding <treding@nvidia.com>");
+MODULE_DESCRIPTION("DRM Driver for Simple Panels");
+MODULE_LICENSE("GPL and additional rights");
