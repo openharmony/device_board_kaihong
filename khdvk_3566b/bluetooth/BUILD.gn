@@ -1,0 +1,91 @@
+# Copyright (C) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/ohos.gni")
+import("//build/ohos/ndk/ndk.gni")
+
+config("bt_warnings") {
+  cflags = [
+    "-Wall",
+    "-Werror",
+    "-Wno-switch",
+    "-Wno-unused-function",
+    "-Wno-unused-parameter",
+    "-Wno-unused-variable",
+    "-Wno-implicit-function-declaration",
+    "-Wno-incompatible-pointer-types",
+  ]
+}
+
+ohos_prebuilt_etc("BCM43430A1.hcd") {
+  source = "//device/board/${product_company}/${product_name}/bluetooth/BCM43430A1.hcd"
+  install_images = [ vendor_base_dir ]
+  relative_install_dir = "firmware"
+  part_name = "kaihong_products"
+  install_enable = true
+}
+
+ohos_prebuilt_etc("BCM4345C5.hcd") {
+  source = "//device/board/${product_company}/${product_name}/bluetooth/BCM4345C5.hcd"
+  install_images = [ vendor_base_dir ]
+  relative_install_dir = "firmware"
+  part_name = "kaihong_products"
+  install_enable = true
+}
+
+
+ohos_shared_library("libbt_vendor") {
+  output_name = "libbt_vendor"
+  sources = [
+    "src/bt_vendor_brcm.c",
+    "src/conf.c",
+    "src/hardware.c",
+    "src/upio.c",
+    "src/userial_vendor.c",
+  ]
+
+  include_dirs = [
+    "include",
+    "//base/hiviewdfx/hilog/interfaces/native/innerkits/include",
+    "//foundation/communication/bluetooth/services/bluetooth/hardware/include",
+  ]
+
+  cflags = [
+    "-DUSE_CONTROLLER_BDADDR=TRUE",
+    "-DFW_AUTO_DETECTION=TRUE",
+    "-DBT_WAKE_VIA_PROC=FALSE",
+    "-DSCO_PCM_ROUTING=0",
+    "-DSCO_PCM_IF_CLOCK_RATE=1",
+    "-DSCO_PCM_IF_FRAME_TYPE=0",
+    "-DSCO_PCM_IF_SYNC_MODE=0",
+    "-DSCO_PCM_IF_CLOCK_MODE=0",
+    "-DPCM_DATA_FMT_SHIFT_MODE=0",
+    "-DPCM_DATA_FMT_FILL_BITS=0x03",
+    "-DPCM_DATA_FMT_FILL_METHOD=0",
+    "-DPCM_DATA_FMT_FILL_NUM=0",
+    "-DPCM_DATA_FMT_JUSTIFY_MODE=0",
+  ]
+
+  configs = [ ":bt_warnings" ]
+
+  external_deps = [
+    "c_utils:utils",
+    "hiviewdfx_hilog_native:libhilog",
+  ]
+
+  install_enable = true
+  install_images = [ chipset_base_dir ]
+
+  part_name = "kaihong_products"
+  subsystem_name = "kaihong_products"
+}
