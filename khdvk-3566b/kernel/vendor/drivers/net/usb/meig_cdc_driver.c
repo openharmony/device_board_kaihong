@@ -3719,3 +3719,478 @@ op_error:
     .bInterfaceClass    = 0xFF, \
     .bInterfaceSubClass    = 0x03, \
     .bInterfaceProtocol    = 0x76
+
+
+static const struct usb_device_id    hw_products [] = {
+    /*ɾ����PRODUCT ID�ıȽϣ�Ĭ���ܹ�֧������HUAWEI_ETHER_INTERFACE �ӿ����͵�NDIS�豸*/
+
+    /*
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x12d1,
+        HUAWEI_ETHER_INTERFACE,
+    },*/
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_INTERFACE,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_OPTIMIZED_INTERFACE,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_OPTIMIZED_INTERFACE_VDF,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_OPTIMIZED_INTERFACE_JUNGO,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_OPTIMIZED_INTERFACE_VDF_JUNGO,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_OPTIMIZED_INTERFACE,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_OPTIMIZED_INTERFACE_JUNGO,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_OPTIMIZED_INTERFACE_VDF,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_OPTIMIZED_INTERFACE_VDF_JUNGO,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_INTERFACE,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_INTERFACE2,
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_NO_3G_JUNGO
+    },
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_NO_3G_QUALCOMM
+    },
+
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_HW_QUALCOMM
+    },
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_HW_JUNGO
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_CONTROL_QUALCOMM 
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_CONTROL_JUNGO
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_NCM_QUALCOMM 
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_NCM_JUNGO
+    },
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_SINGLE_INTERFACE
+    },
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_SINGLE_INTERFACE_JUNGO
+    },
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_SINGLE_INTERFACE_VDF
+    },
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_SINGLE_INTERFACE_VDF_JUNGO
+    },       
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_OPTIMIZED_INTERFACE_JUNGO_HW
+    },  
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_OPTIMIZED_INTERFACE_VDF_JUNGO_HW
+    }, 
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_SINGLE_INTERFACE_JUNGO_HW
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NDIS_SINGLE_INTERFACE_VDF_JUNGO_HW
+    }, 	
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_OPTIMIZED_INTERFACE_JUNGO_HW
+    },  
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_NCM_OPTIMIZED_INTERFACE_VDF_JUNGO_HW
+    }, 
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_NO_3G_JUNGO_HW
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_HW_JUNGO_HW
+    }, 	
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_CONTROL_JUNGO_HW
+    },    
+    {
+        .match_flags    =   USB_DEVICE_ID_MATCH_INT_INFO
+              | USB_DEVICE_ID_MATCH_VENDOR,
+        .idVendor        = 0x2dee,
+        HUAWEI_INTERFACE_NDIS_NCM_JUNGO_HW
+    }, 	
+    { },        // END
+};
+MODULE_DEVICE_TABLE(usb, hw_products);
+
+static int hw_cdc_reset_resume(struct usb_interface *intf);
+static struct usb_driver hw_ether_driver = {
+    .name =        "MeiG_ether",
+    .id_table =    hw_products,
+    .probe =    hw_cdc_probe,
+    .disconnect =    hw_disconnect,
+#if !(LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36))
+    .unlocked_ioctl        =    hw_cdc_ioctl,
+#else
+        .ioctl = hw_cdc_ioctl,
+#endif
+    .suspend =    hw_suspend,
+    .resume =    hw_resume,
+    .reset_resume = hw_cdc_reset_resume,
+};
+
+
+static void hw_cdc_status(struct hw_cdc_net *dev, struct urb *urb)
+{
+    struct usb_cdc_notification    *event;
+
+    if (urb->actual_length < sizeof *event){
+        return;
+    }
+
+    /* SPEED_CHANGE can get split into two 8-byte packets */
+    if (test_and_clear_bit(EVENT_STS_SPLIT, &dev->flags)) {
+        devdbg(dev, "The speed is changed by status event");
+        dumpspeed(dev, (__le32 *) urb->transfer_buffer);
+        return;
+    }
+
+    event = urb->transfer_buffer;
+    switch (event->bNotificationType) {
+    case USB_CDC_NOTIFY_NETWORK_CONNECTION:
+        if (netif_msg_timer(dev)){
+            devdbg(dev, "CDC: carrier %s",
+                    event->wValue ? "on" : "off");
+        }
+        if (event->wValue){
+            netif_carrier_on(dev->net);
+        }else{
+            netif_carrier_off(dev->net);
+        }
+
+        break;
+    case USB_CDC_NOTIFY_SPEED_CHANGE:    /* tx/rx rates */
+        if (netif_msg_timer(dev)){
+            devdbg(dev, "CDC: speed change (len %d)",
+                    urb->actual_length);
+        }
+        if (urb->actual_length != (sizeof *event + 8)){
+            set_bit(EVENT_STS_SPLIT, &dev->flags);
+        }else{
+            dumpspeed(dev, (__le32 *) &event[1]);
+        }
+        break;
+
+    case USB_CDC_NOTIFY_RESPONSE_AVAILABLE:
+    {
+        break;
+    }
+        
+    default:
+        devdbg(dev, "%s: CDC: unexpected notification %02x!", __FUNCTION__,
+                 event->bNotificationType);
+        break;
+    }
+}
+
+
+static int __init hw_cdc_init(void)
+{
+    BUG_ON((sizeof(((struct hw_cdc_net *)0)->data)
+            < sizeof(struct hw_dev_state)));
+
+    return usb_register(&hw_ether_driver);
+}
+fs_initcall(hw_cdc_init);
+
+static int hw_send_qmi_request(struct usb_interface *intf, 
+                unsigned char *snd_req, int snd_len, 
+                unsigned char *read_resp, int resp_len);
+static int hw_send_qmi_request_no_resp(struct usb_interface *intf, 
+                unsigned char *snd_req, int snd_len, 
+                unsigned char *read_resp, int resp_len);
+
+
+//int hw_check_conn_status(struct usb_interface *intf)
+static void hw_cdc_check_status_work(struct work_struct *work)
+
+{
+    //struct hw_cdc_net *net = usb_get_intfdata(intf);
+    //usb_device *udev = interface_to_usbdev(intf);
+    struct hw_cdc_net *dev = container_of(work, struct hw_cdc_net, status_work.work);
+
+    int ret;
+    int repeat = 0;
+    unsigned char resp_buf[56] = {0};
+    unsigned char client_id_req[0x10] = {0x01, 0x0f, 0x00, 0x00, 0x00, 
+                                        0x00, 0x00, 0x06, 0x22, 0x00, 
+                                        0x04, 0x00, 0x01, 0x01, 0x00, 0x01};
+    unsigned char rel_client_id_req[0x11] = {0x01, 0x10, 0x00, 0x00, 0x00, 
+                                        0x00,  0x00, 0x00, 0x23,0x00, 
+                                        0x05, 0x00, 0x01, 0x02, 0x00, 
+                                        0x01, 0x00};
+    unsigned char status_req[13] = {0x01, 0x0c, 0x00, 0x00, 0x01, 
+                    0x00,  0x00, 0x02, 0x00, 
+                    0x22, 0x00, 0x00, 0x00};
+    unsigned char set_instance_req[0x10] = {0x01, 0x0f, 0x00, 0x00, 0x00, 
+                                        0x00, 0x00, 0x06, 0x20, 0x00, 
+                                        0x04, 0x00, 0x01, 0x01, 0x00, 0x00};
+    dev->qmi_sync = 1;    
+    
+     hw_send_qmi_request_no_resp(dev->intf, set_instance_req, 0x10, resp_buf, 56);
+
+    ret = hw_send_qmi_request(dev->intf, client_id_req, 0x10, resp_buf, 56);
+    if (0 == ret){
+        printk(KERN_ERR"%s: Get client ID failed\n", __FUNCTION__);
+        goto failed;
+    }
+    status_req[5] = resp_buf[23];
+    memset(resp_buf, 0, 56 * sizeof (unsigned char));
+
+    //for (repeat = 0; repeat < 3; repeat ++)
+    for (repeat = 0; repeat < 3; repeat++)
+    {
+        ret = hw_send_qmi_request(dev->intf, status_req, 13, resp_buf, 56);
+        if (0 == ret){
+            printk(KERN_ERR"%s: Get connection status failed\n", __FUNCTION__);
+            continue;
+        }
+
+        if (0x02 == resp_buf[23]){
+            printk(KERN_ERR"%s: carrier on\n", __FUNCTION__);
+            netif_carrier_on(dev->net);
+            break;    
+        } else {
+
+            printk(KERN_ERR"%s: carrier off\n", __FUNCTION__);
+            //netif_carrier_off(dev->net);
+        }
+    }
+failed:
+    rel_client_id_req[0x0f] = 0x02;
+    rel_client_id_req[0x10] = status_req[5];
+    memset(resp_buf, 0, 56 * sizeof (unsigned char));
+
+    ret = hw_send_qmi_request_no_resp(dev->intf, rel_client_id_req, 0x11, resp_buf, 56);
+    
+    dev->qmi_sync = 0;
+    cancel_delayed_work(&dev->status_work);
+    //memset(resp_buf, 0, 56 * sizeof (unsigned char));
+    return;
+    
+}
+static int hw_send_qmi_request_no_resp(struct usb_interface *intf, 
+                unsigned char *snd_req, int snd_len, 
+                unsigned char *read_resp, int resp_len)
+{
+    int ret;
+    int index = 0;
+    struct usb_device *udev = interface_to_usbdev(intf);
+    for (index = 0; index < 3; index++)
+{
+        ret = usb_control_msg(udev, usb_sndctrlpipe(udev, 0), 0x00, 
+                    0x21, 0x00, intf->cur_altsetting->desc.bInterfaceNumber, 
+                    snd_req, snd_len, 5000);
+        if (ret < 0){
+            printk(KERN_ERR"%s: send the qmi request failed\n", __FUNCTION__);
+            continue;
+        }
+        else {
+            break;
+        }
+    }
+    return ret;
+}
+
+static int hw_send_qmi_request(struct usb_interface *intf, 
+                unsigned char *snd_req, int snd_len, 
+                unsigned char *read_resp, int resp_len)
+{
+    int ret;
+    int index = 0;
+    struct usb_device *udev = interface_to_usbdev(intf);
+    struct hw_cdc_net *net = usb_get_intfdata(intf);
+    
+    ret = usb_control_msg(udev, usb_sndctrlpipe(udev, 0), 0x00, 
+                    0x21, 0x00, intf->cur_altsetting->desc.bInterfaceNumber, 
+                    snd_req, snd_len, 5000);
+
+    if (ret < 0){
+        printk(KERN_ERR"%s: send the qmi request failed\n", __FUNCTION__);
+        return ret;
+    }
+
+    while(index < 10){
+        ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x01, 
+                    0xA1, 0x00, intf->cur_altsetting->desc.bInterfaceNumber, 
+                    read_resp, resp_len, 1000);
+        if (ret <= 0){
+            printk(KERN_ERR"%s: %d Get response failed\n", __FUNCTION__, index);
+            msleep(10);    
+        } else {
+            if (0x00 == read_resp[4]){
+                if (0x01 == read_resp[6] && snd_req[5] == read_resp[5]
+                    && snd_req[8] == read_resp[8] && snd_req[9] == read_resp[9]) {
+                    ret = 1;
+                    break;
+                }
+            } else if (0x01 == read_resp[4]) {
+                if (0x02 == read_resp[6] && snd_req[5] == read_resp[5]
+                    && snd_req[9] == read_resp[9] && snd_req[10] == read_resp[10]) {
+                    printk(KERN_ERR"%s: get the conn status req=%02x resp\n",
+                            __FUNCTION__, snd_req[9]);
+                    ret = 1;
+                    break;
+                }
+            } else if (0x04 == read_resp[4]){
+                if (snd_req[9] == read_resp[9] && snd_req[10] == read_resp[10] 
+                 && 0x02 == read_resp[16]) {
+                    printk(KERN_ERR"%s: get the conn status ind= carrier on\n",
+                           __FUNCTION__);
+                    netif_carrier_on(net->net);
+                }
+            }
+        }
+        //index ++;
+        index++;
+        continue;
+    }
+
+    if (index >= 10){
+        ret = 0;
+    }
+    return ret;
+}
+static void __exit hw_cdc_exit(void)
+{
+     usb_deregister(&hw_ether_driver);
+}
+module_exit(hw_cdc_exit);
+
+
+MODULE_AUTHOR(DRIVER_AUTHOR);
+MODULE_DESCRIPTION(DRIVER_DESC);
+MODULE_VERSION(DRIVER_VERSION);
+MODULE_LICENSE("GPL");
