@@ -1903,3 +1903,114 @@ void rkispp_isr(u32 mis_val, struct rkispp_device *dev)
 	}
 }
 
+int rkispp_register_stream_vdevs(struct rkispp_device *dev)
+{
+	struct rkispp_stream_vdev *stream_vdev;
+	struct rkispp_stream *stream;
+	struct video_device *vdev;
+	char *vdev_name;
+	int i, j, ret = 0;
+
+	stream_vdev = &dev->stream_vdev;
+	memset(stream_vdev, 0, sizeof(*stream_vdev));
+	atomic_set(&stream_vdev->refcnt, 0);
+	INIT_LIST_HEAD(&stream_vdev->tnr.list_rd);
+	INIT_LIST_HEAD(&stream_vdev->tnr.list_wr);
+	INIT_LIST_HEAD(&stream_vdev->tnr.list_rpt);
+	INIT_LIST_HEAD(&stream_vdev->nr.list_rd);
+	INIT_LIST_HEAD(&stream_vdev->nr.list_wr);
+	INIT_LIST_HEAD(&stream_vdev->fec.list_rd);
+	spin_lock_init(&stream_vdev->tnr.buf_lock);
+	spin_lock_init(&stream_vdev->nr.buf_lock);
+	spin_lock_init(&stream_vdev->fec.buf_lock);
+	stream_vdev->tnr.is_but_init = false;
+
+	if (dev->ispp_ver == ISPP_V10) {
+		dev->stream_max = STREAM_MAX;
+		rkispp_stream_init_ops_v10(stream_vdev);
+		hrtimer_init(&stream_vdev->fec_qst, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		stream_vdev->fec_qst.function = rkispp_fec_do_early;
+		hrtimer_init(&stream_vdev->frame_qst, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		stream_vdev->frame_qst.function = stream_vdev->stream_ops->rkispp_frame_done_early;
+		dev->hw_dev->pool[0].group_buf_max = GROUP_BUF_MAX;
+	} else if (dev->ispp_ver == ISPP_V20) {
+		dev->stream_max = STREAM_VIR + 1;
+		rkispp_stream_init_ops_v20(stream_vdev);
+		dev->hw_dev->pool[0].group_buf_max = GROUP_BUF_GAIN;
+	}
+	for (i = 0; i < dev->stream_max; i++) {
+		stream = &stream_vdev->stream[i];
+		stream->id = i;
+		stream->isppdev = dev;
+		INIT_LIST_HEAD(&stream->buf_queue);
+		init_waitqueue_head(&stream->done);
+		spin_lock_init(&stream->vbq_lock);
+		vdev = &stream->vnode.vdev;
+		switch (i) {
+		case STREAM_II:
+			vdev_name = II_VDEV_NAME;
+			stream->type = STREAM_INPUT;
+			stream->ops = &input_stream_ops;
+			stream->config = &input_config;
+			break;
+		case STREAM_MB:
+			vdev_name = MB_VDEV_NAME;
+			stream->type = STREAM_OUTPUT;
+			stream->ops = &mb_stream_ops;
+			stream->config = &mb_config;
+			break;
+		case STREAM_S0:
+			vdev_name = S0_VDEV_NAME;
+			stream->type = STREAM_OUTPUT;
+			stream->ops = &scal_stream_ops;
+			stream->config = &scl0_config;
+			break;
+		case STREAM_S1:
+			vdev_name = S1_VDEV_NAME;
+			stream->type = STREAM_OUTPUT;
+			stream->ops = &scal_stream_ops;
+			stream->config = &scl1_config;
+			break;
+		case STREAM_S2:
+			vdev_name = S2_VDEV_NAME;
+			stream->type = STREAM_OUTPUT;
+			stream->ops = &scal_stream_ops;
+			stream->config = &scl2_config;
+			break;
+		case STREAM_VIR:
+			vdev_name = VIR_VDEV_NAME;
+			stream->type = STREAM_OUTPUT;
+			stream->config = &input_config;
+			stream->ops = NULL;
+			break;
+		default:
+			v4l2_err(&dev->v4l2_dev, "Invalid stream:%d\n", i);
+			return -EINVAL;
+		}
+		strlcpy(vdev->name, vdev_name, sizeof(vdev->name));
+		ret = rkispp_register_stream_video(stream);
+		if (ret < 0)
+			goto err;
+	}
+	monitor_init(dev);
+	return 0;
+err:
+	for (j = 0; j < i; j++) {
+		stream = &stream_vdev->stream[j];
+		rkispp_unregister_stream_video(stream);
+	}
+	return ret;
+}
+
+void rkispp_unregister_stream_vdevs(struct rkispp_device *dev)
+{
+	struct rkispp_stream_vdev *stream_vdev;
+	struct rkispp_stream *stream;
+	int i;
+
+	stream_vdev = &dev->stream_vdev;
+	for (i = 0; i < dev->stream_max; i++) {
+		stream = &stream_vdev->stream[i];
+		rkispp_unregister_stream_video(stream);
+	}
+}
