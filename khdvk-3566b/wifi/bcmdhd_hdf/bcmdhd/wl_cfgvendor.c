@@ -3242,3 +3242,1847 @@ wl_cfgvendor_nan_parse_dp_sec_info_args(struct wiphy *wiphy,
 	return ret;
 }
 #endif /* WL_NAN_DISC_CACHE */
+
+int8 chanbuf[CHANSPEC_STR_LEN];
+static int
+wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
+	const void *buf, int len, nan_datapath_cmd_data_t *cmd_data)
+{
+	int ret = BCME_OK;
+	int attr_type;
+	int rem = len;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	int chan;
+
+	NAN_DBG_ENTER();
+
+	nla_for_each_attr(iter, buf, len, rem) {
+		attr_type = nla_type(iter);
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+
+		switch (attr_type) {
+		case NAN_ATTRIBUTE_NDP_ID:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ndp_instance_id = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_IFACE:
+			if (nla_len(iter) >= sizeof(cmd_data->ndp_iface)) {
+				WL_ERR(("iface_name len wrong:%d\n", nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			strlcpy((char *)cmd_data->ndp_iface, (char *)nla_data(iter),
+				nla_len(iter));
+			break;
+		case NAN_ATTRIBUTE_SECURITY:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ndp_cfg.security_cfg = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_QOS:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ndp_cfg.qos_cfg = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_RSP_CODE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rsp_code = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_INST_COUNT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->num_ndp_instances = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_PEER_DISC_MAC_ADDR:
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s((char*)&cmd_data->peer_disc_mac_addr,
+				ETHER_ADDR_LEN,	(char*)nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy peer_disc_mac_addr\n"));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_PEER_NDI_MAC_ADDR:
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s((char*)&cmd_data->peer_ndi_mac_addr,
+				ETHER_ADDR_LEN,	(char*)nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy peer_ndi_mac_addr\n"));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_MAC_ADDR:
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s((char*)&cmd_data->mac_addr, ETHER_ADDR_LEN,
+					(char*)nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy mac_addr\n"));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_IF_ADDR:
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s((char*)&cmd_data->if_addr, ETHER_ADDR_LEN,
+					(char*)nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy if_addr\n"));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_ENTRY_CONTROL:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->avail_params.duration = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_AVAIL_BIT_MAP:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->avail_params.bmap = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_CHANNEL: {
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			/* take the default channel start_factor frequency */
+			chan = wf_mhz2channel((uint)nla_get_u32(iter), 0);
+			if (chan <= CH_MAX_2G_CHANNEL) {
+				cmd_data->avail_params.chanspec[0] =
+					wf_channel2chspec(chan, WL_CHANSPEC_BW_20);
+			} else {
+				cmd_data->avail_params.chanspec[0] =
+					wf_channel2chspec(chan, WL_CHANSPEC_BW_80);
+			}
+			if (cmd_data->avail_params.chanspec[0] == 0) {
+				WL_ERR(("Channel is not valid \n"));
+				ret = -EINVAL;
+				goto exit;
+			}
+			WL_TRACE(("valid chanspec, chanspec = 0x%04x \n",
+				cmd_data->avail_params.chanspec[0]));
+			break;
+		}
+		case NAN_ATTRIBUTE_NO_CONFIG_AVAIL:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->avail_params.no_config_avail = (bool)nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_SERVICE_NAME_LEN: {
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_hash.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->svc_hash.dlen = nla_get_u16(iter);
+			if (cmd_data->svc_hash.dlen != WL_NAN_SVC_HASH_LEN) {
+				WL_ERR(("invalid svc_hash length = %u\n", cmd_data->svc_hash.dlen));
+				ret = -EINVAL;
+				goto exit;
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_SERVICE_NAME:
+			if ((!cmd_data->svc_hash.dlen) ||
+				(nla_len(iter) != cmd_data->svc_hash.dlen)) {
+				WL_ERR(("invalid svc_hash length = %d,%d\n",
+					cmd_data->svc_hash.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_hash.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->svc_hash.data =
+				MALLOCZ(cfg->osh, cmd_data->svc_hash.dlen);
+			if (!cmd_data->svc_hash.data) {
+				WL_ERR(("failed to allocate svc_hash data, len=%d\n",
+					cmd_data->svc_hash.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->svc_hash.data, cmd_data->svc_hash.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy svc hash data\n"));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_info.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->svc_info.dlen = nla_get_u16(iter);
+			if (cmd_data->svc_info.dlen > MAX_APP_INFO_LEN) {
+				WL_ERR_RLMT(("Not allowed beyond :%d\n", MAX_APP_INFO_LEN));
+				ret = -EINVAL;
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO:
+			if ((!cmd_data->svc_info.dlen) ||
+				(nla_len(iter) != cmd_data->svc_info.dlen)) {
+				WL_ERR(("failed to allocate svc info by invalid len=%d,%d\n",
+					cmd_data->svc_info.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_info.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->svc_info.data = MALLOCZ(cfg->osh, cmd_data->svc_info.dlen);
+			if (cmd_data->svc_info.data == NULL) {
+				WL_ERR(("failed to allocate svc info data, len=%d\n",
+					cmd_data->svc_info.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->svc_info.data, cmd_data->svc_info.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy svc info\n"));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_PUBLISH_ID:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->pub_id = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_CIPHER_SUITE_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->csid = nla_get_u8(iter);
+			WL_TRACE(("CSID = %u\n", cmd_data->csid));
+			break;
+		case NAN_ATTRIBUTE_KEY_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->key_type = nla_get_u8(iter);
+			WL_TRACE(("Key Type = %u\n", cmd_data->key_type));
+			break;
+		case NAN_ATTRIBUTE_KEY_LEN:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->key.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->key.dlen = nla_get_u32(iter);
+			if ((!cmd_data->key.dlen) || (cmd_data->key.dlen > WL_NAN_NCS_SK_PMK_LEN)) {
+				WL_ERR(("invalid key length = %u\n", cmd_data->key.dlen));
+				ret = -EINVAL;
+				goto exit;
+			}
+			WL_TRACE(("valid key length = %u\n", cmd_data->key.dlen));
+			break;
+		case NAN_ATTRIBUTE_KEY_DATA:
+			if ((!cmd_data->key.dlen) ||
+				(nla_len(iter) != cmd_data->key.dlen)) {
+				WL_ERR(("failed to allocate key data by invalid len=%d,%d\n",
+					cmd_data->key.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->key.data) {
+				WL_ERR(("trying to overwrite key data.\n"));
+				ret = -EINVAL;
+				goto exit;
+			}
+
+			cmd_data->key.data = MALLOCZ(cfg->osh, NAN_MAX_PMK_LEN);
+			if (cmd_data->key.data == NULL) {
+				WL_ERR(("failed to allocate key data, len=%d\n",
+					cmd_data->key.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->key.data, NAN_MAX_PMK_LEN,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to key data\n"));
+				goto exit;
+			}
+			break;
+
+		default:
+			WL_ERR(("Unknown type, %d\n", attr_type));
+			ret = -EINVAL;
+			goto exit;
+		}
+	}
+exit:
+	/* We need to call set_config_handler b/f calling start enable TBD */
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
+	const void *buf, int len, nan_discover_cmd_data_t *cmd_data)
+{
+	int ret = BCME_OK;
+	int attr_type;
+	int rem = len;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	u8 val_u8;
+	u32 bit_flag;
+	u8 flag_match;
+
+	NAN_DBG_ENTER();
+
+	nla_for_each_attr(iter, buf, len, rem) {
+		attr_type = nla_type(iter);
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+
+		switch (attr_type) {
+		case NAN_ATTRIBUTE_TRANSAC_ID:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->token = nla_get_u16(iter);
+			break;
+		case NAN_ATTRIBUTE_PERIODIC_SCAN_INTERVAL:
+			break;
+
+		/* Nan Publish/Subscribe request Attributes */
+		case NAN_ATTRIBUTE_PUBLISH_ID:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->pub_id = nla_get_u16(iter);
+			cmd_data->local_id = cmd_data->pub_id;
+			break;
+		case NAN_ATTRIBUTE_MAC_ADDR:
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s((char*)&cmd_data->mac_addr, ETHER_ADDR_LEN,
+					(char*)nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy mac addr\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_info.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->svc_info.dlen = nla_get_u16(iter);
+			if (cmd_data->svc_info.dlen > NAN_MAX_SERVICE_SPECIFIC_INFO_LEN) {
+				WL_ERR_RLMT(("Not allowed beyond :%d\n",
+					NAN_MAX_SERVICE_SPECIFIC_INFO_LEN));
+				ret = -EINVAL;
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO:
+			if ((!cmd_data->svc_info.dlen) ||
+				(nla_len(iter) != cmd_data->svc_info.dlen)) {
+				WL_ERR(("failed to allocate svc info by invalid len=%d,%d\n",
+					cmd_data->svc_info.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_info.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+
+			cmd_data->svc_info.data = MALLOCZ(cfg->osh, cmd_data->svc_info.dlen);
+			if (cmd_data->svc_info.data == NULL) {
+				WL_ERR(("failed to allocate svc info data, len=%d\n",
+					cmd_data->svc_info.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->svc_info.data, cmd_data->svc_info.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy svc info\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_SUBSCRIBE_ID:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->sub_id = nla_get_u16(iter);
+			cmd_data->local_id = cmd_data->sub_id;
+			break;
+		case NAN_ATTRIBUTE_SUBSCRIBE_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->flags |= nla_get_u8(iter) ? WL_NAN_SUB_ACTIVE : 0;
+			break;
+		case NAN_ATTRIBUTE_PUBLISH_COUNT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->life_count = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_PUBLISH_TYPE: {
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			val_u8 = nla_get_u8(iter);
+			if (val_u8 == 0) {
+				cmd_data->flags |= WL_NAN_PUB_UNSOLICIT;
+			} else if (val_u8 == 1) {
+				cmd_data->flags |= WL_NAN_PUB_SOLICIT;
+			} else {
+				cmd_data->flags |= WL_NAN_PUB_BOTH;
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_PERIOD: {
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u16(iter) > NAN_MAX_AWAKE_DW_INTERVAL) {
+				WL_ERR(("Invalid/Out of bound value = %u\n", nla_get_u16(iter)));
+				ret = BCME_BADARG;
+				break;
+			}
+			if (nla_get_u16(iter)) {
+				cmd_data->period = 1 << (nla_get_u16(iter)-1);
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_REPLIED_EVENT_FLAG:
+			break;
+		case NAN_ATTRIBUTE_TTL:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ttl = nla_get_u16(iter);
+			break;
+		case NAN_ATTRIBUTE_SERVICE_NAME_LEN: {
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_hash.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+
+			cmd_data->svc_hash.dlen = nla_get_u16(iter);
+			if (cmd_data->svc_hash.dlen != WL_NAN_SVC_HASH_LEN) {
+				WL_ERR(("invalid svc_hash length = %u\n", cmd_data->svc_hash.dlen));
+				ret = -EINVAL;
+				goto exit;
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_SERVICE_NAME:
+			if ((!cmd_data->svc_hash.dlen) ||
+				(nla_len(iter) != cmd_data->svc_hash.dlen)) {
+				WL_ERR(("invalid svc_hash length = %d,%d\n",
+					cmd_data->svc_hash.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->svc_hash.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+
+			cmd_data->svc_hash.data =
+				MALLOCZ(cfg->osh, cmd_data->svc_hash.dlen);
+			if (!cmd_data->svc_hash.data) {
+				WL_ERR(("failed to allocate svc_hash data, len=%d\n",
+					cmd_data->svc_hash.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->svc_hash.data, cmd_data->svc_hash.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy svc hash data\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_PEER_ID:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->remote_id = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_INST_ID:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->local_id = nla_get_u16(iter);
+			break;
+		case NAN_ATTRIBUTE_SUBSCRIBE_COUNT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->life_count = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_SSIREQUIREDFORMATCHINDICATION: {
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			bit_flag = (u32)nla_get_u8(iter);
+			cmd_data->flags |=
+				bit_flag ? WL_NAN_SUB_MATCH_IF_SVC_INFO : 0;
+			break;
+		}
+		case NAN_ATTRIBUTE_SUBSCRIBE_MATCH:
+		case NAN_ATTRIBUTE_PUBLISH_MATCH: {
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			flag_match = nla_get_u8(iter);
+
+			switch (flag_match) {
+			case NAN_MATCH_ALG_MATCH_CONTINUOUS:
+				/* Default fw behaviour, no need to set explicitly */
+				break;
+			case NAN_MATCH_ALG_MATCH_ONCE:
+				cmd_data->flags |= WL_NAN_MATCH_ONCE;
+				break;
+			case NAN_MATCH_ALG_MATCH_NEVER:
+				cmd_data->flags |= WL_NAN_MATCH_NEVER;
+				break;
+			default:
+				WL_ERR(("invalid nan match alg = %u\n", flag_match));
+				ret = -EINVAL;
+				goto exit;
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_SERVICERESPONSEFILTER:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->srf_type = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_SERVICERESPONSEINCLUDE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->srf_include = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_USESERVICERESPONSEFILTER:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->use_srf = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_RX_MATCH_FILTER_LEN:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->rx_match.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rx_match.dlen = nla_get_u16(iter);
+			if (cmd_data->rx_match.dlen > MAX_MATCH_FILTER_LEN) {
+				ret = -EINVAL;
+				WL_ERR_RLMT(("Not allowed beyond %d\n", MAX_MATCH_FILTER_LEN));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_RX_MATCH_FILTER:
+			if ((!cmd_data->rx_match.dlen) ||
+			    (nla_len(iter) != cmd_data->rx_match.dlen)) {
+				WL_ERR(("RX match filter len wrong:%d,%d\n",
+					cmd_data->rx_match.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->rx_match.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rx_match.data =
+				MALLOCZ(cfg->osh, cmd_data->rx_match.dlen);
+			if (cmd_data->rx_match.data == NULL) {
+				WL_ERR(("failed to allocate LEN=[%u]\n",
+					cmd_data->rx_match.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->rx_match.data, cmd_data->rx_match.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy rx match data\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_TX_MATCH_FILTER_LEN:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->tx_match.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->tx_match.dlen = nla_get_u16(iter);
+			if (cmd_data->tx_match.dlen > MAX_MATCH_FILTER_LEN) {
+				ret = -EINVAL;
+				WL_ERR_RLMT(("Not allowed beyond %d\n", MAX_MATCH_FILTER_LEN));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_TX_MATCH_FILTER:
+			if ((!cmd_data->tx_match.dlen) ||
+			    (nla_len(iter) != cmd_data->tx_match.dlen)) {
+				WL_ERR(("TX match filter len wrong:%d,%d\n",
+					cmd_data->tx_match.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->tx_match.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->tx_match.data =
+				MALLOCZ(cfg->osh, cmd_data->tx_match.dlen);
+			if (cmd_data->tx_match.data == NULL) {
+				WL_ERR(("failed to allocate LEN=[%u]\n",
+					cmd_data->tx_match.dlen));
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->tx_match.data, cmd_data->tx_match.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy tx match data\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_MAC_ADDR_LIST_NUM_ENTRIES:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->mac_list.num_mac_addr) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->mac_list.num_mac_addr = nla_get_u16(iter);
+			break;
+		case NAN_ATTRIBUTE_MAC_ADDR_LIST:
+			if ((!cmd_data->mac_list.num_mac_addr) ||
+			    (nla_len(iter) != (cmd_data->mac_list.num_mac_addr * ETHER_ADDR_LEN))) {
+				WL_ERR(("wrong mac list len:%d,%d\n",
+					cmd_data->mac_list.num_mac_addr, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->mac_list.list) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->mac_list.list =
+				MALLOCZ(cfg->osh, (cmd_data->mac_list.num_mac_addr
+						* ETHER_ADDR_LEN));
+			if (cmd_data->mac_list.list == NULL) {
+				WL_ERR(("failed to allocate LEN=[%u]\n",
+				(cmd_data->mac_list.num_mac_addr * ETHER_ADDR_LEN)));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->mac_list.list,
+				(cmd_data->mac_list.num_mac_addr * ETHER_ADDR_LEN),
+				nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy list of mac addresses\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_TX_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			val_u8 =  nla_get_u8(iter);
+			if (val_u8 == 0) {
+				cmd_data->flags |= WL_NAN_PUB_BCAST;
+				WL_TRACE(("NAN_ATTRIBUTE_TX_TYPE: flags=NAN_PUB_BCAST\n"));
+			}
+			break;
+		case NAN_ATTRIBUTE_SDE_CONTROL_CONFIG_DP:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u8(iter) == 1) {
+				cmd_data->sde_control_flag
+					|= NAN_SDE_CF_DP_REQUIRED;
+				break;
+			}
+			break;
+		case NAN_ATTRIBUTE_SDE_CONTROL_RANGE_SUPPORT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->sde_control_config = TRUE;
+			if (nla_get_u8(iter) == 1) {
+				cmd_data->sde_control_flag
+					|= NAN_SDE_CF_RANGING_REQUIRED;
+				break;
+			}
+			break;
+		case NAN_ATTRIBUTE_SDE_CONTROL_DP_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u8(iter) == 1) {
+				cmd_data->sde_control_flag
+					|= NAN_SDE_CF_MULTICAST_TYPE;
+				break;
+			}
+			break;
+		case NAN_ATTRIBUTE_SDE_CONTROL_SECURITY:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u8(iter) == 1) {
+				cmd_data->sde_control_flag
+					|= NAN_SDE_CF_SECURITY_REQUIRED;
+				break;
+			}
+			break;
+		case NAN_ATTRIBUTE_RECV_IND_CFG:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->recv_ind_flag = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_CIPHER_SUITE_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->csid = nla_get_u8(iter);
+			WL_TRACE(("CSID = %u\n", cmd_data->csid));
+			break;
+		case NAN_ATTRIBUTE_KEY_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->key_type = nla_get_u8(iter);
+			WL_TRACE(("Key Type = %u\n", cmd_data->key_type));
+			break;
+		case NAN_ATTRIBUTE_KEY_LEN:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->key.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->key.dlen = nla_get_u32(iter);
+			if ((!cmd_data->key.dlen) || (cmd_data->key.dlen > WL_NAN_NCS_SK_PMK_LEN)) {
+				WL_ERR(("invalid key length = %u\n",
+					cmd_data->key.dlen));
+				break;
+			}
+			WL_TRACE(("valid key length = %u\n", cmd_data->key.dlen));
+			break;
+		case NAN_ATTRIBUTE_KEY_DATA:
+			if (!cmd_data->key.dlen ||
+			    (nla_len(iter) != cmd_data->key.dlen)) {
+				WL_ERR(("failed to allocate key data by invalid len=%d,%d\n",
+					cmd_data->key.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->key.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+
+			cmd_data->key.data = MALLOCZ(cfg->osh, NAN_MAX_PMK_LEN);
+			if (cmd_data->key.data == NULL) {
+				WL_ERR(("failed to allocate key data, len=%d\n",
+					cmd_data->key.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->key.data, NAN_MAX_PMK_LEN,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to key data\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_RSSI_THRESHOLD_FLAG:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u8(iter) == 1) {
+				cmd_data->flags |=
+					WL_NAN_RANGE_LIMITED;
+				break;
+			}
+			break;
+		case NAN_ATTRIBUTE_DISC_IND_CFG:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->disc_ind_cfg = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO_LEN:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->sde_svc_info.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->sde_svc_info.dlen = nla_get_u16(iter);
+			if (cmd_data->sde_svc_info.dlen > MAX_SDEA_SVC_INFO_LEN) {
+				ret = -EINVAL;
+				WL_ERR_RLMT(("Not allowed beyond %d\n", MAX_SDEA_SVC_INFO_LEN));
+				goto exit;
+			}
+			break;
+		case NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO:
+			if ((!cmd_data->sde_svc_info.dlen) ||
+			    (nla_len(iter) != cmd_data->sde_svc_info.dlen)) {
+				WL_ERR(("wrong sdea info len:%d,%d\n",
+					cmd_data->sde_svc_info.dlen, nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->sde_svc_info.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->sde_svc_info.data = MALLOCZ(cfg->osh,
+				cmd_data->sde_svc_info.dlen);
+			if (cmd_data->sde_svc_info.data == NULL) {
+				WL_ERR(("failed to allocate svc info data, len=%d\n",
+					cmd_data->sde_svc_info.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->sde_svc_info.data,
+					cmd_data->sde_svc_info.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to sdea info data\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_SECURITY:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ndp_cfg.security_cfg = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_RANGING_INTERVAL:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ranging_intvl_msec = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_RANGING_INGRESS_LIMIT:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ingress_limit = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_RANGING_EGRESS_LIMIT:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->egress_limit = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_RANGING_INDICATION:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->ranging_indication = nla_get_u32(iter);
+			break;
+		/* Nan accept policy: Per service basis policy
+		 * Based on this policy(ALL/NONE), responder side
+		 * will send ACCEPT/REJECT
+		 */
+		case NAN_ATTRIBUTE_SVC_RESPONDER_POLICY:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->service_responder_policy = nla_get_u8(iter);
+			break;
+		default:
+			WL_ERR(("Unknown type, %d\n", attr_type));
+			ret = -EINVAL;
+			goto exit;
+		}
+	}
+exit:
+	/* We need to call set_config_handler b/f calling start enable TBD */
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
+	int len, nan_config_cmd_data_t *cmd_data, uint32 *nan_attr_mask)
+{
+	int ret = BCME_OK;
+	int attr_type;
+	int rem = len;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	int chan;
+	u8 sid_beacon = 0, sub_sid_beacon = 0;
+
+	NAN_DBG_ENTER();
+
+	nla_for_each_attr(iter, buf, len, rem) {
+		attr_type = nla_type(iter);
+		WL_TRACE(("attr: %s (%u)\n", nan_attr_to_str(attr_type), attr_type));
+
+		switch (attr_type) {
+		/* NAN Enable request attributes */
+		case NAN_ATTRIBUTE_2G_SUPPORT:{
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->support_2g = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_SUPPORT_2G_CONFIG;
+			break;
+		}
+		case NAN_ATTRIBUTE_5G_SUPPORT:{
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->support_5g = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_SUPPORT_5G_CONFIG;
+			break;
+		}
+		case NAN_ATTRIBUTE_CLUSTER_LOW: {
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->clus_id.octet[5] = nla_get_u16(iter);
+			break;
+		}
+		case NAN_ATTRIBUTE_CLUSTER_HIGH: {
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->clus_id.octet[4] = nla_get_u16(iter);
+			break;
+		}
+		case NAN_ATTRIBUTE_SID_BEACON: {
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			sid_beacon = nla_get_u8(iter);
+			cmd_data->sid_beacon.sid_enable = (sid_beacon & 0x01);
+			if (cmd_data->sid_beacon.sid_enable) {
+				cmd_data->sid_beacon.sid_count = (sid_beacon >> 1);
+				*nan_attr_mask |= NAN_ATTR_SID_BEACON_CONFIG;
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_SUB_SID_BEACON: {
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			sub_sid_beacon = nla_get_u8(iter);
+			cmd_data->sid_beacon.sub_sid_enable = (sub_sid_beacon & 0x01);
+			if (cmd_data->sid_beacon.sub_sid_enable) {
+				cmd_data->sid_beacon.sub_sid_count = (sub_sid_beacon >> 1);
+				*nan_attr_mask |= NAN_ATTR_SUB_SID_BEACON_CONFIG;
+			}
+			break;
+		}
+		case NAN_ATTRIBUTE_SYNC_DISC_2G_BEACON:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->beacon_2g_val = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_SYNC_DISC_2G_BEACON_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_SYNC_DISC_5G_BEACON:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->beacon_5g_val = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_SYNC_DISC_5G_BEACON_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_SDF_2G_SUPPORT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->sdf_2g_val = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_SDF_2G_SUPPORT_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_SDF_5G_SUPPORT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->sdf_5g_val = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_SDF_5G_SUPPORT_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_HOP_COUNT_LIMIT:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->hop_count_limit = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_HOP_COUNT_LIMIT_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RANDOM_TIME:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->metrics.random_factor = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_RAND_FACTOR_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_MASTER_PREF:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->metrics.master_pref = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_OUI:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->nan_oui = nla_get_u32(iter);
+			*nan_attr_mask |= NAN_ATTR_OUI_CONFIG;
+			WL_TRACE(("nan_oui=%d\n", cmd_data->nan_oui));
+			break;
+		case NAN_ATTRIBUTE_WARMUP_TIME:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->warmup_time = nla_get_u16(iter);
+			break;
+		case NAN_ATTRIBUTE_AMBTT:
+		case NAN_ATTRIBUTE_MASTER_RANK:
+			WL_DBG(("Unhandled attribute, %d\n", attr_type));
+			break;
+		case NAN_ATTRIBUTE_CHANNEL: {
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			/* take the default channel start_factor frequency */
+			chan = wf_mhz2channel((uint)nla_get_u32(iter), 0);
+			if (chan <= CH_MAX_2G_CHANNEL) {
+				cmd_data->chanspec[0] = wf_channel2chspec(chan, WL_CHANSPEC_BW_20);
+			} else {
+				cmd_data->chanspec[0] = wf_channel2chspec(chan, WL_CHANSPEC_BW_80);
+			}
+			if (cmd_data->chanspec[0] == 0) {
+				WL_ERR(("Channel is not valid \n"));
+				ret = -EINVAL;
+				goto exit;
+			}
+			WL_TRACE(("valid chanspec, chanspec = 0x%04x \n",
+				cmd_data->chanspec[0]));
+			break;
+		}
+		case NAN_ATTRIBUTE_24G_CHANNEL: {
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			/* take the default channel start_factor frequency */
+			chan = wf_mhz2channel((uint)nla_get_u32(iter), 0);
+			/* 20MHz as BW */
+			cmd_data->chanspec[1] = wf_channel2chspec(chan, WL_CHANSPEC_BW_20);
+			if (cmd_data->chanspec[1] == 0) {
+				WL_ERR((" 2.4GHz Channel is not valid \n"));
+				ret = -EINVAL;
+				break;
+			}
+			*nan_attr_mask |= NAN_ATTR_2G_CHAN_CONFIG;
+			WL_TRACE(("valid 2.4GHz chanspec, chanspec = 0x%04x \n",
+				cmd_data->chanspec[1]));
+			break;
+		}
+		case NAN_ATTRIBUTE_5G_CHANNEL: {
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			/* take the default channel start_factor frequency */
+			chan = wf_mhz2channel((uint)nla_get_u32(iter), 0);
+			/* 20MHz as BW */
+			cmd_data->chanspec[2] = wf_channel2chspec(chan, WL_CHANSPEC_BW_20);
+			if (cmd_data->chanspec[2] == 0) {
+				WL_ERR((" 5GHz Channel is not valid \n"));
+				ret = -EINVAL;
+				break;
+			}
+			*nan_attr_mask |= NAN_ATTR_5G_CHAN_CONFIG;
+			WL_TRACE(("valid 5GHz chanspec, chanspec = 0x%04x \n",
+				cmd_data->chanspec[2]));
+			break;
+		}
+		case NAN_ATTRIBUTE_CONF_CLUSTER_VAL:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->config_cluster_val = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_CLUSTER_VAL_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_DWELL_TIME:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->dwell_time[0] = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_2G_DWELL_TIME_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_SCAN_PERIOD:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->scan_period[0] = nla_get_u16(iter);
+			*nan_attr_mask |= NAN_ATTR_2G_SCAN_PERIOD_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_DWELL_TIME_5G:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->dwell_time[1] = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_5G_DWELL_TIME_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_SCAN_PERIOD_5G:
+			if (nla_len(iter) != sizeof(uint16)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->scan_period[1] = nla_get_u16(iter);
+			*nan_attr_mask |= NAN_ATTR_5G_SCAN_PERIOD_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_AVAIL_BIT_MAP:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->bmap = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_ENTRY_CONTROL:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->avail_params.duration = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_RSSI_CLOSE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_close_2dot4g_val = nla_get_s8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_CLOSE_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RSSI_MIDDLE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_middle_2dot4g_val = nla_get_s8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_MIDDLE_2G_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RSSI_PROXIMITY:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_proximity_2dot4g_val = nla_get_s8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_PROXIMITY_2G_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RSSI_CLOSE_5G:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_close_5g_val = nla_get_s8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_CLOSE_5G_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RSSI_MIDDLE_5G:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_middle_5g_val = nla_get_s8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_MIDDLE_5G_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RSSI_PROXIMITY_5G:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_proximity_5g_val = nla_get_s8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_PROXIMITY_5G_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_RSSI_WINDOW_SIZE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->rssi_attr.rssi_window_size = nla_get_u8(iter);
+			*nan_attr_mask |= NAN_ATTR_RSSI_WINDOW_SIZE_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_CIPHER_SUITE_TYPE:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->csid = nla_get_u8(iter);
+			WL_TRACE(("CSID = %u\n", cmd_data->csid));
+			break;
+		case NAN_ATTRIBUTE_SCID_LEN:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->scid.dlen) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->scid.dlen = nla_get_u32(iter);
+			if (cmd_data->scid.dlen > MAX_SCID_LEN) {
+				ret = -EINVAL;
+				WL_ERR_RLMT(("Not allowed beyond %d\n", MAX_SCID_LEN));
+				goto exit;
+			}
+			WL_TRACE(("valid scid length = %u\n", cmd_data->scid.dlen));
+			break;
+		case NAN_ATTRIBUTE_SCID:
+			if (!cmd_data->scid.dlen || (nla_len(iter) != cmd_data->scid.dlen)) {
+				WL_ERR(("wrong scid len:%d,%d\n", cmd_data->scid.dlen,
+					nla_len(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (cmd_data->scid.data) {
+				WL_ERR(("trying to overwrite:%d\n", attr_type));
+				ret = -EINVAL;
+				goto exit;
+			}
+
+			cmd_data->scid.data = MALLOCZ(cfg->osh, cmd_data->scid.dlen);
+			if (cmd_data->scid.data == NULL) {
+				WL_ERR(("failed to allocate scid, len=%d\n",
+					cmd_data->scid.dlen));
+				ret = -ENOMEM;
+				goto exit;
+			}
+			ret = memcpy_s(cmd_data->scid.data, cmd_data->scid.dlen,
+					nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to scid data\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_2G_AWAKE_DW:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u32(iter) > NAN_MAX_AWAKE_DW_INTERVAL) {
+				WL_ERR(("%s: Invalid/Out of bound value = %u\n",
+						__FUNCTION__, nla_get_u32(iter)));
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u32(iter)) {
+				cmd_data->awake_dws.dw_interval_2g =
+					1 << (nla_get_u32(iter)-1);
+			}
+			*nan_attr_mask |= NAN_ATTR_2G_DW_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_5G_AWAKE_DW:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			if (nla_get_u32(iter) > NAN_MAX_AWAKE_DW_INTERVAL) {
+				WL_ERR(("%s: Invalid/Out of bound value = %u\n",
+						__FUNCTION__, nla_get_u32(iter)));
+				ret = BCME_BADARG;
+				break;
+			}
+			if (nla_get_u32(iter)) {
+				cmd_data->awake_dws.dw_interval_5g =
+					1 << (nla_get_u32(iter)-1);
+			}
+			*nan_attr_mask |= NAN_ATTR_5G_DW_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_DISC_IND_CFG:
+			if (nla_len(iter) != sizeof(uint8)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->disc_ind_cfg = nla_get_u8(iter);
+			break;
+		case NAN_ATTRIBUTE_MAC_ADDR:
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			ret = memcpy_s((char*)&cmd_data->mac_addr, ETHER_ADDR_LEN,
+					(char*)nla_data(iter), nla_len(iter));
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy mac addr\n"));
+				return ret;
+			}
+			break;
+		case NAN_ATTRIBUTE_RANDOMIZATION_INTERVAL:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->nmi_rand_intvl = nla_get_u8(iter);
+			if (cmd_data->nmi_rand_intvl > 0) {
+				cfg->nancfg.mac_rand = true;
+			} else {
+				cfg->nancfg.mac_rand = false;
+			}
+			break;
+		default:
+			WL_ERR(("%s: Unknown type, %d\n", __FUNCTION__, attr_type));
+			ret = -EINVAL;
+			goto exit;
+		}
+	}
+
+exit:
+	/* We need to call set_config_handler b/f calling start enable TBD */
+	NAN_DBG_EXIT();
+	if (ret) {
+		WL_ERR(("%s: Failed to parse attribute %d ret %d",
+			__FUNCTION__, attr_type, ret));
+	}
+	return ret;
+
+}
+
+static int
+wl_cfgvendor_nan_dp_estb_event_data_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put NDP ID, ret=%d\n", ret));
+		goto fail;
+	}
+	/*
+	 * NDI mac address of the peer
+	 * (required to derive target ipv6 address)
+	 */
+	ret = nla_put(msg, NAN_ATTRIBUTE_PEER_NDI_MAC_ADDR, ETH_ALEN,
+			event_data->responder_ndi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put resp ndi, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_RSP_CODE, event_data->status);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put response code, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->svc_info.dlen && event_data->svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
+				event_data->svc_info.dlen, event_data->svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+
+fail:
+	return ret;
+}
+static int
+wl_cfgvendor_nan_dp_ind_event_data_filler(struct sk_buff *msg,
+		nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
+			event_data->pub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put pub ID, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put NDP ID, ret=%d\n", ret));
+		goto fail;
+	}
+	/* Discovery MAC addr of the peer/initiator */
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETH_ALEN,
+			event_data->remote_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put remote NMI, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_SECURITY, event_data->security);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put security, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->svc_info.dlen && event_data->svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
+				event_data->svc_info.dlen, event_data->svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_tx_followup_ind_event_data_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_TRANSAC_ID, event_data->token);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put transaction id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put nan status, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->status == NAN_STATUS_SUCCESS) {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	} else {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_NO_OTA_ACK"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_svc_terminate_event_filler(struct sk_buff *msg,
+	struct bcm_cfg80211 *cfg, int event_id, nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->local_inst_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+
+	if (event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID,
+				event_data->local_inst_id);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
+			goto fail;
+		}
+	} else {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
+				event_data->local_inst_id);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_STATUS, event_data->status);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put status, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->status == NAN_STATUS_SUCCESS) {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_SUCCESS"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	} else {
+		ret = nla_put(msg, NAN_ATTRIBUTE_REASON,
+				strlen("NAN_STATUS_INTERNAL_FAILURE"), event_data->nan_reason);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan reason, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+
+	ret = wl_cfgnan_remove_inst_id(cfg, event_data->local_inst_id);
+	if (ret) {
+		WL_ERR(("failed to free svc instance-id[%d], ret=%d, event_id = %d\n",
+				event_data->local_inst_id, ret, event_id));
+		goto fail;
+	}
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_opt_params_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	/* service specific info data */
+	if (event_data->svc_info.dlen && event_data->svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO,
+				event_data->svc_info.dlen, event_data->svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put svc info, ret=%d\n", ret));
+			goto fail;
+		}
+		WL_TRACE(("svc info len = %d\n", event_data->svc_info.dlen));
+	}
+
+	/* sdea service specific info data */
+	if (event_data->sde_svc_info.dlen && event_data->sde_svc_info.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO_LEN,
+				event_data->sde_svc_info.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put sdea svc info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO,
+				event_data->sde_svc_info.dlen,
+				event_data->sde_svc_info.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put sdea svc info, ret=%d\n", ret));
+			goto fail;
+		}
+		WL_TRACE(("sdea svc info len = %d\n", event_data->sde_svc_info.dlen));
+	}
+	/* service control discovery range limit */
+	/* TODO: */
+
+	/* service control binding bitmap */
+	/* TODO: */
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_tx_followup_event_filler(struct sk_buff *msg,
+		nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	/* In followup pkt, instance id and requestor instance id are configured
+	 * from the transmitter perspective. As the event is processed with the
+	 * role of receiver, the local handle should use requestor instance
+	 * id (peer_inst_id)
+	 */
+	WL_TRACE(("handle=%d\n", event_data->requestor_id));
+	WL_TRACE(("inst id (local id)=%d\n", event_data->local_inst_id));
+	WL_TRACE(("peer id (remote id)=%d\n", event_data->requestor_id));
+	WL_TRACE(("peer mac addr=" MACDBG "\n",
+			MAC2STRDBG(event_data->remote_nmi.octet)));
+	WL_TRACE(("peer rssi: %d\n", event_data->fup_rssi));
+	WL_TRACE(("attribute no: %d\n", event_data->attr_num));
+	WL_TRACE(("attribute len: %d\n", event_data->attr_list_len));
+
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->requestor_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_INST_ID, event_data->local_inst_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PEER_ID, event_data->requestor_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put requestor inst id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETHER_ADDR_LEN,
+			event_data->remote_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put remote nmi, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_s8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
+			event_data->fup_rssi);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put fup rssi, ret=%d\n", ret));
+		goto fail;
+	}
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_sub_match_event_filler(struct sk_buff *msg,
+	nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+	WL_TRACE(("handle (sub_id)=%d\n", event_data->sub_id));
+	WL_TRACE(("pub id=%d\n", event_data->pub_id));
+	WL_TRACE(("sub id=%d\n", event_data->sub_id));
+	WL_TRACE(("pub mac addr=" MACDBG "\n",
+			MAC2STRDBG(event_data->remote_nmi.octet)));
+	WL_TRACE(("attr no: %d\n", event_data->attr_num));
+	WL_TRACE(("attr len: %d\n", event_data->attr_list_len));
+
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, event_data->sub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put handle, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->pub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put pub id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID, event_data->sub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put Sub Id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETHER_ADDR_LEN,
+			event_data->remote_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put remote NMI, ret=%d\n", ret));
+		goto fail;
+	}
+	if (event_data->publish_rssi) {
+		event_data->publish_rssi = -event_data->publish_rssi;
+		ret = nla_put_u8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
+				event_data->publish_rssi);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put publish rssi, ret=%d\n", ret));
+			goto fail;
+		}
+	}
+	if (event_data->ranging_result_present) {
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_RANGING_INDICATION,
+				event_data->ranging_ind);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put ranging ind, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_RANGING_RESULT,
+				event_data->range_measurement_cm);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put range measurement cm, ret=%d\n",
+					ret));
+			goto fail;
+		}
+	}
+	/*
+	 * handling optional service control, service response filter
+	 */
+	if (event_data->tx_match_filter.dlen && event_data->tx_match_filter.data) {
+		ret = nla_put_u16(msg, NAN_ATTRIBUTE_TX_MATCH_FILTER_LEN,
+				event_data->tx_match_filter.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put tx match filter len, ret=%d\n",
+					ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_TX_MATCH_FILTER,
+				event_data->tx_match_filter.dlen,
+				event_data->tx_match_filter.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put tx match filter data, ret=%d\n",
+					ret));
+			goto fail;
+		}
+		WL_TRACE(("tx matching filter (%d):\n",
+				event_data->tx_match_filter.dlen));
+	}
+
+fail:
+	return ret;
+}
+
+static int
+wl_cfgvendor_nan_de_event_filler(struct sk_buff *msg, nan_event_data_t *event_data)
+{
+	int ret = BCME_OK;
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_ENABLE_STATUS, event_data->enabled);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put event_data->enabled, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u8(msg, NAN_ATTRIBUTE_DE_EVENT_TYPE,
+			event_data->nan_de_evt_type);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put nan_de_evt_type, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put(msg, NAN_ATTRIBUTE_CLUSTER_ID, ETH_ALEN,
+			event_data->clus_id.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put clust id, ret=%d\n", ret));
+		goto fail;
+	}
+	/* OOB tests requires local nmi */
+	ret = nla_put(msg, NAN_ATTRIBUTE_MAC_ADDR, ETH_ALEN,
+			event_data->local_nmi.octet);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put NMI, ret=%d\n", ret));
+		goto fail;
+	}
+fail:
+	return ret;
+}
