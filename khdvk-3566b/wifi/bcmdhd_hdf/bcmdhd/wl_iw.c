@@ -3795,3 +3795,522 @@ wl_iw_event(struct net_device *dev, void *argu,
 #endif /* WIRELESS_EXT > 13 */
 }
 
+#ifdef WL_NAN
+static int wl_iw_get_wireless_stats_cbfn(void *ctx, const uint8 *data, uint16 type, uint16 len)
+{
+	struct iw_statistics *wstats = ctx;
+	int res = BCME_OK;
+
+	switch (type) {
+		case WL_CNT_XTLV_WLC: {
+			wl_cnt_wlc_t *cnt = (wl_cnt_wlc_t *)data;
+			if (len > sizeof(wl_cnt_wlc_t)) {
+				printf("counter structure length invalid! %d > %d\n",
+					len, (int)sizeof(wl_cnt_wlc_t));
+			}
+			wstats->discard.nwid = 0;
+			wstats->discard.code = dtoh32(cnt->rxundec);
+			wstats->discard.fragment = dtoh32(cnt->rxfragerr);
+			wstats->discard.retries = dtoh32(cnt->txfail);
+			wstats->discard.misc = dtoh32(cnt->rxrunt) + dtoh32(cnt->rxgiant);
+			wstats->miss.beacon = 0;
+			WL_TRACE(("wl_iw_get_wireless_stats counters txframe=%d txbyte=%d\n",
+				dtoh32(cnt->txframe), dtoh32(cnt->txbyte)));
+			WL_TRACE(("wl_iw_get_wireless_stats counters rxundec=%d\n",
+				dtoh32(cnt->rxundec)));
+			WL_TRACE(("wl_iw_get_wireless_stats counters txfail=%d\n",
+				dtoh32(cnt->txfail)));
+			WL_TRACE(("wl_iw_get_wireless_stats counters rxfragerr=%d\n",
+				dtoh32(cnt->rxfragerr)));
+			WL_TRACE(("wl_iw_get_wireless_stats counters rxrunt=%d\n",
+				dtoh32(cnt->rxrunt)));
+			WL_TRACE(("wl_iw_get_wireless_stats counters rxgiant=%d\n",
+				dtoh32(cnt->rxgiant)));
+			break;
+		}
+		case WL_CNT_XTLV_CNTV_LE10_UCODE:
+		case WL_CNT_XTLV_LT40_UCODE_V1:
+		case WL_CNT_XTLV_GE40_UCODE_V1:
+		{
+			/* Offsets of rxfrmtoolong and rxbadplcp are the same in
+			 * wl_cnt_v_le10_mcst_t, wl_cnt_lt40mcst_v1_t, and wl_cnt_ge40mcst_v1_t.
+			 * So we can just cast to wl_cnt_v_le10_mcst_t here.
+			 */
+			wl_cnt_v_le10_mcst_t *cnt = (wl_cnt_v_le10_mcst_t *)data;
+			if (len != WL_CNT_MCST_STRUCT_SZ) {
+				printf("counter structure length mismatch! %d != %d\n",
+					len, WL_CNT_MCST_STRUCT_SZ);
+			}
+			WL_TRACE(("wl_iw_get_wireless_stats counters rxfrmtoolong=%d\n",
+				dtoh32(cnt->rxfrmtoolong)));
+			WL_TRACE(("wl_iw_get_wireless_stats counters rxbadplcp=%d\n",
+				dtoh32(cnt->rxbadplcp)));
+			BCM_REFERENCE(cnt);
+			break;
+		}
+		default:
+			WL_ERROR(("%d: Unsupported type %d\n", __LINE__, type));
+			break;
+	}
+	return res;
+}
+#endif
+
+int wl_iw_get_wireless_stats(struct net_device *dev, struct iw_statistics *wstats)
+{
+	int res = 0;
+	int phy_noise;
+	int rssi;
+	scb_val_t scb_val;
+#if WIRELESS_EXT > 11
+	char *cntbuf = NULL;
+	wl_cnt_info_t *cntinfo;
+	uint16 ver;
+	uint32 corerev = 0;
+#endif /* WIRELESS_EXT > 11 */
+
+	phy_noise = 0;
+	if ((res = dev_wlc_ioctl(dev, WLC_GET_PHY_NOISE, &phy_noise, sizeof(phy_noise)))) {
+		WL_TRACE(("WLC_GET_PHY_NOISE error=%d\n", res));
+		goto done;
+	}
+
+	phy_noise = dtoh32(phy_noise);
+	WL_TRACE(("wl_iw_get_wireless_stats phy noise=%d\n *****", phy_noise));
+
+	memset(&scb_val, 0, sizeof(scb_val));
+	if ((res = dev_wlc_ioctl(dev, WLC_GET_RSSI, &scb_val, sizeof(scb_val_t)))) {
+		WL_TRACE(("WLC_GET_RSSI error=%d\n", res));
+		goto done;
+	}
+
+	rssi = dtoh32(scb_val.val);
+	rssi = MIN(rssi, RSSI_MAXVAL);
+	WL_TRACE(("wl_iw_get_wireless_stats rssi=%d ****** \n", rssi));
+	if (rssi <= WL_IW_RSSI_NO_SIGNAL)
+		wstats->qual.qual = 0;
+	else if (rssi <= WL_IW_RSSI_VERY_LOW)
+		wstats->qual.qual = 1;
+	else if (rssi <= WL_IW_RSSI_LOW)
+		wstats->qual.qual = 2;
+	else if (rssi <= WL_IW_RSSI_GOOD)
+		wstats->qual.qual = 3;
+	else if (rssi <= WL_IW_RSSI_VERY_GOOD)
+		wstats->qual.qual = 4;
+	else
+		wstats->qual.qual = 5;
+
+	/* Wraps to 0 if RSSI is 0 */
+	wstats->qual.level = 0x100 + rssi;
+	wstats->qual.noise = 0x100 + phy_noise;
+#if WIRELESS_EXT > 18
+	wstats->qual.updated |= (IW_QUAL_ALL_UPDATED | IW_QUAL_DBM);
+#else
+	wstats->qual.updated |= 7;
+#endif /* WIRELESS_EXT > 18 */
+
+#if WIRELESS_EXT > 11
+	WL_TRACE(("wl_iw_get_wireless_stats counters\n *****"));
+
+	cntbuf = kmalloc(MAX_WLIW_IOCTL_LEN, GFP_KERNEL);
+	if (!cntbuf) {
+		res = BCME_NOMEM;
+		goto done;
+	}
+
+	memset(cntbuf, 0, MAX_WLIW_IOCTL_LEN);
+	res = dev_wlc_bufvar_get(dev, "counters", cntbuf, MAX_WLIW_IOCTL_LEN);
+	if (res)
+	{
+		WL_ERROR(("wl_iw_get_wireless_stats counters failed error=%d ****** \n", res));
+		goto done;
+	}
+
+	cntinfo = (wl_cnt_info_t *)cntbuf;
+	cntinfo->version = dtoh16(cntinfo->version);
+	cntinfo->datalen = dtoh16(cntinfo->datalen);
+	ver = cntinfo->version;
+#ifdef WL_NAN
+	CHK_CNTBUF_DATALEN(cntbuf, MAX_WLIW_IOCTL_LEN);
+#endif
+	if (ver > WL_CNT_T_VERSION) {
+		WL_TRACE(("\tIncorrect version of counters struct: expected %d; got %d\n",
+			WL_CNT_T_VERSION, ver));
+		res = BCME_VERSION;
+		goto done;
+	}
+
+	if (ver == WL_CNT_VERSION_11) {
+		wlc_rev_info_t revinfo;
+		memset(&revinfo, 0, sizeof(revinfo));
+		res = dev_wlc_ioctl(dev, WLC_GET_REVINFO, &revinfo, sizeof(revinfo));
+		if (res) {
+			WL_ERROR(("WLC_GET_REVINFO failed %d\n", res));
+			goto done;
+		}
+		corerev = dtoh32(revinfo.corerev);
+	}
+
+#ifdef WL_NAN
+	res = wl_cntbuf_to_xtlv_format(NULL, cntinfo, MAX_WLIW_IOCTL_LEN, corerev);
+	if (res) {
+		WL_ERROR(("wl_cntbuf_to_xtlv_format failed %d\n", res));
+		goto done;
+	}
+
+	if ((res = bcm_unpack_xtlv_buf(wstats, cntinfo->data, cntinfo->datalen,
+		BCM_XTLV_OPTION_ALIGN32, wl_iw_get_wireless_stats_cbfn))) {
+		goto done;
+	}
+#endif
+#endif /* WIRELESS_EXT > 11 */
+
+done:
+#if WIRELESS_EXT > 11
+	if (cntbuf) {
+		kfree(cntbuf);
+	}
+#endif /* WIRELESS_EXT > 11 */
+	return res;
+}
+
+#ifndef WL_ESCAN
+static void
+wl_iw_timerfunc(ulong data)
+{
+	iscan_info_t *iscan = (iscan_info_t *)data;
+	iscan->timer_on = 0;
+	if (iscan->iscan_state != ISCAN_STATE_IDLE) {
+		WL_TRACE(("timer trigger\n"));
+		up(&iscan->sysioc_sem);
+	}
+}
+
+static void
+wl_iw_set_event_mask(struct net_device *dev)
+{
+	char eventmask[WL_EVENTING_MASK_LEN];
+	char iovbuf[WL_EVENTING_MASK_LEN + 12];	/* Room for "event_msgs" + '\0' + bitvec */
+
+	dev_iw_iovar_getbuf(dev, "event_msgs", "", 0, iovbuf, sizeof(iovbuf));
+	bcopy(iovbuf, eventmask, WL_EVENTING_MASK_LEN);
+	setbit(eventmask, WLC_E_SCAN_COMPLETE);
+	dev_iw_iovar_setbuf(dev, "event_msgs", eventmask, WL_EVENTING_MASK_LEN,
+		iovbuf, sizeof(iovbuf));
+
+}
+
+static int
+wl_iw_iscan_prep(wl_scan_params_t *params, wlc_ssid_t *ssid)
+{
+	int err = 0;
+
+	memcpy(&params->bssid, &ether_bcast, ETHER_ADDR_LEN);
+	params->bss_type = DOT11_BSSTYPE_ANY;
+	params->scan_type = 0;
+	params->nprobes = -1;
+	params->active_time = -1;
+	params->passive_time = -1;
+	params->home_time = -1;
+	params->channel_num = 0;
+
+	params->nprobes = htod32(params->nprobes);
+	params->active_time = htod32(params->active_time);
+	params->passive_time = htod32(params->passive_time);
+	params->home_time = htod32(params->home_time);
+	if (ssid && ssid->SSID_len)
+		memcpy(&params->ssid, ssid, sizeof(wlc_ssid_t));
+
+	return err;
+}
+
+static int
+wl_iw_iscan(iscan_info_t *iscan, wlc_ssid_t *ssid, uint16 action)
+{
+	int params_size = (WL_SCAN_PARAMS_FIXED_SIZE + OFFSETOF(wl_iscan_params_t, params));
+	wl_iscan_params_t *params;
+	int err = 0;
+
+	if (ssid && ssid->SSID_len) {
+		params_size += sizeof(wlc_ssid_t);
+	}
+	params = (wl_iscan_params_t*)kmalloc(params_size, GFP_KERNEL);
+	if (params == NULL) {
+		return -ENOMEM;
+	}
+	memset(params, 0, params_size);
+	ASSERT(params_size < WLC_IOCTL_SMLEN);
+
+	err = wl_iw_iscan_prep(&params->params, ssid);
+
+	if (!err) {
+		params->version = htod32(ISCAN_REQ_VERSION);
+		params->action = htod16(action);
+		params->scan_duration = htod16(0);
+
+		/* params_size += OFFSETOF(wl_iscan_params_t, params); */
+		(void) dev_iw_iovar_setbuf(iscan->dev, "iscan", params, params_size,
+			iscan->ioctlbuf, WLC_IOCTL_SMLEN);
+	}
+
+	kfree(params);
+	return err;
+}
+
+static uint32
+wl_iw_iscan_get(iscan_info_t *iscan)
+{
+	iscan_buf_t * buf;
+	iscan_buf_t * ptr;
+	wl_iscan_results_t * list_buf;
+	wl_iscan_results_t list;
+	wl_scan_results_t *results;
+	uint32 status;
+
+	/* buffers are allocated on demand */
+	if (iscan->list_cur) {
+		buf = iscan->list_cur;
+		iscan->list_cur = buf->next;
+	}
+	else {
+		buf = kmalloc(sizeof(iscan_buf_t), GFP_KERNEL);
+		if (!buf)
+			return WL_SCAN_RESULTS_ABORTED;
+		buf->next = NULL;
+		if (!iscan->list_hdr)
+			iscan->list_hdr = buf;
+		else {
+			ptr = iscan->list_hdr;
+			while (ptr->next) {
+				ptr = ptr->next;
+			}
+			ptr->next = buf;
+		}
+	}
+	memset(buf->iscan_buf, 0, WLC_IW_ISCAN_MAXLEN);
+	list_buf = (wl_iscan_results_t*)buf->iscan_buf;
+	results = &list_buf->results;
+	results->buflen = WL_ISCAN_RESULTS_FIXED_SIZE;
+	results->version = 0;
+	results->count = 0;
+
+	memset(&list, 0, sizeof(list));
+	list.results.buflen = htod32(WLC_IW_ISCAN_MAXLEN);
+	(void) dev_iw_iovar_getbuf(
+		iscan->dev,
+		"iscanresults",
+		&list,
+		WL_ISCAN_RESULTS_FIXED_SIZE,
+		buf->iscan_buf,
+		WLC_IW_ISCAN_MAXLEN);
+	results->buflen = dtoh32(results->buflen);
+	results->version = dtoh32(results->version);
+	results->count = dtoh32(results->count);
+	WL_TRACE(("results->count = %d\n", results->count));
+
+	WL_TRACE(("results->buflen = %d\n", results->buflen));
+	status = dtoh32(list_buf->status);
+	return status;
+}
+
+static void wl_iw_send_scan_complete(iscan_info_t *iscan)
+{
+	union iwreq_data wrqu;
+
+	memset(&wrqu, 0, sizeof(wrqu));
+
+	/* wext expects to get no data for SIOCGIWSCAN Event  */
+	wireless_send_event(iscan->dev, SIOCGIWSCAN, &wrqu, NULL);
+}
+
+static int
+_iscan_sysioc_thread(void *data)
+{
+	uint32 status;
+	iscan_info_t *iscan = (iscan_info_t *)data;
+
+	WL_MSG("wlan", "thread Enter\n");
+	DAEMONIZE("iscan_sysioc");
+
+	status = WL_SCAN_RESULTS_PARTIAL;
+	while (down_interruptible(&iscan->sysioc_sem) == 0) {
+		if (iscan->timer_on) {
+			del_timer(&iscan->timer);
+			iscan->timer_on = 0;
+		}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+		rtnl_lock();
+#endif
+		status = wl_iw_iscan_get(iscan);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+		rtnl_unlock();
+#endif
+
+		switch (status) {
+			case WL_SCAN_RESULTS_PARTIAL:
+				WL_TRACE(("iscanresults incomplete\n"));
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+				rtnl_lock();
+#endif
+				/* make sure our buffer size is enough before going next round */
+				wl_iw_iscan(iscan, NULL, WL_SCAN_ACTION_CONTINUE);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+				rtnl_unlock();
+#endif
+				/* Reschedule the timer */
+				iscan->timer.expires = jiffies + msecs_to_jiffies(iscan->timer_ms);
+				add_timer(&iscan->timer);
+				iscan->timer_on = 1;
+				break;
+			case WL_SCAN_RESULTS_SUCCESS:
+				WL_TRACE(("iscanresults complete\n"));
+				iscan->iscan_state = ISCAN_STATE_IDLE;
+				wl_iw_send_scan_complete(iscan);
+				break;
+			case WL_SCAN_RESULTS_PENDING:
+				WL_TRACE(("iscanresults pending\n"));
+				/* Reschedule the timer */
+				iscan->timer.expires = jiffies + msecs_to_jiffies(iscan->timer_ms);
+				add_timer(&iscan->timer);
+				iscan->timer_on = 1;
+				break;
+			case WL_SCAN_RESULTS_ABORTED:
+				WL_TRACE(("iscanresults aborted\n"));
+				iscan->iscan_state = ISCAN_STATE_IDLE;
+				wl_iw_send_scan_complete(iscan);
+				break;
+			default:
+				WL_TRACE(("iscanresults returned unknown status %d\n", status));
+				break;
+		 }
+	}
+	WL_MSG("wlan", "was terminated\n");
+	complete_and_exit(&iscan->sysioc_exited, 0);
+}
+#endif /* !WL_ESCAN */
+
+void
+wl_iw_detach(struct net_device *dev)
+{
+	struct dhd_pub *dhdp = dhd_get_pub(dev);
+	wl_wext_info_t *wext_info = dhdp->wext_info;
+#ifndef WL_ESCAN
+	iscan_buf_t  *buf;
+	iscan_info_t *iscan;
+#endif
+	if (!wext_info)
+		return;
+
+#ifndef WL_ESCAN
+	iscan = &wext_info->iscan;
+	if (iscan->sysioc_pid >= 0) {
+		KILL_PROC(iscan->sysioc_pid, SIGTERM);
+		wait_for_completion(&iscan->sysioc_exited);
+	}
+
+	while (iscan->list_hdr) {
+		buf = iscan->list_hdr->next;
+		kfree(iscan->list_hdr);
+		iscan->list_hdr = buf;
+	}
+#endif
+	wl_ext_event_deregister(dev, dhdp, WLC_E_LAST, wl_iw_event);
+	if (wext_info) {
+		kfree(wext_info);
+		dhdp->wext_info = NULL;
+	}
+}
+
+int
+wl_iw_attach(struct net_device *dev)
+{
+	struct dhd_pub *dhdp = dhd_get_pub(dev);
+	wl_wext_info_t *wext_info = NULL;
+	int ret = 0;
+#ifndef WL_ESCAN
+	iscan_info_t *iscan = NULL;
+#endif
+
+	if (!dev)
+		return 0;
+	WL_TRACE(("Enter\n"));
+
+	wext_info = (void *)kzalloc(sizeof(struct wl_wext_info), GFP_KERNEL);
+	if (!wext_info)
+		return -ENOMEM;
+	memset(wext_info, 0, sizeof(wl_wext_info_t));
+	wext_info->dev = dev;
+	wext_info->dhd = dhdp;
+	wext_info->conn_info.bssidx = 0;
+	dhdp->wext_info = (void *)wext_info;
+
+#ifndef WL_ESCAN
+	iscan = &wext_info->iscan;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0))
+	iscan->kthread = NULL;
+#endif
+	iscan->sysioc_pid = -1;
+	/* we only care about main interface so save a global here */
+	iscan->dev = dev;
+	iscan->iscan_state = ISCAN_STATE_IDLE;
+
+	/* Set up the timer */
+	iscan->timer_ms    = 2000;
+	init_timer_compat(&iscan->timer, wl_iw_timerfunc, iscan);
+
+	sema_init(&iscan->sysioc_sem, 0);
+	init_completion(&iscan->sysioc_exited);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0))
+	iscan->kthread = kthread_run(_iscan_sysioc_thread, iscan, "iscan_sysioc");
+	iscan->sysioc_pid = iscan->kthread->pid;
+#else
+	iscan->sysioc_pid = kernel_thread(_iscan_sysioc_thread, iscan, 0);
+#endif
+	if (iscan->sysioc_pid < 0) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+#endif
+	ret = wl_ext_event_register(dev, dhdp, WLC_E_LAST, wl_iw_event, dhdp->wext_info,
+		PRIO_EVENT_WEXT);
+	if (ret) {
+		WL_ERROR(("wl_ext_event_register err %d\n", ret));
+		goto exit;
+	}
+
+	return ret;
+exit:
+	wl_iw_detach(dev);
+	return ret;
+}
+
+s32
+wl_iw_autochannel(struct net_device *dev, char* command, int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	wl_wext_info_t *wext_info = NULL;
+	int ret = 0;
+#ifdef WL_ESCAN
+	int bytes_written = -1;
+#endif
+
+	DHD_CHECK(dhd, dev);
+	wext_info = dhd->wext_info;
+#ifdef WL_ESCAN
+	sscanf(command, "%*s %d", &dhd->escan->autochannel);
+	if (dhd->escan->autochannel == 0) {
+		dhd->escan->best_2g_ch = 0;
+		dhd->escan->best_5g_ch = 0;
+	} else if (dhd->escan->autochannel == 2) {
+		bytes_written = snprintf(command, total_len, "2g=%d 5g=%d",
+			dhd->escan->best_2g_ch, dhd->escan->best_5g_ch);
+		WL_TRACE(("command result is %s\n", command));
+		ret = bytes_written;
+	}
+#endif
+
+	return ret;
+}
+
+#endif /* USE_IW */
