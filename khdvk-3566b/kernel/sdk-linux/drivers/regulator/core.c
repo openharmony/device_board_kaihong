@@ -5898,3 +5898,416 @@ void *regulator_get_drvdata(struct regulator *regulator)
 	return regulator->rdev->reg_data;
 }
 EXPORT_SYMBOL_GPL(regulator_get_drvdata);
+
+/**
+ * regulator_set_drvdata - set regulator driver data
+ * @regulator: regulator
+ * @data: data
+ */
+void regulator_set_drvdata(struct regulator *regulator, void *data)
+{
+	regulator->rdev->reg_data = data;
+}
+EXPORT_SYMBOL_GPL(regulator_set_drvdata);
+
+/**
+ * regulator_get_id - get regulator ID
+ * @rdev: regulator
+ */
+int rdev_get_id(struct regulator_dev *rdev)
+{
+	return rdev->desc->id;
+}
+EXPORT_SYMBOL_GPL(rdev_get_id);
+
+struct device *rdev_get_dev(struct regulator_dev *rdev)
+{
+	return &rdev->dev;
+}
+EXPORT_SYMBOL_GPL(rdev_get_dev);
+
+struct regmap *rdev_get_regmap(struct regulator_dev *rdev)
+{
+	return rdev->regmap;
+}
+EXPORT_SYMBOL_GPL(rdev_get_regmap);
+
+void *regulator_get_init_drvdata(struct regulator_init_data *reg_init_data)
+{
+	return reg_init_data->driver_data;
+}
+EXPORT_SYMBOL_GPL(regulator_get_init_drvdata);
+
+#ifdef CONFIG_DEBUG_FS
+static int supply_map_show(struct seq_file *sf, void *data)
+{
+	struct regulator_map *map;
+
+	list_for_each_entry(map, &regulator_map_list, list) {
+		seq_printf(sf, "%s -> %s.%s\n",
+				rdev_get_name(map->regulator), map->dev_name,
+				map->supply);
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(supply_map);
+
+struct summary_data {
+	struct seq_file *s;
+	struct regulator_dev *parent;
+	int level;
+};
+
+static void regulator_summary_show_subtree(struct seq_file *s,
+					   struct regulator_dev *rdev,
+					   int level);
+
+static int regulator_summary_show_children(struct device *dev, void *data)
+{
+	struct regulator_dev *rdev = dev_to_rdev(dev);
+	struct summary_data *summary_data = data;
+
+	if (rdev->supply && rdev->supply->rdev == summary_data->parent)
+		regulator_summary_show_subtree(summary_data->s, rdev,
+					       summary_data->level + 1);
+
+	return 0;
+}
+
+static void regulator_summary_show_subtree(struct seq_file *s,
+					   struct regulator_dev *rdev,
+					   int level)
+{
+	struct regulation_constraints *c;
+	struct regulator *consumer;
+	struct summary_data summary_data;
+	unsigned int opmode;
+
+	if (!rdev)
+		return;
+
+	opmode = _regulator_get_mode_unlocked(rdev);
+	seq_printf(s, "%*s%-*s %3d %4d %6d %7s ",
+		   level * 3 + 1, "",
+		   30 - level * 3, rdev_get_name(rdev),
+		   rdev->use_count, rdev->open_count, rdev->bypass_count,
+		   regulator_opmode_to_str(opmode));
+
+	seq_printf(s, "%5dmV ", regulator_get_voltage_rdev(rdev) / 1000);
+	seq_printf(s, "%5dmA ",
+		   _regulator_get_current_limit_unlocked(rdev) / 1000);
+
+	c = rdev->constraints;
+	if (c) {
+		switch (rdev->desc->type) {
+		case REGULATOR_VOLTAGE:
+			seq_printf(s, "%5dmV %5dmV ",
+				   c->min_uV / 1000, c->max_uV / 1000);
+			break;
+		case REGULATOR_CURRENT:
+			seq_printf(s, "%5dmA %5dmA ",
+				   c->min_uA / 1000, c->max_uA / 1000);
+			break;
+		}
+	}
+
+	seq_puts(s, "\n");
+
+	list_for_each_entry(consumer, &rdev->consumer_list, list) {
+		if (consumer->dev && consumer->dev->class == &regulator_class)
+			continue;
+
+		seq_printf(s, "%*s%-*s ",
+			   (level + 1) * 3 + 1, "",
+			   30 - (level + 1) * 3,
+			   consumer->supply_name ? consumer->supply_name :
+			   consumer->dev ? dev_name(consumer->dev) : "deviceless");
+
+		switch (rdev->desc->type) {
+		case REGULATOR_VOLTAGE:
+			seq_printf(s, "%3d %33dmA%c%5dmV %5dmV",
+				   consumer->enable_count,
+				   consumer->uA_load / 1000,
+				   consumer->uA_load && !consumer->enable_count ?
+				   '*' : ' ',
+				   consumer->voltage[PM_SUSPEND_ON].min_uV / 1000,
+				   consumer->voltage[PM_SUSPEND_ON].max_uV / 1000);
+			break;
+		case REGULATOR_CURRENT:
+			break;
+		}
+
+		seq_puts(s, "\n");
+	}
+
+	summary_data.s = s;
+	summary_data.level = level;
+	summary_data.parent = rdev;
+
+	class_for_each_device(&regulator_class, NULL, &summary_data,
+			      regulator_summary_show_children);
+}
+
+struct summary_lock_data {
+	struct ww_acquire_ctx *ww_ctx;
+	struct regulator_dev **new_contended_rdev;
+	struct regulator_dev **old_contended_rdev;
+};
+
+static int regulator_summary_lock_one(struct device *dev, void *data)
+{
+	struct regulator_dev *rdev = dev_to_rdev(dev);
+	struct summary_lock_data *lock_data = data;
+	int ret = 0;
+
+	if (rdev != *lock_data->old_contended_rdev) {
+		ret = regulator_lock_nested(rdev, lock_data->ww_ctx);
+
+		if (ret == -EDEADLK)
+			*lock_data->new_contended_rdev = rdev;
+		else
+			WARN_ON_ONCE(ret);
+	} else {
+		*lock_data->old_contended_rdev = NULL;
+	}
+
+	return ret;
+}
+
+static int regulator_summary_unlock_one(struct device *dev, void *data)
+{
+	struct regulator_dev *rdev = dev_to_rdev(dev);
+	struct summary_lock_data *lock_data = data;
+
+	if (lock_data) {
+		if (rdev == *lock_data->new_contended_rdev)
+			return -EDEADLK;
+	}
+
+	regulator_unlock(rdev);
+
+	return 0;
+}
+
+static int regulator_summary_lock_all(struct ww_acquire_ctx *ww_ctx,
+				      struct regulator_dev **new_contended_rdev,
+				      struct regulator_dev **old_contended_rdev)
+{
+	struct summary_lock_data lock_data;
+	int ret;
+
+	lock_data.ww_ctx = ww_ctx;
+	lock_data.new_contended_rdev = new_contended_rdev;
+	lock_data.old_contended_rdev = old_contended_rdev;
+
+	ret = class_for_each_device(&regulator_class, NULL, &lock_data,
+				    regulator_summary_lock_one);
+	if (ret)
+		class_for_each_device(&regulator_class, NULL, &lock_data,
+				      regulator_summary_unlock_one);
+
+	return ret;
+}
+
+static void regulator_summary_lock(struct ww_acquire_ctx *ww_ctx)
+{
+	struct regulator_dev *new_contended_rdev = NULL;
+	struct regulator_dev *old_contended_rdev = NULL;
+	int err;
+
+	mutex_lock(&regulator_list_mutex);
+
+	ww_acquire_init(ww_ctx, &regulator_ww_class);
+
+	do {
+		if (new_contended_rdev) {
+			ww_mutex_lock_slow(&new_contended_rdev->mutex, ww_ctx);
+			old_contended_rdev = new_contended_rdev;
+			old_contended_rdev->ref_cnt++;
+		}
+
+		err = regulator_summary_lock_all(ww_ctx,
+						 &new_contended_rdev,
+						 &old_contended_rdev);
+
+		if (old_contended_rdev)
+			regulator_unlock(old_contended_rdev);
+
+	} while (err == -EDEADLK);
+
+	ww_acquire_done(ww_ctx);
+}
+
+static void regulator_summary_unlock(struct ww_acquire_ctx *ww_ctx)
+{
+	class_for_each_device(&regulator_class, NULL, NULL,
+			      regulator_summary_unlock_one);
+	ww_acquire_fini(ww_ctx);
+
+	mutex_unlock(&regulator_list_mutex);
+}
+
+static int regulator_summary_show_roots(struct device *dev, void *data)
+{
+	struct regulator_dev *rdev = dev_to_rdev(dev);
+	struct seq_file *s = data;
+
+	if (!rdev->supply)
+		regulator_summary_show_subtree(s, rdev, 0);
+
+	return 0;
+}
+
+static int regulator_summary_show(struct seq_file *s, void *data)
+{
+	struct ww_acquire_ctx ww_ctx;
+
+	seq_puts(s, " regulator                      use open bypass  opmode voltage current     min     max\n");
+	seq_puts(s, "---------------------------------------------------------------------------------------\n");
+
+	regulator_summary_lock(&ww_ctx);
+
+	class_for_each_device(&regulator_class, NULL, s,
+			      regulator_summary_show_roots);
+
+	regulator_summary_unlock(&ww_ctx);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(regulator_summary);
+#endif /* CONFIG_DEBUG_FS */
+
+static int __init regulator_init(void)
+{
+	int ret;
+
+	ret = class_register(&regulator_class);
+
+	debugfs_root = debugfs_create_dir("regulator", NULL);
+	if (!debugfs_root)
+		pr_warn("regulator: Failed to create debugfs directory\n");
+
+#ifdef CONFIG_DEBUG_FS
+	debugfs_create_file("supply_map", 0444, debugfs_root, NULL,
+			    &supply_map_fops);
+
+	debugfs_create_file("regulator_summary", 0444, debugfs_root,
+			    NULL, &regulator_summary_fops);
+#endif
+	regulator_dummy_init();
+
+	regulator_coupler_register(&generic_regulator_coupler);
+
+	return ret;
+}
+
+/* init early to allow our consumers to complete system booting */
+#ifdef CONFIG_ROCKCHIP_THUNDER_BOOT
+core_initcall_sync(regulator_init);
+#else
+core_initcall(regulator_init);
+#endif
+
+static int regulator_late_cleanup(struct device *dev, void *data)
+{
+	struct regulator_dev *rdev = dev_to_rdev(dev);
+	const struct regulator_ops *ops = rdev->desc->ops;
+	struct regulation_constraints *c = rdev->constraints;
+	int enabled, ret;
+
+	if (c && c->always_on)
+		return 0;
+
+	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_STATUS))
+		return 0;
+
+	regulator_lock(rdev);
+
+	if (rdev->use_count)
+		goto unlock;
+
+	/* If we can't read the status assume it's always on. */
+	if (ops->is_enabled)
+		enabled = ops->is_enabled(rdev);
+	else
+		enabled = 1;
+
+	/* But if reading the status failed, assume that it's off. */
+	if (enabled <= 0)
+		goto unlock;
+
+	if (have_full_constraints()) {
+		/* We log since this may kill the system if it goes
+		 * wrong. */
+		rdev_info(rdev, "disabling\n");
+		ret = _regulator_do_disable(rdev);
+		if (ret != 0)
+			rdev_err(rdev, "couldn't disable: %pe\n", ERR_PTR(ret));
+	} else {
+		/* The intention is that in future we will
+		 * assume that full constraints are provided
+		 * so warn even if we aren't going to do
+		 * anything here.
+		 */
+		rdev_warn(rdev, "incomplete constraints, leaving on\n");
+	}
+
+unlock:
+	regulator_unlock(rdev);
+
+	return 0;
+}
+
+static void regulator_init_complete_work_function(struct work_struct *work)
+{
+	/*
+	 * Regulators may had failed to resolve their input supplies
+	 * when were registered, either because the input supply was
+	 * not registered yet or because its parent device was not
+	 * bound yet. So attempt to resolve the input supplies for
+	 * pending regulators before trying to disable unused ones.
+	 */
+	class_for_each_device(&regulator_class, NULL, NULL,
+			      regulator_register_resolve_supply);
+
+	/* If we have a full configuration then disable any regulators
+	 * we have permission to change the status for and which are
+	 * not in use or always_on.  This is effectively the default
+	 * for DT and ACPI as they have full constraints.
+	 */
+	class_for_each_device(&regulator_class, NULL, NULL,
+			      regulator_late_cleanup);
+}
+
+static DECLARE_DELAYED_WORK(regulator_init_complete_work,
+			    regulator_init_complete_work_function);
+
+static int __init regulator_init_complete(void)
+{
+	/*
+	 * Since DT doesn't provide an idiomatic mechanism for
+	 * enabling full constraints and since it's much more natural
+	 * with DT to provide them just assume that a DT enabled
+	 * system has full constraints.
+	 */
+	if (of_have_populated_dt())
+		has_full_constraints = true;
+
+	/*
+	 * We punt completion for an arbitrary amount of time since
+	 * systems like distros will load many drivers from userspace
+	 * so consumers might not always be ready yet, this is
+	 * particularly an issue with laptops where this might bounce
+	 * the display off then on.  Ideally we'd get a notification
+	 * from userspace when this happens but we don't so just wait
+	 * a bit and hope we waited long enough.  It'd be better if
+	 * we'd only do this on systems that need it, and a kernel
+	 * command line option might be useful.
+	 */
+	schedule_delayed_work(&regulator_init_complete_work,
+			      msecs_to_jiffies(30000));
+
+	return 0;
+}
+late_initcall_sync(regulator_init_complete);
