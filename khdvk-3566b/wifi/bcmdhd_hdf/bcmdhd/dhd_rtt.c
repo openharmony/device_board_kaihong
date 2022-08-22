@@ -3835,4 +3835,268 @@ dhd_rtt_avail_channel(dhd_pub_t *dhd, wifi_channel_info *channel_info)
 	return err;
 }
 
+int
+dhd_rtt_enable_responder(dhd_pub_t *dhd, wifi_channel_info *channel_info)
+{
+	int err = BCME_OK;
+	char chanbuf[CHANSPEC_STR_LEN];
+	int pm = PM_OFF;
+	int ftm_cfg_cnt = 0;
+	chanspec_t chanspec;
+	wifi_channel_info_t channel;
+	struct net_device *dev = dhd_linux_get_primary_netdev(dhd);
+	ftm_config_options_info_t ftm_configs[FTM_MAX_CONFIGS];
+	ftm_config_param_info_t ftm_params[FTM_MAX_PARAMS];
+	rtt_status_info_t *rtt_status;
 
+	memset(&channel, 0, sizeof(channel));
+	BCM_REFERENCE(chanbuf);
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	if (RTT_IS_STOPPED(rtt_status)) {
+		DHD_RTT(("STA responder/Target. \n"));
+	}
+	DHD_RTT(("Enter %s \n", __FUNCTION__));
+	if (!dhd_is_associated(dhd, 0, NULL)) {
+		if (channel_info) {
+			channel.width = channel_info->width;
+			channel.center_freq = channel_info->center_freq;
+			channel.center_freq0 = channel_info->center_freq;
+		}
+		else {
+			channel.width = WIFI_CHAN_WIDTH_80;
+			channel.center_freq = DEFAULT_FTM_FREQ;
+			channel.center_freq0 = DEFAULT_FTM_CNTR_FREQ0;
+		}
+		chanspec =  dhd_rtt_convert_to_chspec(channel);
+		DHD_RTT(("chanspec/channel set as %s for rtt.\n",
+			wf_chspec_ntoa(chanspec, chanbuf)));
+		err = wldev_iovar_setint(dev, "chanspec", chanspec);
+		if (err) {
+			DHD_RTT_ERR(("Failed to set the chanspec \n"));
+		}
+	}
+	rtt_status->pm = PM_OFF;
+	err = wldev_ioctl_get(dev, WLC_GET_PM, &rtt_status->pm, sizeof(rtt_status->pm));
+	DHD_RTT(("Current PM value read %d\n", rtt_status->pm));
+	if (err) {
+		DHD_RTT_ERR(("Failed to get the PM value \n"));
+	} else {
+		err = wldev_ioctl_set(dev, WLC_SET_PM, &pm, sizeof(pm));
+		if (err) {
+			DHD_RTT_ERR(("Failed to set the PM \n"));
+			rtt_status->pm_restore = FALSE;
+		} else {
+			rtt_status->pm_restore = TRUE;
+		}
+	}
+	if (!RTT_IS_ENABLED(rtt_status)) {
+		err = dhd_rtt_ftm_enable(dhd, TRUE);
+		if (err) {
+			DHD_RTT_ERR(("Failed to enable FTM (%d)\n", err));
+			goto exit;
+		}
+		DHD_RTT(("FTM enabled \n"));
+	}
+	rtt_status->status = RTT_ENABLED;
+	DHD_RTT(("Responder enabled \n"));
+	memset(ftm_configs, 0, sizeof(ftm_configs));
+	memset(ftm_params, 0, sizeof(ftm_params));
+	ftm_configs[ftm_cfg_cnt].enable = TRUE;
+	ftm_configs[ftm_cfg_cnt++].flags = WL_PROXD_SESSION_FLAG_TARGET;
+	rtt_status->flags = WL_PROXD_SESSION_FLAG_TARGET;
+	DHD_RTT(("Set the device as responder \n"));
+	err = dhd_rtt_ftm_config(dhd, FTM_DEFAULT_SESSION, FTM_CONFIG_CAT_OPTIONS,
+		ftm_configs, ftm_cfg_cnt);
+exit:
+	if (err) {
+		rtt_status->status = RTT_STOPPED;
+		DHD_RTT_ERR(("rtt is stopped  %s \n", __FUNCTION__));
+		dhd_rtt_ftm_enable(dhd, FALSE);
+		DHD_RTT(("restoring the PM value \n"));
+		if (rtt_status->pm_restore) {
+			pm = PM_FAST;
+			err = wldev_ioctl_set(dev, WLC_SET_PM, &pm, sizeof(pm));
+			if (err) {
+				DHD_RTT_ERR(("Failed to restore PM \n"));
+			} else {
+				rtt_status->pm_restore = FALSE;
+			}
+		}
+	}
+	return err;
+}
+
+int
+dhd_rtt_cancel_responder(dhd_pub_t *dhd)
+{
+	int err = BCME_OK;
+	rtt_status_info_t *rtt_status;
+	int pm = 0;
+	struct net_device *dev = dhd_linux_get_primary_netdev(dhd);
+
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	DHD_RTT(("Enter %s \n", __FUNCTION__));
+	err = dhd_rtt_ftm_enable(dhd, FALSE);
+	if (err) {
+		DHD_RTT_ERR(("failed to disable FTM (%d)\n", err));
+	}
+	rtt_status->status = RTT_STOPPED;
+	if (rtt_status->pm_restore) {
+		pm = PM_FAST;
+		DHD_RTT(("pm_restore =%d \n", rtt_status->pm_restore));
+		err = wldev_ioctl_set(dev, WLC_SET_PM, &pm, sizeof(pm));
+		if (err) {
+			DHD_RTT_ERR(("Failed to restore PM \n"));
+		} else {
+			rtt_status->pm_restore = FALSE;
+		}
+	}
+	return err;
+}
+#endif /* WL_CFG80211 */
+
+int
+dhd_rtt_init(dhd_pub_t *dhd)
+{
+	int err = BCME_OK;
+#ifdef WL_CFG80211
+	int ret;
+	int32 drv_up = 1;
+	int32 version;
+	rtt_status_info_t *rtt_status;
+	ftm_config_param_info_t ftm_params[FTM_MAX_PARAMS];
+	int ftm_param_cnt = 0;
+
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	dhd->rtt_supported = FALSE;
+	if (dhd->rtt_state) {
+		return err;
+	}
+	dhd->rtt_state = (rtt_status_info_t *)MALLOCZ(dhd->osh,
+		sizeof(rtt_status_info_t));
+	if (dhd->rtt_state == NULL) {
+		err = BCME_NOMEM;
+		DHD_RTT_ERR(("%s : failed to create rtt_state\n", __FUNCTION__));
+		return err;
+	}
+	bzero(dhd->rtt_state, sizeof(rtt_status_info_t));
+	rtt_status = GET_RTTSTATE(dhd);
+	rtt_status->rtt_config.target_info =
+			(rtt_target_info_t *)MALLOCZ(dhd->osh,
+			TARGET_INFO_SIZE(RTT_MAX_TARGET_CNT));
+	if (rtt_status->rtt_config.target_info == NULL) {
+		DHD_RTT_ERR(("%s failed to allocate the target info for %d\n",
+			__FUNCTION__, RTT_MAX_TARGET_CNT));
+		err = BCME_NOMEM;
+		goto exit;
+	}
+	rtt_status->dhd = dhd;
+	/* need to do WLC_UP  */
+	dhd_wl_ioctl_cmd(dhd, WLC_UP, (char *)&drv_up, sizeof(int32), TRUE, 0);
+
+	ret = dhd_rtt_get_version(dhd, &version);
+	if (ret == BCME_OK && (version == WL_PROXD_API_VERSION)) {
+		DHD_RTT_ERR(("%s : FTM is supported\n", __FUNCTION__));
+		dhd->rtt_supported = TRUE;
+		/* rtt_status->rtt_capa.proto |= RTT_CAP_ONE_WAY; */
+		rtt_status->rtt_capa.proto |= RTT_CAP_FTM_WAY;
+
+		/* indicate to set tx rate */
+		rtt_status->rtt_capa.feature |= RTT_FEATURE_LCI;
+		rtt_status->rtt_capa.feature |= RTT_FEATURE_LCR;
+		rtt_status->rtt_capa.feature |= RTT_FEATURE_PREAMBLE;
+		rtt_status->rtt_capa.preamble |= RTT_PREAMBLE_VHT;
+		rtt_status->rtt_capa.preamble |= RTT_PREAMBLE_HT;
+
+		/* indicate to set bandwith */
+		rtt_status->rtt_capa.feature |= RTT_FEATURE_BW;
+		rtt_status->rtt_capa.bw |= RTT_BW_20;
+		rtt_status->rtt_capa.bw |= RTT_BW_40;
+		rtt_status->rtt_capa.bw |= RTT_BW_80;
+	} else {
+		if ((ret != BCME_OK) || (version == 0)) {
+			DHD_RTT_ERR(("%s : FTM is not supported\n", __FUNCTION__));
+		} else {
+			DHD_RTT_ERR(("%s : FTM version mismatch between HOST (%d) and FW (%d)\n",
+				__FUNCTION__, WL_PROXD_API_VERSION, version));
+		}
+	}
+	/* cancel all of RTT request once we got the cancel request */
+	rtt_status->all_cancel = TRUE;
+	mutex_init(&rtt_status->rtt_mutex);
+	mutex_init(&rtt_status->rtt_work_mutex);
+	mutex_init(&rtt_status->geofence_mutex);
+	INIT_LIST_HEAD(&rtt_status->noti_fn_list);
+	INIT_LIST_HEAD(&rtt_status->rtt_results_cache);
+	INIT_WORK(&rtt_status->work, dhd_rtt_work);
+	/* initialize proxd timer */
+	INIT_DELAYED_WORK(&rtt_status->proxd_timeout, dhd_rtt_timeout_work);
+#ifdef WL_NAN
+	/* initialize proxd retry timer */
+	INIT_DELAYED_WORK(&rtt_status->rtt_retry_timer, dhd_rtt_retry_work);
+#endif /* WL_NAN */
+	/* Global proxd config */
+	ftm_params[ftm_param_cnt].event_mask = ((1 << WL_PROXD_EVENT_BURST_END) |
+		(1 << WL_PROXD_EVENT_SESSION_END));
+	ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_EVENT_MASK;
+	dhd_rtt_ftm_config(dhd, 0, FTM_CONFIG_CAT_GENERAL,
+			ftm_params, ftm_param_cnt);
+exit:
+	if (err < 0) {
+		kfree(rtt_status->rtt_config.target_info);
+		kfree(dhd->rtt_state);
+	}
+#endif /* WL_CFG80211 */
+	return err;
+
+}
+
+int
+dhd_rtt_deinit(dhd_pub_t *dhd)
+{
+	int err = BCME_OK;
+#ifdef WL_CFG80211
+	rtt_status_info_t *rtt_status;
+	rtt_results_header_t *rtt_header, *next;
+	rtt_result_t *rtt_result, *next2;
+	struct rtt_noti_callback *iter, *iter2;
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	rtt_status->status = RTT_STOPPED;
+	DHD_RTT(("rtt is stopped %s \n", __FUNCTION__));
+	/* clear evt callback list */
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	if (!list_empty(&rtt_status->noti_fn_list)) {
+		list_for_each_entry_safe(iter, iter2, &rtt_status->noti_fn_list, list) {
+			list_del(&iter->list);
+			kfree(iter);
+		}
+	}
+	/* remove the rtt results */
+	if (!list_empty(&rtt_status->rtt_results_cache)) {
+		list_for_each_entry_safe(rtt_header, next, &rtt_status->rtt_results_cache, list) {
+			list_del(&rtt_header->list);
+			list_for_each_entry_safe(rtt_result, next2,
+				&rtt_header->result_list, list) {
+				list_del(&rtt_result->list);
+				kfree(rtt_result);
+			}
+			kfree(rtt_header);
+		}
+	}
+	GCC_DIAGNOSTIC_POP();
+
+	if (delayed_work_pending(&rtt_status->rtt_retry_timer)) {
+		cancel_delayed_work(&rtt_status->rtt_retry_timer);
+	}
+	kfree(rtt_status->rtt_config.target_info);
+	kfree(dhd->rtt_state);
+	dhd->rtt_state = NULL;
+#endif /* WL_CFG80211 */
+	return err;
+}
