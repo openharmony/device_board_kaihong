@@ -1987,3 +1987,648 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 	type = "Device";
 	for (i = 0; i < hdev->maxcollection; i++) {
 		struct hid_collection *col = &hdev->collection[i];
+		if (col->type == HID_COLLECTION_APPLICATION &&
+		   (col->usage & HID_USAGE_PAGE) == HID_UP_GENDESK &&
+		   (col->usage & 0xffff) < ARRAY_SIZE(types)) {
+			type = types[col->usage & 0xffff];
+			break;
+		}
+	}
+
+	switch (hdev->bus) {
+	case BUS_USB:
+		bus = "USB";
+		break;
+	case BUS_BLUETOOTH:
+		bus = "BLUETOOTH";
+		break;
+	case BUS_I2C:
+		bus = "I2C";
+		break;
+	case BUS_VIRTUAL:
+		bus = "VIRTUAL";
+		break;
+	default:
+		bus = "<UNKNOWN>";
+	}
+
+	ret = device_create_file(&hdev->dev, &dev_attr_country);
+	if (ret)
+		hid_warn(hdev,
+			 "can't create sysfs country code attribute err: %d\n", ret);
+
+	hid_info(hdev, "%s: %s HID v%x.%02x %s [%s] on %s\n",
+		 buf, bus, hdev->version >> 8, hdev->version & 0xff,
+		 type, hdev->name, hdev->phys);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(hid_connect);
+
+void hid_disconnect(struct hid_device *hdev)
+{
+	device_remove_file(&hdev->dev, &dev_attr_country);
+	if (hdev->claimed & HID_CLAIMED_INPUT)
+		hidinput_disconnect(hdev);
+	if (hdev->claimed & HID_CLAIMED_HIDDEV)
+		hdev->hiddev_disconnect(hdev);
+	if (hdev->claimed & HID_CLAIMED_HIDRAW)
+		hidraw_disconnect(hdev);
+	hdev->claimed = 0;
+}
+EXPORT_SYMBOL_GPL(hid_disconnect);
+
+/**
+ * hid_hw_start - start underlying HW
+ * @hdev: hid device
+ * @connect_mask: which outputs to connect, see HID_CONNECT_*
+ *
+ * Call this in probe function *after* hid_parse. This will setup HW
+ * buffers and start the device (if not defeirred to device open).
+ * hid_hw_stop must be called if this was successful.
+ */
+int hid_hw_start(struct hid_device *hdev, unsigned int connect_mask)
+{
+	int error;
+
+	error = hdev->ll_driver->start(hdev);
+	if (error)
+		return error;
+
+	if (connect_mask) {
+		error = hid_connect(hdev, connect_mask);
+		if (error) {
+			hdev->ll_driver->stop(hdev);
+			return error;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(hid_hw_start);
+
+/**
+ * hid_hw_stop - stop underlying HW
+ * @hdev: hid device
+ *
+ * This is usually called from remove function or from probe when something
+ * failed and hid_hw_start was called already.
+ */
+void hid_hw_stop(struct hid_device *hdev)
+{
+	hid_disconnect(hdev);
+	hdev->ll_driver->stop(hdev);
+}
+EXPORT_SYMBOL_GPL(hid_hw_stop);
+
+/**
+ * hid_hw_open - signal underlying HW to start delivering events
+ * @hdev: hid device
+ *
+ * Tell underlying HW to start delivering events from the device.
+ * This function should be called sometime after successful call
+ * to hid_hw_start().
+ */
+int hid_hw_open(struct hid_device *hdev)
+{
+	int ret;
+
+	ret = mutex_lock_killable(&hdev->ll_open_lock);
+	if (ret)
+		return ret;
+
+	if (!hdev->ll_open_count++) {
+		ret = hdev->ll_driver->open(hdev);
+		if (ret)
+			hdev->ll_open_count--;
+	}
+
+	mutex_unlock(&hdev->ll_open_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(hid_hw_open);
+
+/**
+ * hid_hw_close - signal underlaying HW to stop delivering events
+ *
+ * @hdev: hid device
+ *
+ * This function indicates that we are not interested in the events
+ * from this device anymore. Delivery of events may or may not stop,
+ * depending on the number of users still outstanding.
+ */
+void hid_hw_close(struct hid_device *hdev)
+{
+	mutex_lock(&hdev->ll_open_lock);
+	if (!--hdev->ll_open_count)
+		hdev->ll_driver->close(hdev);
+	mutex_unlock(&hdev->ll_open_lock);
+}
+EXPORT_SYMBOL_GPL(hid_hw_close);
+
+struct hid_dynid {
+	struct list_head list;
+	struct hid_device_id id;
+};
+
+/**
+ * store_new_id - add a new HID device ID to this driver and re-probe devices
+ * @drv: target device driver
+ * @buf: buffer for scanning device ID data
+ * @count: input size
+ *
+ * Adds a new dynamic hid device ID to this driver,
+ * and causes the driver to probe for all devices again.
+ */
+static ssize_t new_id_store(struct device_driver *drv, const char *buf,
+		size_t count)
+{
+	struct hid_driver *hdrv = to_hid_driver(drv);
+	struct hid_dynid *dynid;
+	__u32 bus, vendor, product;
+	unsigned long driver_data = 0;
+	int ret;
+
+	ret = sscanf(buf, "%x %x %x %lx",
+			&bus, &vendor, &product, &driver_data);
+	if (ret < 3)
+		return -EINVAL;
+
+	dynid = kzalloc(sizeof(*dynid), GFP_KERNEL);
+	if (!dynid)
+		return -ENOMEM;
+
+	dynid->id.bus = bus;
+	dynid->id.group = HID_GROUP_ANY;
+	dynid->id.vendor = vendor;
+	dynid->id.product = product;
+	dynid->id.driver_data = driver_data;
+
+	spin_lock(&hdrv->dyn_lock);
+	list_add_tail(&dynid->list, &hdrv->dyn_list);
+	spin_unlock(&hdrv->dyn_lock);
+
+	ret = driver_attach(&hdrv->driver);
+
+	return ret ? : count;
+}
+static DRIVER_ATTR_WO(new_id);
+
+static struct attribute *hid_drv_attrs[] = {
+	&driver_attr_new_id.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(hid_drv);
+
+static void hid_free_dynids(struct hid_driver *hdrv)
+{
+	struct hid_dynid *dynid, *n;
+
+	spin_lock(&hdrv->dyn_lock);
+	list_for_each_entry_safe(dynid, n, &hdrv->dyn_list, list) {
+		list_del(&dynid->list);
+		kfree(dynid);
+	}
+	spin_unlock(&hdrv->dyn_lock);
+}
+
+const struct hid_device_id *hid_match_device(struct hid_device *hdev,
+					     struct hid_driver *hdrv)
+{
+	struct hid_dynid *dynid;
+
+	spin_lock(&hdrv->dyn_lock);
+	list_for_each_entry(dynid, &hdrv->dyn_list, list) {
+		if (hid_match_one_id(hdev, &dynid->id)) {
+			spin_unlock(&hdrv->dyn_lock);
+			return &dynid->id;
+		}
+	}
+	spin_unlock(&hdrv->dyn_lock);
+
+	return hid_match_id(hdev, hdrv->id_table);
+}
+EXPORT_SYMBOL_GPL(hid_match_device);
+
+static int hid_bus_match(struct device *dev, struct device_driver *drv)
+{
+	struct hid_driver *hdrv = to_hid_driver(drv);
+	struct hid_device *hdev = to_hid_device(dev);
+
+	return hid_match_device(hdev, hdrv) != NULL;
+}
+
+/**
+ * hid_compare_device_paths - check if both devices share the same path
+ * @hdev_a: hid device
+ * @hdev_b: hid device
+ * @separator: char to use as separator
+ *
+ * Check if two devices share the same path up to the last occurrence of
+ * the separator char. Both paths must exist (i.e., zero-length paths
+ * don't match).
+ */
+bool hid_compare_device_paths(struct hid_device *hdev_a,
+			      struct hid_device *hdev_b, char separator)
+{
+	int n1 = strrchr(hdev_a->phys, separator) - hdev_a->phys;
+	int n2 = strrchr(hdev_b->phys, separator) - hdev_b->phys;
+
+	if (n1 != n2 || n1 <= 0 || n2 <= 0)
+		return false;
+
+	return !strncmp(hdev_a->phys, hdev_b->phys, n1);
+}
+EXPORT_SYMBOL_GPL(hid_compare_device_paths);
+
+static int hid_device_probe(struct device *dev)
+{
+	struct hid_driver *hdrv = to_hid_driver(dev->driver);
+	struct hid_device *hdev = to_hid_device(dev);
+	const struct hid_device_id *id;
+	int ret = 0;
+
+	if (down_interruptible(&hdev->driver_input_lock)) {
+		ret = -EINTR;
+		goto end;
+	}
+	hdev->io_started = false;
+
+	clear_bit(ffs(HID_STAT_REPROBED), &hdev->status);
+
+	if (!hdev->driver) {
+		id = hid_match_device(hdev, hdrv);
+		if (id == NULL) {
+			ret = -ENODEV;
+			goto unlock;
+		}
+
+		if (hdrv->match) {
+			if (!hdrv->match(hdev, hid_ignore_special_drivers)) {
+				ret = -ENODEV;
+				goto unlock;
+			}
+		} else {
+			/*
+			 * hid-generic implements .match(), so if
+			 * hid_ignore_special_drivers is set, we can safely
+			 * return.
+			 */
+			if (hid_ignore_special_drivers) {
+				ret = -ENODEV;
+				goto unlock;
+			}
+		}
+
+		/* reset the quirks that has been previously set */
+		hdev->quirks = hid_lookup_quirk(hdev);
+		hdev->driver = hdrv;
+		if (hdrv->probe) {
+			ret = hdrv->probe(hdev, id);
+		} else { /* default probe */
+			ret = hid_open_report(hdev);
+			if (!ret)
+				ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+		}
+		if (ret) {
+			hid_close_report(hdev);
+			hdev->driver = NULL;
+		}
+	}
+unlock:
+	if (!hdev->io_started)
+		up(&hdev->driver_input_lock);
+end:
+	return ret;
+}
+
+static int hid_device_remove(struct device *dev)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct hid_driver *hdrv;
+
+	down(&hdev->driver_input_lock);
+	hdev->io_started = false;
+
+	hdrv = hdev->driver;
+	if (hdrv) {
+		if (hdrv->remove)
+			hdrv->remove(hdev);
+		else /* default remove */
+			hid_hw_stop(hdev);
+		hid_close_report(hdev);
+		hdev->driver = NULL;
+	}
+
+	if (!hdev->io_started)
+		up(&hdev->driver_input_lock);
+
+	return 0;
+}
+
+static ssize_t modalias_show(struct device *dev, struct device_attribute *a,
+			     char *buf)
+{
+	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+
+	return scnprintf(buf, PAGE_SIZE, "hid:b%04Xg%04Xv%08Xp%08X\n",
+			 hdev->bus, hdev->group, hdev->vendor, hdev->product);
+}
+static DEVICE_ATTR_RO(modalias);
+
+static struct attribute *hid_dev_attrs[] = {
+	&dev_attr_modalias.attr,
+	NULL,
+};
+static struct bin_attribute *hid_dev_bin_attrs[] = {
+	&dev_bin_attr_report_desc,
+	NULL
+};
+static const struct attribute_group hid_dev_group = {
+	.attrs = hid_dev_attrs,
+	.bin_attrs = hid_dev_bin_attrs,
+};
+__ATTRIBUTE_GROUPS(hid_dev);
+
+static int hid_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+
+	if (add_uevent_var(env, "HID_ID=%04X:%08X:%08X",
+			hdev->bus, hdev->vendor, hdev->product))
+		return -ENOMEM;
+
+	if (add_uevent_var(env, "HID_NAME=%s", hdev->name))
+		return -ENOMEM;
+
+	if (add_uevent_var(env, "HID_PHYS=%s", hdev->phys))
+		return -ENOMEM;
+
+	if (add_uevent_var(env, "HID_UNIQ=%s", hdev->uniq))
+		return -ENOMEM;
+
+	if (add_uevent_var(env, "MODALIAS=hid:b%04Xg%04Xv%08Xp%08X",
+			   hdev->bus, hdev->group, hdev->vendor, hdev->product))
+		return -ENOMEM;
+
+	return 0;
+}
+
+struct bus_type hid_bus_type = {
+	.name		= "hid",
+	.dev_groups	= hid_dev_groups,
+	.drv_groups	= hid_drv_groups,
+	.match		= hid_bus_match,
+	.probe		= hid_device_probe,
+	.remove		= hid_device_remove,
+	.uevent		= hid_uevent,
+};
+EXPORT_SYMBOL(hid_bus_type);
+
+int hid_add_device(struct hid_device *hdev)
+{
+	static atomic_t id = ATOMIC_INIT(0);
+	int ret;
+
+	if (WARN_ON(hdev->status & HID_STAT_ADDED))
+		return -EBUSY;
+
+	hdev->quirks = hid_lookup_quirk(hdev);
+
+	/* we need to kill them here, otherwise they will stay allocated to
+	 * wait for coming driver */
+	if (hid_ignore(hdev))
+		return -ENODEV;
+
+	/*
+	 * Check for the mandatory transport channel.
+	 */
+	 if (!hdev->ll_driver->raw_request) {
+		hid_err(hdev, "transport driver missing .raw_request()\n");
+		return -EINVAL;
+	 }
+
+	/*
+	 * Read the device report descriptor once and use as template
+	 * for the driver-specific modifications.
+	 */
+	ret = hdev->ll_driver->parse(hdev);
+	if (ret)
+		return ret;
+	if (!hdev->dev_rdesc)
+		return -ENODEV;
+
+	/*
+	 * Scan generic devices for group information
+	 */
+	if (hid_ignore_special_drivers) {
+		hdev->group = HID_GROUP_GENERIC;
+	} else if (!hdev->group &&
+		   !(hdev->quirks & HID_QUIRK_HAVE_SPECIAL_DRIVER)) {
+		ret = hid_scan_report(hdev);
+		if (ret)
+			hid_warn(hdev, "bad device descriptor (%d)\n", ret);
+	}
+
+	/* XXX hack, any other cleaner solution after the driver core
+	 * is converted to allow more than 20 bytes as the device name? */
+	dev_set_name(&hdev->dev, "%04X:%04X:%04X.%04X", hdev->bus,
+		     hdev->vendor, hdev->product, atomic_inc_return(&id));
+
+	hid_debug_register(hdev, dev_name(&hdev->dev));
+	ret = device_add(&hdev->dev);
+	if (!ret)
+		hdev->status |= HID_STAT_ADDED;
+	else
+		hid_debug_unregister(hdev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(hid_add_device);
+
+/**
+ * hid_allocate_device - allocate new hid device descriptor
+ *
+ * Allocate and initialize hid device, so that hid_destroy_device might be
+ * used to free it.
+ *
+ * New hid_device pointer is returned on success, otherwise ERR_PTR encoded
+ * error value.
+ */
+struct hid_device *hid_allocate_device(void)
+{
+	struct hid_device *hdev;
+	int ret = -ENOMEM;
+
+	hdev = kzalloc(sizeof(*hdev), GFP_KERNEL);
+	if (hdev == NULL)
+		return ERR_PTR(ret);
+
+	device_initialize(&hdev->dev);
+	hdev->dev.release = hid_device_release;
+	hdev->dev.bus = &hid_bus_type;
+	device_enable_async_suspend(&hdev->dev);
+
+	hid_close_report(hdev);
+
+	init_waitqueue_head(&hdev->debug_wait);
+	INIT_LIST_HEAD(&hdev->debug_list);
+	spin_lock_init(&hdev->debug_list_lock);
+	sema_init(&hdev->driver_input_lock, 1);
+	mutex_init(&hdev->ll_open_lock);
+
+	return hdev;
+}
+EXPORT_SYMBOL_GPL(hid_allocate_device);
+
+static void hid_remove_device(struct hid_device *hdev)
+{
+	if (hdev->status & HID_STAT_ADDED) {
+		device_del(&hdev->dev);
+		hid_debug_unregister(hdev);
+		hdev->status &= ~HID_STAT_ADDED;
+	}
+	kfree(hdev->dev_rdesc);
+	hdev->dev_rdesc = NULL;
+	hdev->dev_rsize = 0;
+}
+
+/**
+ * hid_destroy_device - free previously allocated device
+ *
+ * @hdev: hid device
+ *
+ * If you allocate hid_device through hid_allocate_device, you should ever
+ * free by this function.
+ */
+void hid_destroy_device(struct hid_device *hdev)
+{
+	hid_remove_device(hdev);
+	put_device(&hdev->dev);
+}
+EXPORT_SYMBOL_GPL(hid_destroy_device);
+
+
+static int __hid_bus_reprobe_drivers(struct device *dev, void *data)
+{
+	struct hid_driver *hdrv = data;
+	struct hid_device *hdev = to_hid_device(dev);
+
+	if (hdev->driver == hdrv &&
+	    !hdrv->match(hdev, hid_ignore_special_drivers) &&
+	    !test_and_set_bit(ffs(HID_STAT_REPROBED), &hdev->status))
+		return device_reprobe(dev);
+
+	return 0;
+}
+
+static int __hid_bus_driver_added(struct device_driver *drv, void *data)
+{
+	struct hid_driver *hdrv = to_hid_driver(drv);
+
+	if (hdrv->match) {
+		bus_for_each_dev(&hid_bus_type, NULL, hdrv,
+				 __hid_bus_reprobe_drivers);
+	}
+
+	return 0;
+}
+
+static int __bus_removed_driver(struct device_driver *drv, void *data)
+{
+	return bus_rescan_devices(&hid_bus_type);
+}
+
+int __hid_register_driver(struct hid_driver *hdrv, struct module *owner,
+		const char *mod_name)
+{
+	int ret;
+
+	hdrv->driver.name = hdrv->name;
+	hdrv->driver.bus = &hid_bus_type;
+	hdrv->driver.owner = owner;
+	hdrv->driver.mod_name = mod_name;
+
+	INIT_LIST_HEAD(&hdrv->dyn_list);
+	spin_lock_init(&hdrv->dyn_lock);
+
+	ret = driver_register(&hdrv->driver);
+
+	if (ret == 0)
+		bus_for_each_drv(&hid_bus_type, NULL, NULL,
+				 __hid_bus_driver_added);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(__hid_register_driver);
+
+void hid_unregister_driver(struct hid_driver *hdrv)
+{
+	driver_unregister(&hdrv->driver);
+	hid_free_dynids(hdrv);
+
+	bus_for_each_drv(&hid_bus_type, NULL, hdrv, __bus_removed_driver);
+}
+EXPORT_SYMBOL_GPL(hid_unregister_driver);
+
+int hid_check_keys_pressed(struct hid_device *hid)
+{
+	struct hid_input *hidinput;
+	int i;
+
+	if (!(hid->claimed & HID_CLAIMED_INPUT))
+		return 0;
+
+	list_for_each_entry(hidinput, &hid->inputs, list) {
+		for (i = 0; i < BITS_TO_LONGS(KEY_MAX); i++)
+			if (hidinput->input->key[i])
+				return 1;
+	}
+
+	return 0;
+}
+
+EXPORT_SYMBOL_GPL(hid_check_keys_pressed);
+
+static int __init hid_init(void)
+{
+	int ret;
+
+	if (hid_debug)
+		pr_warn("hid_debug is now used solely for parser and driver debugging.\n"
+			"debugfs is now used for inspecting the device (report descriptor, reports)\n");
+
+	ret = bus_register(&hid_bus_type);
+	if (ret) {
+		pr_err("can't register hid bus\n");
+		goto err;
+	}
+
+	ret = hidraw_init();
+	if (ret)
+		goto err_bus;
+
+	hid_debug_init();
+
+	return 0;
+err_bus:
+	bus_unregister(&hid_bus_type);
+err:
+	return ret;
+}
+
+static void __exit hid_exit(void)
+{
+	hid_debug_exit();
+	hidraw_exit();
+	bus_unregister(&hid_bus_type);
+	hid_quirks_exit(HID_BUS_ANY);
+}
+
+module_init(hid_init);
+module_exit(hid_exit);
+
+MODULE_AUTHOR("Andreas Gal");
+MODULE_AUTHOR("Vojtech Pavlik");
+MODULE_AUTHOR("Jiri Kosina");
+MODULE_LICENSE("GPL");
