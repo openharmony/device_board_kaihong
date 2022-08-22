@@ -1,0 +1,4 @@
+
+config VENDOR_KHDVK_3566B_DRIVER_NET_TOOL
+	bool "rk3566 Device drivers tool"
+	default y
