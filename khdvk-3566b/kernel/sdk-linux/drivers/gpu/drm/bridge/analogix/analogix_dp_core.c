@@ -1726,3 +1726,230 @@ int analogix_dp_audio_startup(struct analogix_dp_device *dp)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(analogix_dp_audio_startup);
+
+int analogix_dp_audio_get_eld(struct analogix_dp_device *dp, u8 *buf, size_t len)
+{
+	memcpy(buf, dp->connector.eld, min(sizeof(dp->connector.eld), len));
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(analogix_dp_audio_get_eld);
+
+int analogix_dp_loader_protect(struct analogix_dp_device *dp)
+{
+	int ret;
+
+	ret = pm_runtime_resume_and_get(dp->dev);
+	if (ret) {
+		dev_err(dp->dev, "failed to get runtime PM: %d\n", ret);
+		return ret;
+	}
+
+	analogix_dp_phy_power_on(dp);
+
+	dp->dpms_mode = DRM_MODE_DPMS_ON;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(analogix_dp_loader_protect);
+
+struct analogix_dp_device *
+analogix_dp_probe(struct device *dev, struct analogix_dp_plat_data *plat_data)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct analogix_dp_device *dp;
+	struct resource *res;
+	int ret;
+
+	if (!plat_data) {
+		dev_err(dev, "Invalided input plat_data\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	dp = devm_kzalloc(dev, sizeof(struct analogix_dp_device), GFP_KERNEL);
+	if (!dp)
+		return ERR_PTR(-ENOMEM);
+
+	dp->dev = &pdev->dev;
+	dp->dpms_mode = DRM_MODE_DPMS_OFF;
+
+	mutex_init(&dp->panel_lock);
+	dp->panel_is_prepared = false;
+
+	/*
+	 * platform dp driver need containor_of the plat_data to get
+	 * the driver private data, so we need to store the point of
+	 * plat_data, not the context of plat_data.
+	 */
+	dp->plat_data = plat_data;
+
+	ret = analogix_dp_dt_parse_pdata(dp);
+	if (ret)
+		return ERR_PTR(ret);
+
+	dp->phy = devm_phy_get(dp->dev, "dp");
+	if (IS_ERR(dp->phy)) {
+		dev_err(dp->dev, "no DP phy configured\n");
+		ret = PTR_ERR(dp->phy);
+		if (ret) {
+			/*
+			 * phy itself is not enabled, so we can move forward
+			 * assigning NULL to phy pointer.
+			 */
+			if (ret == -ENOSYS || ret == -ENODEV)
+				dp->phy = NULL;
+			else
+				return ERR_PTR(ret);
+		}
+	}
+
+	ret = devm_clk_bulk_get_all(dev, &dp->clks);
+	if (ret < 0) {
+		dev_err(dev, "failed to get clocks %d\n", ret);
+		return ERR_PTR(ret);
+	}
+
+	dp->nr_clks = ret;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+	dp->reg_base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(dp->reg_base))
+		return ERR_CAST(dp->reg_base);
+
+	dp->force_hpd = of_property_read_bool(dev->of_node, "force-hpd");
+
+	/* Try two different names */
+	dp->hpd_gpiod = devm_gpiod_get_optional(dev, "hpd", GPIOD_IN);
+	if (!dp->hpd_gpiod)
+		dp->hpd_gpiod = devm_gpiod_get_optional(dev, "samsung,hpd",
+							GPIOD_IN);
+	if (IS_ERR(dp->hpd_gpiod)) {
+		dev_err(dev, "error getting HDP GPIO: %ld\n",
+			PTR_ERR(dp->hpd_gpiod));
+		return ERR_CAST(dp->hpd_gpiod);
+	}
+
+	if (dp->hpd_gpiod) {
+		ret = devm_request_threaded_irq(dev,
+						gpiod_to_irq(dp->hpd_gpiod),
+						NULL,
+						analogix_dp_hpd_irq_handler,
+						IRQF_TRIGGER_RISING |
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						"analogix-hpd", dp);
+		if (ret) {
+			dev_err(dev, "failed to request hpd IRQ: %d\n", ret);
+			return ERR_PTR(ret);
+		}
+	}
+
+	dp->irq = platform_get_irq(pdev, 0);
+	if (dp->irq == -ENXIO) {
+		dev_err(&pdev->dev, "failed to get irq\n");
+		return ERR_PTR(-ENODEV);
+	}
+
+	irq_set_status_flags(dp->irq, IRQ_NOAUTOEN);
+	ret = devm_request_threaded_irq(&pdev->dev, dp->irq,
+					analogix_dp_hardirq,
+					analogix_dp_irq_thread,
+					0, "analogix-dp", dp);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to request irq\n");
+		return ERR_PTR(ret);
+	}
+
+	dp->bridge.driver_private = dp;
+	dp->bridge.funcs = &analogix_dp_bridge_funcs;
+
+	return dp;
+}
+EXPORT_SYMBOL_GPL(analogix_dp_probe);
+
+int analogix_dp_bind(struct analogix_dp_device *dp, struct drm_device *drm_dev)
+{
+	int ret;
+
+	dp->drm_dev = drm_dev;
+	dp->encoder = dp->plat_data->encoder;
+
+	dp->aux.name = "DP-AUX";
+	dp->aux.transfer = analogix_dpaux_transfer;
+	dp->aux.dev = dp->dev;
+
+	ret = drm_dp_aux_register(&dp->aux);
+	if (ret)
+		return ret;
+
+	pm_runtime_enable(dp->dev);
+
+	ret = analogix_dp_bridge_init(dp);
+	if (ret) {
+		DRM_ERROR("failed to init bridge (%d)\n", ret);
+		goto err_disable_pm_runtime;
+	}
+
+	return 0;
+
+err_disable_pm_runtime:
+	pm_runtime_disable(dp->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(analogix_dp_bind);
+
+void analogix_dp_unbind(struct analogix_dp_device *dp)
+{
+	dp->connector.funcs->destroy(&dp->connector);
+	drm_dp_aux_unregister(&dp->aux);
+	pm_runtime_disable(dp->dev);
+}
+EXPORT_SYMBOL_GPL(analogix_dp_unbind);
+
+void analogix_dp_remove(struct analogix_dp_device *dp)
+{
+}
+EXPORT_SYMBOL_GPL(analogix_dp_remove);
+
+int analogix_dp_runtime_suspend(struct analogix_dp_device *dp)
+{
+	clk_bulk_disable_unprepare(dp->nr_clks, dp->clks);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(analogix_dp_runtime_suspend);
+
+int analogix_dp_runtime_resume(struct analogix_dp_device *dp)
+{
+	return clk_bulk_prepare_enable(dp->nr_clks, dp->clks);
+}
+EXPORT_SYMBOL_GPL(analogix_dp_runtime_resume);
+
+int analogix_dp_start_crc(struct drm_connector *connector)
+{
+	struct analogix_dp_device *dp = to_dp(connector);
+
+	if (!connector->state->crtc) {
+		DRM_ERROR("Connector %s doesn't currently have a CRTC.\n",
+			  connector->name);
+		return -EINVAL;
+	}
+
+	return drm_dp_start_crc(&dp->aux, connector->state->crtc);
+}
+EXPORT_SYMBOL_GPL(analogix_dp_start_crc);
+
+int analogix_dp_stop_crc(struct drm_connector *connector)
+{
+	struct analogix_dp_device *dp = to_dp(connector);
+
+	return drm_dp_stop_crc(&dp->aux);
+}
+EXPORT_SYMBOL_GPL(analogix_dp_stop_crc);
+
+MODULE_AUTHOR("Jingoo Han <jg1.han@samsung.com>");
+MODULE_DESCRIPTION("Analogix DP Core Driver");
+MODULE_LICENSE("GPL v2");
