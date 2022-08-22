@@ -5170,3 +5170,298 @@ static int redist_disable_lpis(void)
 	/*
 	 * From that point on, we only try to do some damage control.
 	 */
+	pr_warn("GICv3: CPU%d: Booted with LPIs enabled, memory probably corrupted\n",
+		smp_processor_id());
+	add_taint(TAINT_CRAP, LOCKDEP_STILL_OK);
+
+	/* Disable LPIs */
+	val &= ~GICR_CTLR_ENABLE_LPIS;
+	writel_relaxed(val, rbase + GICR_CTLR);
+
+	/* Make sure any change to GICR_CTLR is observable by the GIC */
+	dsb(sy);
+
+	/*
+	 * Software must observe RWP==0 after clearing GICR_CTLR.EnableLPIs
+	 * from 1 to 0 before programming GICR_PEND{PROP}BASER registers.
+	 * Error out if we time out waiting for RWP to clear.
+	 */
+	while (readl_relaxed(rbase + GICR_CTLR) & GICR_CTLR_RWP) {
+		if (!timeout) {
+			pr_err("CPU%d: Timeout while disabling LPIs\n",
+			       smp_processor_id());
+			return -ETIMEDOUT;
+		}
+		udelay(1);
+		timeout--;
+	}
+
+	/*
+	 * After it has been written to 1, it is IMPLEMENTATION
+	 * DEFINED whether GICR_CTLR.EnableLPI becomes RES1 or can be
+	 * cleared to 0. Error out if clearing the bit failed.
+	 */
+	if (readl_relaxed(rbase + GICR_CTLR) & GICR_CTLR_ENABLE_LPIS) {
+		pr_err("CPU%d: Failed to disable LPIs\n", smp_processor_id());
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+int its_cpu_init(void)
+{
+	if (!list_empty(&its_nodes)) {
+		int ret;
+
+		ret = redist_disable_lpis();
+		if (ret)
+			return ret;
+
+		its_cpu_init_lpis();
+		its_cpu_init_collections();
+	}
+
+	return 0;
+}
+
+static const struct of_device_id its_device_id[] = {
+	{	.compatible	= "arm,gic-v3-its",	},
+	{},
+};
+
+static int __init its_of_probe(struct device_node *node)
+{
+	struct device_node *np;
+	struct resource res;
+
+	for (np = of_find_matching_node(node, its_device_id); np;
+	     np = of_find_matching_node(np, its_device_id)) {
+		if (!of_device_is_available(np))
+			continue;
+		if (!of_property_read_bool(np, "msi-controller")) {
+			pr_warn("%pOF: no msi-controller property, ITS ignored\n",
+				np);
+			continue;
+		}
+
+		if (of_address_to_resource(np, 0, &res)) {
+			pr_warn("%pOF: no regs?\n", np);
+			continue;
+		}
+
+		its_probe_one(&res, &np->fwnode, of_node_to_nid(np));
+	}
+	return 0;
+}
+
+#ifdef CONFIG_ACPI
+
+#define ACPI_GICV3_ITS_MEM_SIZE (SZ_128K)
+
+#ifdef CONFIG_ACPI_NUMA
+struct its_srat_map {
+	/* numa node id */
+	u32	numa_node;
+	/* GIC ITS ID */
+	u32	its_id;
+};
+
+static struct its_srat_map *its_srat_maps __initdata;
+static int its_in_srat __initdata;
+
+static int __init acpi_get_its_numa_node(u32 its_id)
+{
+	int i;
+
+	for (i = 0; i < its_in_srat; i++) {
+		if (its_id == its_srat_maps[i].its_id)
+			return its_srat_maps[i].numa_node;
+	}
+	return NUMA_NO_NODE;
+}
+
+static int __init gic_acpi_match_srat_its(union acpi_subtable_headers *header,
+					  const unsigned long end)
+{
+	return 0;
+}
+
+static int __init gic_acpi_parse_srat_its(union acpi_subtable_headers *header,
+			 const unsigned long end)
+{
+	int node;
+	struct acpi_srat_gic_its_affinity *its_affinity;
+
+	its_affinity = (struct acpi_srat_gic_its_affinity *)header;
+	if (!its_affinity)
+		return -EINVAL;
+
+	if (its_affinity->header.length < sizeof(*its_affinity)) {
+		pr_err("SRAT: Invalid header length %d in ITS affinity\n",
+			its_affinity->header.length);
+		return -EINVAL;
+	}
+
+	/*
+	 * Note that in theory a new proximity node could be created by this
+	 * entry as it is an SRAT resource allocation structure.
+	 * We do not currently support doing so.
+	 */
+	node = pxm_to_node(its_affinity->proximity_domain);
+
+	if (node == NUMA_NO_NODE || node >= MAX_NUMNODES) {
+		pr_err("SRAT: Invalid NUMA node %d in ITS affinity\n", node);
+		return 0;
+	}
+
+	its_srat_maps[its_in_srat].numa_node = node;
+	its_srat_maps[its_in_srat].its_id = its_affinity->its_id;
+	its_in_srat++;
+	pr_info("SRAT: PXM %d -> ITS %d -> Node %d\n",
+		its_affinity->proximity_domain, its_affinity->its_id, node);
+
+	return 0;
+}
+
+static void __init acpi_table_parse_srat_its(void)
+{
+	int count;
+
+	count = acpi_table_parse_entries(ACPI_SIG_SRAT,
+			sizeof(struct acpi_table_srat),
+			ACPI_SRAT_TYPE_GIC_ITS_AFFINITY,
+			gic_acpi_match_srat_its, 0);
+	if (count <= 0)
+		return;
+
+	its_srat_maps = kmalloc_array(count, sizeof(struct its_srat_map),
+				      GFP_KERNEL);
+	if (!its_srat_maps) {
+		pr_warn("SRAT: Failed to allocate memory for its_srat_maps!\n");
+		return;
+	}
+
+	acpi_table_parse_entries(ACPI_SIG_SRAT,
+			sizeof(struct acpi_table_srat),
+			ACPI_SRAT_TYPE_GIC_ITS_AFFINITY,
+			gic_acpi_parse_srat_its, 0);
+}
+
+/* free the its_srat_maps after ITS probing */
+static void __init acpi_its_srat_maps_free(void)
+{
+	kfree(its_srat_maps);
+}
+#else
+static void __init acpi_table_parse_srat_its(void)	{ }
+static int __init acpi_get_its_numa_node(u32 its_id) { return NUMA_NO_NODE; }
+static void __init acpi_its_srat_maps_free(void) { }
+#endif
+
+static int __init gic_acpi_parse_madt_its(union acpi_subtable_headers *header,
+					  const unsigned long end)
+{
+	struct acpi_madt_generic_translator *its_entry;
+	struct fwnode_handle *dom_handle;
+	struct resource res;
+	int err;
+
+	its_entry = (struct acpi_madt_generic_translator *)header;
+	memset(&res, 0, sizeof(res));
+	res.start = its_entry->base_address;
+	res.end = its_entry->base_address + ACPI_GICV3_ITS_MEM_SIZE - 1;
+	res.flags = IORESOURCE_MEM;
+
+	dom_handle = irq_domain_alloc_fwnode(&res.start);
+	if (!dom_handle) {
+		pr_err("ITS@%pa: Unable to allocate GICv3 ITS domain token\n",
+		       &res.start);
+		return -ENOMEM;
+	}
+
+	err = iort_register_domain_token(its_entry->translation_id, res.start,
+					 dom_handle);
+	if (err) {
+		pr_err("ITS@%pa: Unable to register GICv3 ITS domain token (ITS ID %d) to IORT\n",
+		       &res.start, its_entry->translation_id);
+		goto dom_err;
+	}
+
+	err = its_probe_one(&res, dom_handle,
+			acpi_get_its_numa_node(its_entry->translation_id));
+	if (!err)
+		return 0;
+
+	iort_deregister_domain_token(its_entry->translation_id);
+dom_err:
+	irq_domain_free_fwnode(dom_handle);
+	return err;
+}
+
+static void __init its_acpi_probe(void)
+{
+	acpi_table_parse_srat_its();
+	acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_TRANSLATOR,
+			      gic_acpi_parse_madt_its, 0);
+	acpi_its_srat_maps_free();
+}
+#else
+static void __init its_acpi_probe(void) { }
+#endif
+
+int __init its_init(struct fwnode_handle *handle, struct rdists *rdists,
+		    struct irq_domain *parent_domain)
+{
+	struct device_node *of_node;
+	struct its_node *its;
+	bool has_v4 = false;
+	bool has_v4_1 = false;
+	int err;
+
+	gic_rdists = rdists;
+
+	its_parent = parent_domain;
+	of_node = to_of_node(handle);
+	if (of_node)
+		its_of_probe(of_node);
+	else
+		its_acpi_probe();
+
+	if (list_empty(&its_nodes)) {
+		pr_warn("ITS: No ITS available, not enabling LPIs\n");
+		return -ENXIO;
+	}
+
+	err = allocate_lpi_tables();
+	if (err)
+		return err;
+
+	list_for_each_entry(its, &its_nodes, entry) {
+		has_v4 |= is_v4(its);
+		has_v4_1 |= is_v4_1(its);
+	}
+
+	/* Don't bother with inconsistent systems */
+	if (WARN_ON(!has_v4_1 && rdists->has_rvpeid))
+		rdists->has_rvpeid = false;
+
+	if (has_v4 & rdists->has_vlpis) {
+		const struct irq_domain_ops *sgi_ops;
+
+		if (has_v4_1)
+			sgi_ops = &its_sgi_domain_ops;
+		else
+			sgi_ops = NULL;
+
+		if (its_init_vpe_domain() ||
+		    its_init_v4(parent_domain, &its_vpe_domain_ops, sgi_ops)) {
+			rdists->has_vlpis = false;
+			pr_err("ITS: Disabling GICv4 support\n");
+		}
+	}
+
+	register_syscore_ops(&its_syscore_ops);
+
+	return 0;
+}
