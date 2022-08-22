@@ -1906,3 +1906,515 @@ dhd_dbg_stop_pkt_monitor(dhd_pub_t *dhdp)
 			return __ret; \
 		} \
 	} while (0);
+
+int
+dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
+		uint16 req_count, uint16 *resp_count)
+{
+	dhd_dbg_tx_report_t *tx_report;
+	dhd_dbg_tx_info_t *tx_pkt;
+	wifi_tx_report_t *ptr;
+	compat_wifi_tx_report_t *cptr;
+	dhd_dbg_pkt_mon_state_t tx_pkt_state;
+	dhd_dbg_pkt_mon_state_t tx_status_state;
+	uint16 pkt_count, count;
+	unsigned long flags;
+
+	DHD_PKT_INFO(("%s, %d\n", __FUNCTION__, __LINE__));
+	BCM_REFERENCE(ptr);
+	BCM_REFERENCE(cptr);
+
+	if (!dhdp || !dhdp->dbg) {
+		DHD_PKT_MON(("%s(): dhdp=%p, dhdp->dbg=%p\n", __FUNCTION__,
+			dhdp, (dhdp ? dhdp->dbg : NULL)));
+		return -EINVAL;
+	}
+
+	DHD_PKT_MON_LOCK(dhdp->dbg->pkt_mon_lock, flags);
+	tx_pkt_state = dhdp->dbg->pkt_mon.tx_pkt_state;
+	tx_status_state = dhdp->dbg->pkt_mon.tx_status_state;
+	if (PKT_MON_DETACHED(tx_pkt_state) || PKT_MON_DETACHED(tx_status_state)) {
+		DHD_PKT_MON(("%s(): packet monitor is not yet enabled, "
+			"tx_pkt_state=%d, tx_status_state=%d\n", __FUNCTION__,
+			tx_pkt_state, tx_status_state));
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		return -EINVAL;
+	}
+
+	count = 0;
+	tx_report = dhdp->dbg->pkt_mon.tx_report;
+	tx_pkt = tx_report->tx_pkts;
+	pkt_count = MIN(req_count, tx_report->status_pos);
+
+#ifdef CONFIG_COMPAT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0))
+	if (in_compat_syscall())
+#else
+	if (is_compat_task())
+#endif
+	{
+		cptr = (compat_wifi_tx_report_t *)user_buf;
+		while ((count < pkt_count) && tx_pkt && cptr) {
+			compat_wifi_tx_report_t *comp_ptr = compat_ptr((uintptr_t) cptr);
+			compat_dhd_dbg_pkt_info_t compat_tx_pkt;
+			__dhd_dbg_dump_tx_pkt_info(dhdp, tx_pkt, count);
+			__COPY_TO_USER(&comp_ptr->fate, &tx_pkt->fate, sizeof(tx_pkt->fate));
+
+			compat_tx_pkt.payload_type = tx_pkt->info.payload_type;
+			compat_tx_pkt.pkt_len = tx_pkt->info.pkt_len;
+			compat_tx_pkt.driver_ts = tx_pkt->info.driver_ts;
+			compat_tx_pkt.firmware_ts = tx_pkt->info.firmware_ts;
+			compat_tx_pkt.pkt_hash = tx_pkt->info.pkt_hash;
+			__COPY_TO_USER(&comp_ptr->frame_inf.payload_type,
+				&compat_tx_pkt.payload_type,
+				OFFSETOF(compat_dhd_dbg_pkt_info_t, pkt_hash));
+			__COPY_TO_USER(comp_ptr->frame_inf.frame_content.ethernet_ii,
+				PKTDATA(dhdp->osh, tx_pkt->info.pkt), tx_pkt->info.pkt_len);
+
+			cptr++;
+			tx_pkt++;
+			count++;
+		}
+	} else
+#endif /* CONFIG_COMPAT */
+	{
+		ptr = (wifi_tx_report_t *)user_buf;
+		while ((count < pkt_count) && tx_pkt && ptr) {
+			__dhd_dbg_dump_tx_pkt_info(dhdp, tx_pkt, count);
+			__COPY_TO_USER(&ptr->fate, &tx_pkt->fate, sizeof(tx_pkt->fate));
+			__COPY_TO_USER(&ptr->frame_inf.payload_type,
+				&tx_pkt->info.payload_type,
+				OFFSETOF(dhd_dbg_pkt_info_t, pkt_hash));
+			__COPY_TO_USER(ptr->frame_inf.frame_content.ethernet_ii,
+				PKTDATA(dhdp->osh, tx_pkt->info.pkt), tx_pkt->info.pkt_len);
+
+			ptr++;
+			tx_pkt++;
+			count++;
+		}
+	}
+	*resp_count = pkt_count;
+
+	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+	if (!pkt_count) {
+		DHD_ERROR(("%s(): no tx_status in tx completion messages, "
+			"make sure that 'd11status' is enabled in firmware, "
+			"status_pos=%u\n", __FUNCTION__, pkt_count));
+	}
+
+	return BCME_OK;
+}
+
+int
+dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
+		uint16 req_count, uint16 *resp_count)
+{
+	dhd_dbg_rx_report_t *rx_report;
+	dhd_dbg_rx_info_t *rx_pkt;
+	wifi_rx_report_t *ptr;
+	compat_wifi_rx_report_t *cptr;
+	dhd_dbg_pkt_mon_state_t rx_pkt_state;
+	uint16 pkt_count, count;
+	unsigned long flags;
+
+	DHD_PKT_INFO(("%s, %d\n", __FUNCTION__, __LINE__));
+	BCM_REFERENCE(ptr);
+	BCM_REFERENCE(cptr);
+
+	if (!dhdp || !dhdp->dbg) {
+		DHD_PKT_MON(("%s(): dhdp=%p, dhdp->dbg=%p\n", __FUNCTION__,
+			dhdp, (dhdp ? dhdp->dbg : NULL)));
+		return -EINVAL;
+	}
+
+	DHD_PKT_MON_LOCK(dhdp->dbg->pkt_mon_lock, flags);
+	rx_pkt_state = dhdp->dbg->pkt_mon.rx_pkt_state;
+	if (PKT_MON_DETACHED(rx_pkt_state)) {
+		DHD_PKT_MON(("%s(): packet fetch is not allowed , "
+			"rx_pkt_state=%d\n", __FUNCTION__, rx_pkt_state));
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		return -EINVAL;
+	}
+
+	count = 0;
+	rx_report = dhdp->dbg->pkt_mon.rx_report;
+	rx_pkt = rx_report->rx_pkts;
+	pkt_count = MIN(req_count, rx_report->pkt_pos);
+
+#ifdef CONFIG_COMPAT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0))
+	if (in_compat_syscall())
+#else
+	if (is_compat_task())
+#endif
+	{
+		cptr = (compat_wifi_rx_report_t *)user_buf;
+		while ((count < pkt_count) && rx_pkt && cptr) {
+			compat_wifi_rx_report_t *comp_ptr = compat_ptr((uintptr_t) cptr);
+			compat_dhd_dbg_pkt_info_t compat_rx_pkt;
+			__dhd_dbg_dump_rx_pkt_info(dhdp, rx_pkt, count);
+			__COPY_TO_USER(&comp_ptr->fate, &rx_pkt->fate, sizeof(rx_pkt->fate));
+
+			compat_rx_pkt.payload_type = rx_pkt->info.payload_type;
+			compat_rx_pkt.pkt_len = rx_pkt->info.pkt_len;
+			compat_rx_pkt.driver_ts = rx_pkt->info.driver_ts;
+			compat_rx_pkt.firmware_ts = rx_pkt->info.firmware_ts;
+			compat_rx_pkt.pkt_hash = rx_pkt->info.pkt_hash;
+			__COPY_TO_USER(&comp_ptr->frame_inf.payload_type,
+				&compat_rx_pkt.payload_type,
+				OFFSETOF(compat_dhd_dbg_pkt_info_t, pkt_hash));
+			__COPY_TO_USER(comp_ptr->frame_inf.frame_content.ethernet_ii,
+				PKTDATA(dhdp->osh, rx_pkt->info.pkt), rx_pkt->info.pkt_len);
+
+			cptr++;
+			rx_pkt++;
+			count++;
+		}
+	} else
+#endif /* CONFIG_COMPAT */
+	{
+		ptr = (wifi_rx_report_t *)user_buf;
+		while ((count < pkt_count) && rx_pkt && ptr) {
+			__dhd_dbg_dump_rx_pkt_info(dhdp, rx_pkt, count);
+
+			__COPY_TO_USER(&ptr->fate, &rx_pkt->fate, sizeof(rx_pkt->fate));
+			__COPY_TO_USER(&ptr->frame_inf.payload_type,
+				&rx_pkt->info.payload_type,
+				OFFSETOF(dhd_dbg_pkt_info_t, pkt_hash));
+			__COPY_TO_USER(ptr->frame_inf.frame_content.ethernet_ii,
+				PKTDATA(dhdp->osh, rx_pkt->info.pkt), rx_pkt->info.pkt_len);
+
+			ptr++;
+			rx_pkt++;
+			count++;
+		}
+	}
+
+	*resp_count = pkt_count;
+	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+
+	return BCME_OK;
+}
+
+int
+dhd_dbg_detach_pkt_monitor(dhd_pub_t *dhdp)
+{
+	dhd_dbg_tx_report_t *tx_report;
+	dhd_dbg_rx_report_t *rx_report;
+	dhd_dbg_pkt_mon_state_t tx_pkt_state;
+	dhd_dbg_pkt_mon_state_t tx_status_state;
+	dhd_dbg_pkt_mon_state_t rx_pkt_state;
+	unsigned long flags;
+
+	DHD_PKT_INFO(("%s, %d\n", __FUNCTION__, __LINE__));
+	if (!dhdp || !dhdp->dbg) {
+		DHD_PKT_MON(("%s(): dhdp=%p, dhdp->dbg=%p\n", __FUNCTION__,
+			dhdp, (dhdp ? dhdp->dbg : NULL)));
+		return -EINVAL;
+	}
+
+	DHD_PKT_MON_LOCK(dhdp->dbg->pkt_mon_lock, flags);
+	tx_pkt_state = dhdp->dbg->pkt_mon.tx_pkt_state;
+	tx_status_state = dhdp->dbg->pkt_mon.tx_status_state;
+	rx_pkt_state = dhdp->dbg->pkt_mon.rx_pkt_state;
+
+	if (PKT_MON_DETACHED(tx_pkt_state) || PKT_MON_DETACHED(tx_status_state) ||
+			PKT_MON_DETACHED(rx_pkt_state)) {
+		DHD_PKT_MON(("%s(): packet monitor is already detached, "
+			"tx_pkt_state=%d, tx_status_state=%d, rx_pkt_state=%d\n",
+			__FUNCTION__, tx_pkt_state, tx_status_state, rx_pkt_state));
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		return -EINVAL;
+	}
+
+	tx_report = dhdp->dbg->pkt_mon.tx_report;
+	rx_report = dhdp->dbg->pkt_mon.rx_report;
+
+	/* free and de-initalize tx packet monitoring */
+	dhdp->dbg->pkt_mon.tx_pkt_state = PKT_MON_DETACHED;
+	dhdp->dbg->pkt_mon.tx_status_state = PKT_MON_DETACHED;
+	if (tx_report) {
+		if (tx_report->tx_pkts) {
+			__dhd_dbg_free_tx_pkts(dhdp, tx_report->tx_pkts,
+				tx_report->pkt_pos);
+			MFREE(dhdp->osh, tx_report->tx_pkts,
+				(sizeof(*tx_report->tx_pkts) * MAX_FATE_LOG_LEN));
+			dhdp->dbg->pkt_mon.tx_report->tx_pkts = NULL;
+		}
+		MFREE(dhdp->osh, tx_report, sizeof(*tx_report));
+		dhdp->dbg->pkt_mon.tx_report = NULL;
+	}
+	dhdp->dbg->pkt_mon.tx_pkt_mon = NULL;
+	dhdp->dbg->pkt_mon.tx_status_mon = NULL;
+
+	/* free and de-initalize rx packet monitoring */
+	dhdp->dbg->pkt_mon.rx_pkt_state = PKT_MON_DETACHED;
+	if (rx_report) {
+		if (rx_report->rx_pkts) {
+			__dhd_dbg_free_rx_pkts(dhdp, rx_report->rx_pkts,
+				rx_report->pkt_pos);
+			MFREE(dhdp->osh, rx_report->rx_pkts,
+				(sizeof(*rx_report->rx_pkts) * MAX_FATE_LOG_LEN));
+			dhdp->dbg->pkt_mon.rx_report->rx_pkts = NULL;
+		}
+		MFREE(dhdp->osh, rx_report, sizeof(*rx_report));
+		dhdp->dbg->pkt_mon.rx_report = NULL;
+	}
+	dhdp->dbg->pkt_mon.rx_pkt_mon = NULL;
+
+	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+	DHD_PKT_MON(("%s(): packet monitor detach succeeded\n", __FUNCTION__));
+	return BCME_OK;
+}
+#endif /* DBG_PKT_MON */
+
+#if defined(DBG_PKT_MON)
+bool
+dhd_dbg_process_tx_status(dhd_pub_t *dhdp, void *pkt, uint32 pktid,
+		uint16 status)
+{
+	bool pkt_fate = TRUE;
+	if (dhdp->d11_tx_status) {
+		pkt_fate = (status == WLFC_CTL_PKTFLAG_DISCARD) ? TRUE : FALSE;
+		DHD_DBG_PKT_MON_TX_STATUS(dhdp, pkt, pktid, status);
+	}
+	return pkt_fate;
+}
+#else /* DBG_PKT_MON || DHD_PKT_LOGGING */
+bool
+dhd_dbg_process_tx_status(dhd_pub_t *dhdp, void *pkt,
+		uint32 pktid, uint16 status)
+{
+	return TRUE;
+}
+#endif // endif
+
+#define	EL_LOG_STR_LEN	512
+
+void
+print_roam_enhanced_log(prcd_event_log_hdr_t *plog_hdr)
+{
+	prsv_periodic_log_hdr_t *hdr = (prsv_periodic_log_hdr_t *)plog_hdr->log_ptr;
+	char chanspec_buf[CHANSPEC_STR_LEN];
+
+	if (hdr->version != ROAM_LOG_VER_1) {
+		DHD_ERROR(("ROAM_LOG ENHANCE: version is not matched\n"));
+		goto default_print;
+		return;
+	}
+
+	switch (hdr->id) {
+		case ROAM_LOG_SCANSTART:
+		{
+			roam_log_trig_v1_t *log = (roam_log_trig_v1_t *)plog_hdr->log_ptr;
+			DHD_ERROR(("ROAM_LOG_SCANSTART time: %d,"
+				" version:%d reason: %d rssi:%d cu:%d result:%d\n",
+				plog_hdr->armcycle, log->hdr.version, log->reason,
+				log->rssi, log->current_cu, log->result));
+			if (log->reason == WLC_E_REASON_DEAUTH ||
+				log->reason == WLC_E_REASON_DISASSOC) {
+				DHD_ERROR(("  ROAM_LOG_PRT_ROAM: RCVD reason:%d\n",
+					log->prt_roam.rcvd_reason));
+			} else if (log->reason == WLC_E_REASON_BSSTRANS_REQ) {
+				DHD_ERROR(("  ROAM_LOG_BSS_REQ: mode:%d candidate:%d token:%d "
+					"duration disassoc:%d valid:%d term:%d\n",
+					log->bss_trans.req_mode, log->bss_trans.nbrlist_size,
+					log->bss_trans.token, log->bss_trans.disassoc_dur,
+					log->bss_trans.validity_dur, log->bss_trans.bss_term_dur));
+			}
+			break;
+		}
+		case ROAM_LOG_SCAN_CMPLT:
+		{
+			int i;
+			roam_log_scan_cmplt_v1_t *log =
+				(roam_log_scan_cmplt_v1_t *)plog_hdr->log_ptr;
+
+			DHD_ERROR(("ROAM_LOG_SCAN_CMPL: time:%d version:%d"
+				"is_full:%d scan_count:%d score_delta:%d",
+				plog_hdr->armcycle, log->hdr.version, log->full_scan,
+				log->scan_count, log->score_delta));
+			DHD_ERROR(("  ROAM_LOG_CUR_AP: " MACDBG "rssi:%d score:%d channel:%s\n",
+					MAC2STRDBG((uint8 *)&log->cur_info.addr),
+					log->cur_info.rssi,
+					log->cur_info.score,
+					wf_chspec_ntoa_ex(log->cur_info.chanspec, chanspec_buf)));
+			for (i = 0; i < log->scan_list_size; i++) {
+				DHD_ERROR(("  ROAM_LOG_CANDIDATE %d: " MACDBG
+					"rssi:%d score:%d channel:%s TPUT:%dkbps\n",
+					i, MAC2STRDBG((uint8 *)&log->scan_list[i].addr),
+					log->scan_list[i].rssi, log->scan_list[i].score,
+					wf_chspec_ntoa_ex(log->scan_list[i].chanspec,
+					chanspec_buf),
+					log->scan_list[i].estm_tput != ROAM_LOG_INVALID_TPUT?
+					log->scan_list[i].estm_tput:0));
+			}
+			break;
+		}
+		case ROAM_LOG_ROAM_CMPLT:
+		{
+			roam_log_cmplt_v1_t *log = (roam_log_cmplt_v1_t *)plog_hdr->log_ptr;
+			DHD_ERROR(("ROAM_LOG_ROAM_CMPL: time: %d, version:%d"
+				"status: %d reason: %d channel:%s retry:%d " MACDBG "\n",
+				plog_hdr->armcycle, log->hdr.version, log->status, log->reason,
+				wf_chspec_ntoa_ex(log->chanspec, chanspec_buf),
+				log->retry, MAC2STRDBG((uint8 *)&log->addr)));
+			break;
+		}
+		case ROAM_LOG_NBR_REQ:
+		{
+			roam_log_nbrreq_v1_t *log = (roam_log_nbrreq_v1_t *)plog_hdr->log_ptr;
+			DHD_ERROR(("ROAM_LOG_NBR_REQ: time: %d, version:%d token:%d\n",
+				plog_hdr->armcycle, log->hdr.version, log->token));
+			break;
+		}
+		case ROAM_LOG_NBR_REP:
+		{
+			roam_log_nbrrep_v1_t *log = (roam_log_nbrrep_v1_t *)plog_hdr->log_ptr;
+			DHD_ERROR(("ROAM_LOG_NBR_REP: time:%d, veresion:%d chan_num:%d\n",
+				plog_hdr->armcycle, log->hdr.version, log->channel_num));
+			break;
+		}
+		case ROAM_LOG_BCN_REQ:
+		{
+			roam_log_bcnrpt_req_v1_t *log =
+				(roam_log_bcnrpt_req_v1_t *)plog_hdr->log_ptr;
+			DHD_ERROR(("ROAM_LOG_BCN_REQ: time:%d, version:%d ret:%d"
+				"class:%d num_chan:%d ",
+				plog_hdr->armcycle, log->hdr.version,
+				log->result, log->reg, log->channel));
+			DHD_ERROR(("ROAM_LOG_BCN_REQ: mode:%d is_wild:%d duration:%d"
+				"ssid_len:%d\n", log->mode, log->bssid_wild,
+				log->duration, log->ssid_len));
+			break;
+		}
+		case ROAM_LOG_BCN_REP:
+		{
+			roam_log_bcnrpt_rep_v1_t *log =
+				(roam_log_bcnrpt_rep_v1_t *)plog_hdr->log_ptr;
+			DHD_ERROR(("ROAM_LOG_BCN_REP: time:%d, verseion:%d count:%d\n",
+				plog_hdr->armcycle, log->hdr.version,
+				log->count));
+			break;
+		}
+		default:
+			goto default_print;
+	}
+
+	return;
+
+default_print:
+	{
+		uint32 *ptr = (uint32 *)plog_hdr->log_ptr;
+		int i;
+		int loop_cnt = hdr->length / sizeof(uint32);
+		struct bcmstrbuf b;
+		char pr_buf[EL_LOG_STR_LEN] = { 0 };
+
+		bcm_binit(&b, pr_buf, EL_LOG_STR_LEN);
+		bcm_bprintf(&b, "ROAM_LOG_UNKNOWN ID:%d ver:%d armcycle:%d",
+			hdr->id, hdr->version, plog_hdr->armcycle);
+		for (i = 0; i < loop_cnt && b.size > 0; i++) {
+			bcm_bprintf(&b, " %x", *ptr);
+			ptr++;
+		}
+		DHD_ERROR(("%s\n", b.origbuf));
+	}
+}
+
+/*
+ * dhd_dbg_attach: initialziation of dhd dbugability module
+ *
+ * Return: An error code or 0 on success.
+ */
+int
+dhd_dbg_attach(dhd_pub_t *dhdp, dbg_pullreq_t os_pullreq,
+	dbg_urgent_noti_t os_urgent_notifier, void *os_priv)
+{
+	dhd_dbg_t *dbg = NULL;
+	dhd_dbg_ring_t *ring = NULL;
+	int ret = BCME_ERROR, ring_id = 0;
+	void *buf = NULL;
+
+	dbg = MALLOCZ(dhdp->osh, sizeof(dhd_dbg_t));
+	if (!dbg)
+		return BCME_NOMEM;
+
+#ifdef CONFIG_DHD_USE_STATIC_BUF
+	buf = DHD_OS_PREALLOC(dhdp, DHD_PREALLOC_FW_VERBOSE_RING, FW_VERBOSE_RING_SIZE);
+#else
+	buf = MALLOCZ(dhdp->osh, FW_VERBOSE_RING_SIZE);
+#endif
+	if (!buf)
+		goto error;
+	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[FW_VERBOSE_RING_ID], FW_VERBOSE_RING_ID,
+			(uint8 *)FW_VERBOSE_RING_NAME, FW_VERBOSE_RING_SIZE, buf, FALSE);
+	if (ret)
+		goto error;
+
+#ifdef CONFIG_DHD_USE_STATIC_BUF
+	buf = DHD_OS_PREALLOC(dhdp, DHD_PREALLOC_DHD_EVENT_RING, DHD_EVENT_RING_SIZE);
+#else
+	buf = MALLOCZ(dhdp->osh, DHD_EVENT_RING_SIZE);
+#endif
+	if (!buf)
+		goto error;
+	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[DHD_EVENT_RING_ID], DHD_EVENT_RING_ID,
+			(uint8 *)DHD_EVENT_RING_NAME, DHD_EVENT_RING_SIZE, buf, FALSE);
+	if (ret)
+		goto error;
+
+	dbg->private = os_priv;
+	dbg->pullreq = os_pullreq;
+	dbg->urgent_notifier = os_urgent_notifier;
+	dhdp->dbg = dbg;
+
+	return BCME_OK;
+
+error:
+	for (ring_id = DEBUG_RING_ID_INVALID + 1; ring_id < DEBUG_RING_ID_MAX; ring_id++) {
+		if (VALID_RING(dbg->dbg_rings[ring_id].id)) {
+			ring = &dbg->dbg_rings[ring_id];
+			dhd_dbg_ring_deinit(dhdp, ring);
+			if (ring->ring_buf) {
+#ifndef CONFIG_DHD_USE_STATIC_BUF
+				MFREE(dhdp->osh, ring->ring_buf, ring->ring_size);
+#endif
+				ring->ring_buf = NULL;
+			}
+			ring->ring_size = 0;
+		}
+	}
+	MFREE(dhdp->osh, dhdp->dbg, sizeof(dhd_dbg_t));
+
+	return ret;
+}
+
+/*
+ * dhd_dbg_detach: clean up dhd dbugability module
+ */
+void
+dhd_dbg_detach(dhd_pub_t *dhdp)
+{
+	int ring_id;
+	dhd_dbg_ring_t *ring = NULL;
+	dhd_dbg_t *dbg;
+
+	if (!dhdp->dbg)
+		return;
+	dbg = dhdp->dbg;
+	for (ring_id = DEBUG_RING_ID_INVALID + 1; ring_id < DEBUG_RING_ID_MAX; ring_id++) {
+		if (VALID_RING(dbg->dbg_rings[ring_id].id)) {
+			ring = &dbg->dbg_rings[ring_id];
+			dhd_dbg_ring_deinit(dhdp, ring);
+			if (ring->ring_buf) {
+#ifndef CONFIG_DHD_USE_STATIC_BUF
+				MFREE(dhdp->osh, ring->ring_buf, ring->ring_size);
+#endif
+				ring->ring_buf = NULL;
+			}
+			ring->ring_size = 0;
+		}
+	}
+	MFREE(dhdp->osh, dhdp->dbg, sizeof(dhd_dbg_t));
+}
