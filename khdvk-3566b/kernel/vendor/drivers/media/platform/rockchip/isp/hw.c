@@ -675,3 +675,345 @@ void rkisp_soft_reset(struct rkisp_hw_dev *dev, bool is_secure)
 	}
 }
 
+static void isp_config_clk(struct rkisp_hw_dev *dev, int on)
+{
+	u32 val = !on ? 0 :
+		CIF_ICCL_ISP_CLK | CIF_ICCL_CP_CLK | CIF_ICCL_MRSZ_CLK |
+		CIF_ICCL_SRSZ_CLK | CIF_ICCL_JPEG_CLK | CIF_ICCL_MI_CLK |
+		CIF_ICCL_IE_CLK | CIF_ICCL_MIPI_CLK | CIF_ICCL_DCROP_CLK;
+
+	if ((dev->isp_ver == ISP_V20 || dev->isp_ver == ISP_V30) && on)
+		val |= ICCL_MPFBC_CLK;
+
+	writel(val, dev->base_addr + CIF_ICCL);
+	if (dev->is_unite)
+		writel(val, dev->base_next_addr + CIF_ICCL);
+
+	if (dev->isp_ver == ISP_V12 || dev->isp_ver == ISP_V13) {
+		val = !on ? 0 :
+		      CIF_CLK_CTRL_MI_Y12 | CIF_CLK_CTRL_MI_SP |
+		      CIF_CLK_CTRL_MI_RAW0 | CIF_CLK_CTRL_MI_RAW1 |
+		      CIF_CLK_CTRL_MI_READ | CIF_CLK_CTRL_MI_RAWRD |
+		      CIF_CLK_CTRL_CP | CIF_CLK_CTRL_IE;
+
+		writel(val, dev->base_addr + CIF_VI_ISP_CLK_CTRL_V12);
+	} else if (dev->isp_ver == ISP_V20 ||
+		   dev->isp_ver == ISP_V21 ||
+		   dev->isp_ver == ISP_V30) {
+		val = !on ? 0 :
+		      CLK_CTRL_MI_LDC | CLK_CTRL_MI_MP |
+		      CLK_CTRL_MI_JPEG | CLK_CTRL_MI_DP |
+		      CLK_CTRL_MI_Y12 | CLK_CTRL_MI_SP |
+		      CLK_CTRL_MI_RAW0 | CLK_CTRL_MI_RAW1 |
+		      CLK_CTRL_MI_READ | CLK_CTRL_MI_RAWRD |
+		      CLK_CTRL_ISP_RAW;
+
+		if ((dev->isp_ver == ISP_V20 || dev->isp_ver == ISP_V30) && on)
+			val |= CLK_CTRL_ISP_3A;
+		writel(val, dev->base_addr + CTRL_VI_ISP_CLK_CTRL);
+		if (dev->is_unite)
+			writel(val, dev->base_next_addr + CTRL_VI_ISP_CLK_CTRL);
+	}
+}
+
+static void disable_sys_clk(struct rkisp_hw_dev *dev)
+{
+	int i;
+
+	if (dev->isp_ver == ISP_V12 || dev->isp_ver == ISP_V13) {
+		if (dev->mipi_irq >= 0)
+			disable_irq(dev->mipi_irq);
+	}
+
+	isp_config_clk(dev, false);
+
+	for (i = dev->num_clks - 1; i >= 0; i--)
+		if (!IS_ERR(dev->clks[i]))
+			clk_disable_unprepare(dev->clks[i]);
+}
+
+static int enable_sys_clk(struct rkisp_hw_dev *dev)
+{
+	int i, ret = -EINVAL;
+	unsigned long rate;
+
+	for (i = 0; i < dev->num_clks; i++) {
+		if (!IS_ERR(dev->clks[i])) {
+			ret = clk_prepare_enable(dev->clks[i]);
+			if (ret < 0)
+				goto err;
+		}
+	}
+
+	rate = dev->clk_rate_tbl[0].clk_rate * 1000000UL;
+	rkisp_set_clk_rate(dev->clks[0], rate);
+	if (dev->is_unite)
+		rkisp_set_clk_rate(dev->clks[5], rate);
+	rkisp_soft_reset(dev, false);
+	isp_config_clk(dev, true);
+
+	if (dev->isp_ver == ISP_V12 || dev->isp_ver == ISP_V13) {
+		/* disable csi_rx interrupt */
+		writel(0, dev->base_addr + CIF_ISP_CSI0_CTRL0);
+		writel(0, dev->base_addr + CIF_ISP_CSI0_MASK1);
+		writel(0, dev->base_addr + CIF_ISP_CSI0_MASK2);
+		writel(0, dev->base_addr + CIF_ISP_CSI0_MASK3);
+	}
+
+	return 0;
+err:
+	for (--i; i >= 0; --i)
+		if (!IS_ERR(dev->clks[i]))
+			clk_disable_unprepare(dev->clks[i]);
+	return ret;
+}
+
+static int rkisp_hw_probe(struct platform_device *pdev)
+{
+	const struct of_device_id *match;
+	const struct isp_match_data *match_data;
+	struct device_node *node = pdev->dev.of_node;
+	struct device *dev = &pdev->dev;
+	struct rkisp_hw_dev *hw_dev;
+	struct resource *res;
+	int i, ret;
+	bool is_mem_reserved = true;
+
+	match = of_match_node(rkisp_hw_of_match, node);
+	if (IS_ERR(match))
+		return PTR_ERR(match);
+
+	hw_dev = devm_kzalloc(dev, sizeof(*hw_dev), GFP_KERNEL);
+	if (!hw_dev)
+		return -ENOMEM;
+
+	dev_set_drvdata(dev, hw_dev);
+	hw_dev->dev = dev;
+	hw_dev->is_thunderboot = IS_ENABLED(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP);
+	dev_info(dev, "is_thunderboot: %d\n", hw_dev->is_thunderboot);
+	hw_dev->max_in.w = 0;
+	hw_dev->max_in.h = 0;
+	hw_dev->max_in.fps = 0;
+	of_property_read_u32_array(node, "max-input", &hw_dev->max_in.w, 3);
+	dev_info(dev, "max input:%dx%d@%dfps\n",
+		 hw_dev->max_in.w, hw_dev->max_in.h, hw_dev->max_in.fps);
+	hw_dev->grf = syscon_regmap_lookup_by_phandle(node, "rockchip,grf");
+	if (IS_ERR(hw_dev->grf))
+		dev_warn(dev, "Missing rockchip,grf property\n");
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		dev_err(dev, "get resource failed\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	hw_dev->base_addr = devm_ioremap_resource(dev, res);
+	if (PTR_ERR(hw_dev->base_addr) == -EBUSY) {
+		resource_size_t offset = res->start;
+		resource_size_t size = resource_size(res);
+
+		hw_dev->base_addr = devm_ioremap(dev, offset, size);
+	}
+	if (IS_ERR(hw_dev->base_addr)) {
+		dev_err(dev, "ioremap failed\n");
+		ret = PTR_ERR(hw_dev->base_addr);
+		goto err;
+	}
+
+	match_data = match->data;
+	hw_dev->base_next_addr = NULL;
+	if (match_data->unite) {
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+		if (!res) {
+			dev_err(dev, "get next resource failed\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		hw_dev->base_next_addr = devm_ioremap_resource(dev, res);
+		if (PTR_ERR(hw_dev->base_next_addr) == -EBUSY) {
+			resource_size_t offset = res->start;
+			resource_size_t size = resource_size(res);
+
+			hw_dev->base_next_addr = devm_ioremap(dev, offset, size);
+		}
+
+		if (IS_ERR(hw_dev->base_next_addr)) {
+			dev_err(dev, "ioremap next failed\n");
+			ret = PTR_ERR(hw_dev->base_next_addr);
+			goto err;
+		}
+	}
+
+	rkisp_monitor = device_property_read_bool(dev, "rockchip,restart-monitor-en");
+	hw_dev->mipi_irq = -1;
+
+	hw_dev->pdev = pdev;
+	hw_dev->match_data = match_data;
+	if (!hw_dev->is_thunderboot)
+		rkisp_register_irq(hw_dev);
+
+	for (i = 0; i < match_data->num_clks; i++) {
+		struct clk *clk = devm_clk_get(dev, match_data->clks[i]);
+
+		if (IS_ERR(clk)) {
+			dev_err(dev, "failed to get %s\n", match_data->clks[i]);
+			ret = PTR_ERR(clk);
+			goto err;
+		}
+		hw_dev->clks[i] = clk;
+	}
+	hw_dev->num_clks = match_data->num_clks;
+	hw_dev->clk_rate_tbl = match_data->clk_rate_tbl;
+	hw_dev->num_clk_rate_tbl = match_data->num_clk_rate_tbl;
+
+	hw_dev->reset = devm_reset_control_array_get(dev, false, false);
+	if (IS_ERR(hw_dev->reset)) {
+		dev_dbg(dev, "failed to get reset\n");
+		hw_dev->reset = NULL;
+	}
+
+	ret = of_property_read_u64(node, "rockchip,iq-feature", &hw_dev->iq_feature);
+	if (!ret)
+		hw_dev->is_feature_on = true;
+	else
+		hw_dev->is_feature_on = false;
+
+	hw_dev->dev_num = 0;
+	hw_dev->cur_dev_id = 0;
+	hw_dev->mipi_dev_id = 0;
+	hw_dev->isp_ver = match_data->isp_ver;
+	hw_dev->is_unite = match_data->unite;
+	mutex_init(&hw_dev->dev_lock);
+	spin_lock_init(&hw_dev->rdbk_lock);
+	atomic_set(&hw_dev->refcnt, 0);
+	spin_lock_init(&hw_dev->buf_lock);
+	INIT_LIST_HEAD(&hw_dev->list);
+	INIT_LIST_HEAD(&hw_dev->rpt_list);
+	hw_dev->buf_init_cnt = 0;
+	hw_dev->is_idle = true;
+	hw_dev->is_single = true;
+	hw_dev->is_mi_update = false;
+	hw_dev->is_dma_contig = true;
+	hw_dev->is_dma_sg_ops = false;
+	hw_dev->is_buf_init = false;
+	hw_dev->is_shutdown = false;
+	hw_dev->is_mmu = is_iommu_enable(dev);
+	ret = of_reserved_mem_device_init(dev);
+	if (ret) {
+		is_mem_reserved = false;
+
+		if (!hw_dev->is_mmu)
+			dev_info(dev, "No reserved memory region. default cma area!\n");
+		else
+			hw_dev->is_dma_contig = false;
+	}
+	if (is_mem_reserved) {
+		/* reserved memory using rdma_sg */
+		hw_dev->mem_ops = &vb2_rdma_sg_memops;
+		hw_dev->is_dma_sg_ops = true;
+	} else if (hw_dev->is_mmu) {
+		hw_dev->mem_ops = &vb2_dma_sg_memops;
+		hw_dev->is_dma_sg_ops = true;
+	} else {
+		hw_dev->mem_ops = &vb2_dma_contig_memops;
+	}
+
+	pm_runtime_enable(dev);
+
+	return 0;
+err:
+	return ret;
+}
+
+static int rkisp_hw_remove(struct platform_device *pdev)
+{
+	struct rkisp_hw_dev *hw_dev = platform_get_drvdata(pdev);
+
+	pm_runtime_disable(&pdev->dev);
+	mutex_destroy(&hw_dev->dev_lock);
+	return 0;
+}
+
+static void rkisp_hw_shutdown(struct platform_device *pdev)
+{
+	struct rkisp_hw_dev *hw_dev = platform_get_drvdata(pdev);
+
+	hw_dev->is_shutdown = true;
+	if (pm_runtime_active(&pdev->dev)) {
+		writel(0xffff, hw_dev->base_addr + CIF_IRCL);
+		if (hw_dev->is_unite)
+			writel(0xffff, hw_dev->base_next_addr + CIF_IRCL);
+	}
+	dev_info(&pdev->dev, "%s\n", __func__);
+}
+
+static int __maybe_unused rkisp_runtime_suspend(struct device *dev)
+{
+	struct rkisp_hw_dev *hw_dev = dev_get_drvdata(dev);
+
+	disable_sys_clk(hw_dev);
+	return pinctrl_pm_select_sleep_state(dev);
+}
+
+static int __maybe_unused rkisp_runtime_resume(struct device *dev)
+{
+	struct rkisp_hw_dev *hw_dev = dev_get_drvdata(dev);
+	void __iomem *base = hw_dev->base_addr;
+	int mult = hw_dev->is_unite ? 2 : 1;
+	int ret, i;
+
+	ret = pinctrl_pm_select_default_state(dev);
+	if (ret < 0)
+		return ret;
+
+	enable_sys_clk(hw_dev);
+
+	for (i = 0; i < hw_dev->dev_num; i++) {
+		void *buf = hw_dev->isp[i]->sw_base_addr;
+
+		memset(buf, 0, RKISP_ISP_SW_MAX_SIZE * mult);
+		memcpy_fromio(buf, base, RKISP_ISP_SW_REG_SIZE);
+		if (hw_dev->is_unite) {
+			buf += RKISP_ISP_SW_MAX_SIZE;
+			base = hw_dev->base_next_addr;
+			memcpy_fromio(buf, base, RKISP_ISP_SW_REG_SIZE);
+		}
+		default_sw_reg_flag(hw_dev->isp[i]);
+	}
+	hw_dev->monitor.is_en = rkisp_monitor;
+	return 0;
+}
+
+static const struct dev_pm_ops rkisp_hw_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
+	SET_RUNTIME_PM_OPS(rkisp_runtime_suspend,
+			   rkisp_runtime_resume, NULL)
+};
+
+static struct platform_driver rkisp_hw_drv = {
+	.driver = {
+		.name = "rkisp_hw",
+		.of_match_table = of_match_ptr(rkisp_hw_of_match),
+		.pm = &rkisp_hw_pm_ops,
+	},
+	.probe = rkisp_hw_probe,
+	.remove = rkisp_hw_remove,
+	.shutdown = rkisp_hw_shutdown,
+};
+
+static int __init rkisp_hw_drv_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&rkisp_hw_drv);
+	if (!ret)
+		ret = platform_driver_register(&rkisp_plat_drv);
+#if IS_BUILTIN(CONFIG_VENDOR_VIDEO_ROCKCHIP_ISP) && IS_BUILTIN(CONFIG_VENDOR_VIDEO_ROCKCHIP_ISPP)
+	if (!ret)
+		ret = rkispp_hw_drv_init();
+#endif
+	return ret;
+}
+
+module_init(rkisp_hw_drv_init);
