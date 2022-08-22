@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Platform drivers
+#	Most drivers here are currently for webcam support
+
+menuconfig V4L_PLATFORM_DRIVERS
+
+if V4L_PLATFORM_DRIVERS
+
+source "vendor/drivers/media/platform/rockchip/cif/Kconfig"
+source "vendor/drivers/media/platform/rockchip/isp/Kconfig"
+source "vendor/drivers/media/platform/rockchip/ispp/Kconfig"
+
+endif # V4L_PLATFORM_DRIVERS
+
+
