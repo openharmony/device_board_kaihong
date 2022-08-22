@@ -1989,3 +1989,346 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
 	if (of_property_read_u64(node, "redistributor-stride", &redist_stride))
 		redist_stride = 0;
 
+	gic_enable_of_quirks(node, gic_quirks, &gic_data);
+
+	err = gic_init_bases(dist_base, rdist_regs, nr_redist_regions,
+			     redist_stride, &node->fwnode);
+	if (err)
+		goto out_unmap_rdist;
+
+	gic_populate_ppi_partitions(node);
+
+	if (static_branch_likely(&supports_deactivate_key))
+		gic_of_setup_kvm_info(node);
+	return 0;
+
+out_unmap_rdist:
+	for (i = 0; i < nr_redist_regions; i++)
+		if (rdist_regs[i].redist_base)
+			iounmap(rdist_regs[i].redist_base);
+	kfree(rdist_regs);
+out_unmap_dist:
+	iounmap(dist_base);
+	return err;
+}
+
+IRQCHIP_DECLARE(gic_v3, "arm,gic-v3", gic_of_init);
+
+#ifdef CONFIG_ACPI
+static struct
+{
+	void __iomem *dist_base;
+	struct redist_region *redist_regs;
+	u32 nr_redist_regions;
+	bool single_redist;
+	int enabled_rdists;
+	u32 maint_irq;
+	int maint_irq_mode;
+	phys_addr_t vcpu_base;
+} acpi_data __initdata;
+
+static void __init
+gic_acpi_register_redist(phys_addr_t phys_base, void __iomem *redist_base)
+{
+	static int count = 0;
+
+	acpi_data.redist_regs[count].phys_base = phys_base;
+	acpi_data.redist_regs[count].redist_base = redist_base;
+	acpi_data.redist_regs[count].single_redist = acpi_data.single_redist;
+	count++;
+}
+
+static int __init
+gic_acpi_parse_madt_redist(union acpi_subtable_headers *header,
+			   const unsigned long end)
+{
+	struct acpi_madt_generic_redistributor *redist =
+			(struct acpi_madt_generic_redistributor *)header;
+	void __iomem *redist_base;
+
+	redist_base = ioremap(redist->base_address, redist->length);
+	if (!redist_base) {
+		pr_err("Couldn't map GICR region @%llx\n", redist->base_address);
+		return -ENOMEM;
+	}
+
+	gic_acpi_register_redist(redist->base_address, redist_base);
+	return 0;
+}
+
+static int __init
+gic_acpi_parse_madt_gicc(union acpi_subtable_headers *header,
+			 const unsigned long end)
+{
+	struct acpi_madt_generic_interrupt *gicc =
+				(struct acpi_madt_generic_interrupt *)header;
+	u32 reg = readl_relaxed(acpi_data.dist_base + GICD_PIDR2) & GIC_PIDR2_ARCH_MASK;
+	u32 size = reg == GIC_PIDR2_ARCH_GICv4 ? SZ_64K * 4 : SZ_64K * 2;
+	void __iomem *redist_base;
+
+	/* GICC entry which has !ACPI_MADT_ENABLED is not unusable so skip */
+	if (!(gicc->flags & ACPI_MADT_ENABLED))
+		return 0;
+
+	redist_base = ioremap(gicc->gicr_base_address, size);
+	if (!redist_base)
+		return -ENOMEM;
+
+	gic_acpi_register_redist(gicc->gicr_base_address, redist_base);
+	return 0;
+}
+
+static int __init gic_acpi_collect_gicr_base(void)
+{
+	acpi_tbl_entry_handler redist_parser;
+	enum acpi_madt_type type;
+
+	if (acpi_data.single_redist) {
+		type = ACPI_MADT_TYPE_GENERIC_INTERRUPT;
+		redist_parser = gic_acpi_parse_madt_gicc;
+	} else {
+		type = ACPI_MADT_TYPE_GENERIC_REDISTRIBUTOR;
+		redist_parser = gic_acpi_parse_madt_redist;
+	}
+
+	/* Collect redistributor base addresses in GICR entries */
+	if (acpi_table_parse_madt(type, redist_parser, 0) > 0)
+		return 0;
+
+	pr_info("No valid GICR entries exist\n");
+	return -ENODEV;
+}
+
+static int __init gic_acpi_match_gicr(union acpi_subtable_headers *header,
+				  const unsigned long end)
+{
+	/* Subtable presence means that redist exists, that's it */
+	return 0;
+}
+
+static int __init gic_acpi_match_gicc(union acpi_subtable_headers *header,
+				      const unsigned long end)
+{
+	struct acpi_madt_generic_interrupt *gicc =
+				(struct acpi_madt_generic_interrupt *)header;
+
+	/*
+	 * If GICC is enabled and has valid gicr base address, then it means
+	 * GICR base is presented via GICC
+	 */
+	if ((gicc->flags & ACPI_MADT_ENABLED) && gicc->gicr_base_address) {
+		acpi_data.enabled_rdists++;
+		return 0;
+	}
+
+	/*
+	 * It's perfectly valid firmware can pass disabled GICC entry, driver
+	 * should not treat as errors, skip the entry instead of probe fail.
+	 */
+	if (!(gicc->flags & ACPI_MADT_ENABLED))
+		return 0;
+
+	return -ENODEV;
+}
+
+static int __init gic_acpi_count_gicr_regions(void)
+{
+	int count;
+
+	/*
+	 * Count how many redistributor regions we have. It is not allowed
+	 * to mix redistributor description, GICR and GICC subtables have to be
+	 * mutually exclusive.
+	 */
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_REDISTRIBUTOR,
+				      gic_acpi_match_gicr, 0);
+	if (count > 0) {
+		acpi_data.single_redist = false;
+		return count;
+	}
+
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT,
+				      gic_acpi_match_gicc, 0);
+	if (count > 0) {
+		acpi_data.single_redist = true;
+		count = acpi_data.enabled_rdists;
+	}
+
+	return count;
+}
+
+static bool __init acpi_validate_gic_table(struct acpi_subtable_header *header,
+					   struct acpi_probe_entry *ape)
+{
+	struct acpi_madt_generic_distributor *dist;
+	int count;
+
+	dist = (struct acpi_madt_generic_distributor *)header;
+	if (dist->version != ape->driver_data)
+		return false;
+
+	/* We need to do that exercise anyway, the sooner the better */
+	count = gic_acpi_count_gicr_regions();
+	if (count <= 0)
+		return false;
+
+	acpi_data.nr_redist_regions = count;
+	return true;
+}
+
+static int __init gic_acpi_parse_virt_madt_gicc(union acpi_subtable_headers *header,
+						const unsigned long end)
+{
+	struct acpi_madt_generic_interrupt *gicc =
+		(struct acpi_madt_generic_interrupt *)header;
+	int maint_irq_mode;
+	static int first_madt = true;
+
+	/* Skip unusable CPUs */
+	if (!(gicc->flags & ACPI_MADT_ENABLED))
+		return 0;
+
+	maint_irq_mode = (gicc->flags & ACPI_MADT_VGIC_IRQ_MODE) ?
+		ACPI_EDGE_SENSITIVE : ACPI_LEVEL_SENSITIVE;
+
+	if (first_madt) {
+		first_madt = false;
+
+		acpi_data.maint_irq = gicc->vgic_interrupt;
+		acpi_data.maint_irq_mode = maint_irq_mode;
+		acpi_data.vcpu_base = gicc->gicv_base_address;
+
+		return 0;
+	}
+
+	/*
+	 * The maintenance interrupt and GICV should be the same for every CPU
+	 */
+	if ((acpi_data.maint_irq != gicc->vgic_interrupt) ||
+	    (acpi_data.maint_irq_mode != maint_irq_mode) ||
+	    (acpi_data.vcpu_base != gicc->gicv_base_address))
+		return -EINVAL;
+
+	return 0;
+}
+
+static bool __init gic_acpi_collect_virt_info(void)
+{
+	int count;
+
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT,
+				      gic_acpi_parse_virt_madt_gicc, 0);
+
+	return (count > 0);
+}
+
+#define ACPI_GICV3_DIST_MEM_SIZE (SZ_64K)
+#define ACPI_GICV2_VCTRL_MEM_SIZE	(SZ_4K)
+#define ACPI_GICV2_VCPU_MEM_SIZE	(SZ_8K)
+
+static void __init gic_acpi_setup_kvm_info(void)
+{
+	int irq;
+
+	if (!gic_acpi_collect_virt_info()) {
+		pr_warn("Unable to get hardware information used for virtualization\n");
+		return;
+	}
+
+	gic_v3_kvm_info.type = GIC_V3;
+
+	irq = acpi_register_gsi(NULL, acpi_data.maint_irq,
+				acpi_data.maint_irq_mode,
+				ACPI_ACTIVE_HIGH);
+	if (irq <= 0)
+		return;
+
+	gic_v3_kvm_info.maint_irq = irq;
+
+	if (acpi_data.vcpu_base) {
+		struct resource *vcpu = &gic_v3_kvm_info.vcpu;
+
+		vcpu->flags = IORESOURCE_MEM;
+		vcpu->start = acpi_data.vcpu_base;
+		vcpu->end = vcpu->start + ACPI_GICV2_VCPU_MEM_SIZE - 1;
+	}
+
+	gic_v3_kvm_info.has_v4 = gic_data.rdists.has_vlpis;
+	gic_v3_kvm_info.has_v4_1 = gic_data.rdists.has_rvpeid;
+	gic_set_kvm_info(&gic_v3_kvm_info);
+}
+
+static int __init
+gic_acpi_init(union acpi_subtable_headers *header, const unsigned long end)
+{
+	struct acpi_madt_generic_distributor *dist;
+	struct fwnode_handle *domain_handle;
+	size_t size;
+	int i, err;
+
+	/* Get distributor base address */
+	dist = (struct acpi_madt_generic_distributor *)header;
+	acpi_data.dist_base = ioremap(dist->base_address,
+				      ACPI_GICV3_DIST_MEM_SIZE);
+	if (!acpi_data.dist_base) {
+		pr_err("Unable to map GICD registers\n");
+		return -ENOMEM;
+	}
+
+	err = gic_validate_dist_version(acpi_data.dist_base);
+	if (err) {
+		pr_err("No distributor detected at @%p, giving up\n",
+		       acpi_data.dist_base);
+		goto out_dist_unmap;
+	}
+
+	size = sizeof(*acpi_data.redist_regs) * acpi_data.nr_redist_regions;
+	acpi_data.redist_regs = kzalloc(size, GFP_KERNEL);
+	if (!acpi_data.redist_regs) {
+		err = -ENOMEM;
+		goto out_dist_unmap;
+	}
+
+	err = gic_acpi_collect_gicr_base();
+	if (err)
+		goto out_redist_unmap;
+
+	domain_handle = irq_domain_alloc_fwnode(&dist->base_address);
+	if (!domain_handle) {
+		err = -ENOMEM;
+		goto out_redist_unmap;
+	}
+
+	err = gic_init_bases(acpi_data.dist_base, acpi_data.redist_regs,
+			     acpi_data.nr_redist_regions, 0, domain_handle);
+	if (err)
+		goto out_fwhandle_free;
+
+	acpi_set_irq_model(ACPI_IRQ_MODEL_GIC, domain_handle);
+
+	if (static_branch_likely(&supports_deactivate_key))
+		gic_acpi_setup_kvm_info();
+
+	return 0;
+
+out_fwhandle_free:
+	irq_domain_free_fwnode(domain_handle);
+out_redist_unmap:
+	for (i = 0; i < acpi_data.nr_redist_regions; i++)
+		if (acpi_data.redist_regs[i].redist_base)
+			iounmap(acpi_data.redist_regs[i].redist_base);
+	kfree(acpi_data.redist_regs);
+out_dist_unmap:
+	iounmap(acpi_data.dist_base);
+	return err;
+}
+IRQCHIP_ACPI_DECLARE(gic_v3, ACPI_MADT_TYPE_GENERIC_DISTRIBUTOR,
+		     acpi_validate_gic_table, ACPI_MADT_GIC_VERSION_V3,
+		     gic_acpi_init);
+IRQCHIP_ACPI_DECLARE(gic_v4, ACPI_MADT_TYPE_GENERIC_DISTRIBUTOR,
+		     acpi_validate_gic_table, ACPI_MADT_GIC_VERSION_V4,
+		     gic_acpi_init);
+IRQCHIP_ACPI_DECLARE(gic_v3_or_v4, ACPI_MADT_TYPE_GENERIC_DISTRIBUTOR,
+		     acpi_validate_gic_table, ACPI_MADT_GIC_VERSION_NONE,
+		     gic_acpi_init);
+#endif
