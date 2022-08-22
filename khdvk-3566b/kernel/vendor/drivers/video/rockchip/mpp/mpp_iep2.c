@@ -557,4 +557,463 @@ static void iep2_tru_list_cfg(struct mpp_dev *mpp, struct iep_task *task)
 	}
 }
 
+static void iep2_comb_cfg(struct mpp_dev *mpp, struct iep_task *task)
+{
+	struct iep2_params *hw_cfg = &task->params;
+	int i;
+	u32 reg = 0;
+
+	for (i = 0; i < ARRAY_SIZE(hw_cfg->comb_osd_vld); ++i) {
+		if (hw_cfg->comb_osd_vld[i])
+			reg |= IEP2_REG_COMB_OSD_VLD(i);
+	}
+
+	reg |= IEP2_REG_COMB_T_THR(hw_cfg->comb_t_thr)
+		| IEP2_REG_COMB_FEATRUE_THR(hw_cfg->comb_feature_thr)
+		| IEP2_REG_COMB_CNT_THR(hw_cfg->comb_cnt_thr);
+	mpp_write_relaxed(mpp, IEP2_REG_COMB_CONFIG0, reg);
+}
+
+static int iep2_run(struct mpp_dev *mpp,
+		    struct mpp_task *mpp_task)
+{
+	struct iep_task *task = NULL;
+
+	mpp_debug_enter();
+
+	task = to_iep_task(mpp_task);
+
+	/* init current task */
+	mpp->cur_task = mpp_task;
+
+	iep2_config(mpp, task);
+	iep2_osd_cfg(mpp, task);
+	iep2_mtn_tab_cfg(mpp, task);
+	iep2_tru_list_cfg(mpp, task);
+	iep2_comb_cfg(mpp, task);
+
+	/* set interrupt enable bits */
+	mpp_write_relaxed(mpp, IEP2_REG_INT_EN,
+			  IEP2_REG_FRM_DONE_EN
+			  | IEP2_REG_OSD_MAX_EN
+			  | IEP2_REG_BUS_ERROR_EN);
+
+	/* Last, flush the registers */
+	wmb();
+	/* start iep2 */
+	mpp_write(mpp, IEP2_REG_FRM_START, 1);
+
+	mpp_debug_leave();
+
+	return 0;
+}
+
+static int iep2_irq(struct mpp_dev *mpp)
+{
+	mpp->irq_status = mpp_read(mpp, IEP2_REG_INT_STS);
+	mpp_write(mpp, IEP2_REG_INT_CLR, 0xffffffff);
+
+	if (!IEP2_REG_RO_VALID_INT_STS(mpp->irq_status))
+		return IRQ_NONE;
+
+	return IRQ_WAKE_THREAD;
+}
+
+static int iep2_isr(struct mpp_dev *mpp)
+{
+	struct mpp_task *mpp_task = NULL;
+	struct iep_task *task = NULL;
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	mpp_task = mpp->cur_task;
+	task = to_iep_task(mpp_task);
+	if (!task) {
+		dev_err(iep->mpp.dev, "no current task\n");
+		return IRQ_HANDLED;
+	}
+
+	mpp_time_diff(mpp_task);
+	mpp->cur_task = NULL;
+	task->irq_status = mpp->irq_status;
+	mpp_debug(DEBUG_IRQ_STATUS, "irq_status: %08x\n",
+		  task->irq_status);
+
+	if (IEP2_REG_RO_BUS_ERROR_STS(task->irq_status))
+		atomic_inc(&mpp->reset_request);
+
+	mpp_task_finish(mpp_task->session, mpp_task);
+
+	mpp_debug_leave();
+
+	return IRQ_HANDLED;
+}
+
+static void iep2_osd_done(struct mpp_dev *mpp, struct iep_task *task)
+{
+	int i;
+	u32 reg;
+
+	for (i = 0; i < task->output.dect_osd_cnt; ++i) {
+		reg = mpp_read(mpp, IEP2_REG_RO_OSD_AREA_X(i));
+		task->output.x_sta[i] = IEP2_REG_RO_X_STA(reg) / 16;
+		task->output.x_end[i] = IEP2_REG_RO_X_END(reg) / 16;
+
+		reg = mpp_read(mpp, IEP2_REG_RO_OSD_AREA_Y(i));
+		task->output.y_sta[i] = IEP2_REG_RO_Y_STA(reg) / 4;
+		task->output.y_end[i] = IEP2_REG_RO_Y_END(reg) / 4;
+	}
+
+	for (; i < ARRAY_SIZE(task->output.x_sta); ++i) {
+		task->output.x_sta[i] = 0;
+		task->output.x_end[i] = 0;
+		task->output.y_sta[i] = 0;
+		task->output.y_end[i] = 0;
+	}
+}
+
+static int iep2_finish(struct mpp_dev *mpp,
+		       struct mpp_task *mpp_task)
+{
+	struct iep_task *task = to_iep_task(mpp_task);
+	struct iep2_output *output = &task->output;
+	u32 i;
+	u32 reg;
+
+	mpp_debug_enter();
+
+	output->dect_pd_tcnt = mpp_read(mpp, IEP2_REG_RO_PD_TCNT);
+	output->dect_pd_bcnt = mpp_read(mpp, IEP2_REG_RO_PD_BCNT);
+	output->dect_ff_cur_tcnt = mpp_read(mpp, IEP2_REG_RO_FF_CUR_TCNT);
+	output->dect_ff_cur_bcnt = mpp_read(mpp, IEP2_REG_RO_FF_CUR_BCNT);
+	output->dect_ff_nxt_tcnt = mpp_read(mpp, IEP2_REG_RO_FF_NXT_TCNT);
+	output->dect_ff_nxt_bcnt = mpp_read(mpp, IEP2_REG_RO_FF_NXT_BCNT);
+	output->dect_ff_ble_tcnt = mpp_read(mpp, IEP2_REG_RO_FF_BLE_TCNT);
+	output->dect_ff_ble_bcnt = mpp_read(mpp, IEP2_REG_RO_FF_BLE_BCNT);
+	output->dect_ff_nz = mpp_read(mpp, IEP2_REG_RO_FF_COMB_NZ);
+	output->dect_ff_comb_f = mpp_read(mpp, IEP2_REG_RO_FF_COMB_F);
+	output->dect_osd_cnt = mpp_read(mpp, IEP2_REG_RO_OSD_NUM);
+
+	reg = mpp_read(mpp, IEP2_REG_RO_COMB_CNT);
+	output->out_comb_cnt = IEP2_REG_RO_OUT_COMB_CNT(reg);
+	output->out_osd_comb_cnt = IEP2_REG_RO_OUT_OSD_COMB_CNT(reg);
+	output->ff_gradt_tcnt = mpp_read(mpp, IEP2_REG_RO_FF_GRADT_TCNT);
+	output->ff_gradt_bcnt = mpp_read(mpp, IEP2_REG_RO_FF_GRADT_BCNT);
+
+	iep2_osd_done(mpp, task);
+
+	for (i = 0; i < ARRAY_SIZE(output->mv_hist); i += 2) {
+		reg = mpp_read(mpp, IEP2_REG_RO_MV_HIST_BIN(i / 2));
+		output->mv_hist[i] = IEP2_REG_RO_MV_HIST_EVEN(reg);
+		output->mv_hist[i + 1] = IEP2_REG_RO_MV_HIST_ODD(reg);
+	}
+
+	mpp_debug_leave();
+
+	return 0;
+}
+
+static int iep2_result(struct mpp_dev *mpp,
+		       struct mpp_task *mpp_task,
+		       struct mpp_task_msgs *msgs)
+{
+	u32 i;
+	struct mpp_request *req;
+	struct iep_task *task = to_iep_task(mpp_task);
+
+	/* FIXME may overflow the kernel */
+	for (i = 0; i < task->r_req_cnt; i++) {
+		req = &task->r_reqs[i];
+
+		if (copy_to_user(req->data, (u8 *)&task->output, req->size)) {
+			mpp_err("copy_to_user reg fail\n");
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+static int iep2_free_task(struct mpp_session *session,
+			  struct mpp_task *mpp_task)
+{
+	struct iep_task *task = to_iep_task(mpp_task);
+
+	mpp_task_finalize(session, mpp_task);
+	kfree(task);
+
+	return 0;
+}
+
+#ifdef CONFIG_ROCKCHIP_MPP_PROC_FS
+static int iep2_procfs_remove(struct mpp_dev *mpp)
+{
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	if (iep->procfs) {
+		proc_remove(iep->procfs);
+		iep->procfs = NULL;
+	}
+
+	return 0;
+}
+
+static int iep2_procfs_init(struct mpp_dev *mpp)
+{
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	iep->procfs = proc_mkdir(mpp->dev->of_node->name, mpp->srv->procfs);
+	if (IS_ERR_OR_NULL(iep->procfs)) {
+		mpp_err("failed on mkdir\n");
+		iep->procfs = NULL;
+		return -EIO;
+	}
+	mpp_procfs_create_u32("aclk", 0644,
+			      iep->procfs, &iep->aclk_info.debug_rate_hz);
+	mpp_procfs_create_u32("session_buffers", 0644,
+			      iep->procfs, &mpp->session_max_buffers);
+
+	return 0;
+}
+#else
+static inline int iep2_procfs_remove(struct mpp_dev *mpp)
+{
+	return 0;
+}
+
+static inline int iep2_procfs_init(struct mpp_dev *mpp)
+{
+	return 0;
+}
+#endif
+
+#define IEP2_TILE_W_MAX		120
+#define IEP2_TILE_H_MAX		272
+
+static int iep2_init(struct mpp_dev *mpp)
+{
+	int ret;
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	mpp->grf_info = &mpp->srv->grf_infos[MPP_DRIVER_IEP2];
+
+	/* Get clock info from dtsi */
+	ret = mpp_get_clk_info(mpp, &iep->aclk_info, "aclk");
+	if (ret)
+		mpp_err("failed on clk_get aclk\n");
+	ret = mpp_get_clk_info(mpp, &iep->hclk_info, "hclk");
+	if (ret)
+		mpp_err("failed on clk_get hclk\n");
+	ret = mpp_get_clk_info(mpp, &iep->sclk_info, "sclk");
+	if (ret)
+		mpp_err("failed on clk_get sclk\n");
+	/* Set default rates */
+	mpp_set_clk_info_rate_hz(&iep->aclk_info, CLK_MODE_DEFAULT, 300 * MHZ);
+
+	iep->rst_a = mpp_reset_control_get(mpp, RST_TYPE_A, "rst_a");
+	if (!iep->rst_a)
+		mpp_err("No aclk reset resource define\n");
+	iep->rst_h = mpp_reset_control_get(mpp, RST_TYPE_H, "rst_h");
+	if (!iep->rst_h)
+		mpp_err("No hclk reset resource define\n");
+	iep->rst_s = mpp_reset_control_get(mpp, RST_TYPE_CORE, "rst_s");
+	if (!iep->rst_s)
+		mpp_err("No sclk reset resource define\n");
+
+	iep->roi.size = IEP2_TILE_W_MAX * IEP2_TILE_H_MAX;
+	iep->roi.vaddr = dma_alloc_coherent(mpp->dev, iep->roi.size,
+					    &iep->roi.iova,
+					    GFP_KERNEL);
+	if (iep->roi.vaddr) {
+		dev_err(mpp->dev, "allocate roi buffer failed\n");
+		//return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int iep2_clk_on(struct mpp_dev *mpp)
+{
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	mpp_clk_safe_enable(iep->aclk_info.clk);
+	mpp_clk_safe_enable(iep->hclk_info.clk);
+	mpp_clk_safe_enable(iep->sclk_info.clk);
+
+	return 0;
+}
+
+static int iep2_clk_off(struct mpp_dev *mpp)
+{
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	mpp_clk_safe_disable(iep->aclk_info.clk);
+	mpp_clk_safe_disable(iep->hclk_info.clk);
+	mpp_clk_safe_disable(iep->sclk_info.clk);
+
+	return 0;
+}
+
+static int iep2_set_freq(struct mpp_dev *mpp,
+			 struct mpp_task *mpp_task)
+{
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+	struct iep_task *task = to_iep_task(mpp_task);
+
+	mpp_clk_set_rate(&iep->aclk_info, task->clk_mode);
+
+	return 0;
+}
+
+static int iep2_reset(struct mpp_dev *mpp)
+{
+	struct iep2_dev *iep = to_iep2_dev(mpp);
+
+	if (iep->rst_a && iep->rst_h && iep->rst_s) {
+		/* Don't skip this or iommu won't work after reset */
+		rockchip_pmu_idle_request(mpp->dev, true);
+		mpp_safe_reset(iep->rst_a);
+		mpp_safe_reset(iep->rst_h);
+		mpp_safe_reset(iep->rst_s);
+		udelay(5);
+		mpp_safe_unreset(iep->rst_a);
+		mpp_safe_unreset(iep->rst_h);
+		mpp_safe_unreset(iep->rst_s);
+		rockchip_pmu_idle_request(mpp->dev, false);
+	}
+
+	return 0;
+}
+
+static struct mpp_hw_ops iep_v2_hw_ops = {
+	.init = iep2_init,
+	.clk_on = iep2_clk_on,
+	.clk_off = iep2_clk_off,
+	.set_freq = iep2_set_freq,
+	.reset = iep2_reset,
+};
+
+static struct mpp_dev_ops iep_v2_dev_ops = {
+	.alloc_task = iep2_alloc_task,
+	.run = iep2_run,
+	.irq = iep2_irq,
+	.isr = iep2_isr,
+	.finish = iep2_finish,
+	.result = iep2_result,
+	.free_task = iep2_free_task,
+};
+
+static struct mpp_hw_info iep2_hw_info = {
+	.reg_id = -1,
+};
+
+static const struct mpp_dev_var iep2_v2_data = {
+	.device_type = MPP_DEVICE_IEP2,
+	.hw_ops = &iep_v2_hw_ops,
+	.dev_ops = &iep_v2_dev_ops,
+	.hw_info = &iep2_hw_info,
+};
+
+static const struct of_device_id mpp_iep2_match[] = {
+	{
+		.compatible = "rockchip,iep-v2",
+		.data = &iep2_v2_data,
+	},
+#ifdef CONFIG_CPU_RV1126
+	{
+		.compatible = "rockchip,rv1126-iep",
+		.data = &iep2_v2_data,
+	},
+#endif
+	{},
+};
+
+static int iep2_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct iep2_dev *iep = NULL;
+	struct mpp_dev *mpp = NULL;
+	const struct of_device_id *match = NULL;
+	int ret = 0;
+
+	dev_info(dev, "probe device\n");
+	iep = devm_kzalloc(dev, sizeof(struct iep2_dev), GFP_KERNEL);
+	if (!iep)
+		return -ENOMEM;
+
+	mpp = &iep->mpp;
+	platform_set_drvdata(pdev, iep);
+
+	if (pdev->dev.of_node) {
+		match = of_match_node(mpp_iep2_match, pdev->dev.of_node);
+		if (match)
+			mpp->var = (struct mpp_dev_var *)match->data;
+	}
+
+	ret = mpp_dev_probe(mpp, pdev);
+	if (ret) {
+		dev_err(dev, "probe sub driver failed\n");
+		return -EINVAL;
+	}
+
+	ret = devm_request_threaded_irq(dev, mpp->irq,
+					mpp_dev_irq,
+					mpp_dev_isr_sched,
+					IRQF_SHARED,
+					dev_name(dev), mpp);
+	if (ret) {
+		dev_err(dev, "register interrupter runtime failed\n");
+		return -EINVAL;
+	}
+
+	mpp->session_max_buffers = IEP2_SESSION_MAX_BUFFERS;
+	iep2_procfs_init(mpp);
+	/* register current device to mpp service */
+	mpp_dev_register_srv(mpp, mpp->srv);
+	dev_info(dev, "probing finish\n");
+
+	return 0;
+}
+
+static int iep2_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct iep2_dev *iep = platform_get_drvdata(pdev);
+
+	dma_free_coherent(dev, iep->roi.size, iep->roi.vaddr, iep->roi.iova);
+
+	dev_info(dev, "remove device\n");
+	mpp_dev_remove(&iep->mpp);
+	iep2_procfs_remove(&iep->mpp);
+
+	return 0;
+}
+
+static void iep2_shutdown(struct platform_device *pdev)
+{
+	int ret;
+	int val;
+	struct device *dev = &pdev->dev;
+	struct iep2_dev *iep = platform_get_drvdata(pdev);
+	struct mpp_dev *mpp = &iep->mpp;
+
+	dev_info(dev, "shutdown device\n");
+
+	atomic_inc(&mpp->srv->shutdown_request);
+	ret = readx_poll_timeout(atomic_read,
+				 &mpp->task_count,
+				 val, val == 0, 20000, 200000);
+	if (ret == -ETIMEDOUT)
+		dev_err(dev, "wait total running time out\n");
+}
+
+struct platform_driver rockchip_iep2_driver = {
+	.probe = iep2_probe,
+	.remove = iep2_remove,
+	.shutdown = iep2_shutdown,
+	.driver = {
+		.name = IEP2_DRIVER_NAME,
+		.of_match_table = of_match_ptr(mpp_iep2_match),
+	},
+};
+EXPORT_SYMBOL(rockchip_iep2_driver);
 
