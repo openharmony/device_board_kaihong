@@ -3126,3 +3126,1908 @@ exit:
 	mutex_unlock(&cfg->if_sync);
 	return NULL;
 }
+
+static bcm_struct_cfgdev *
+wl_cfg80211_add_virtual_iface(struct wiphy *wiphy,
+#if defined(WL_CFG80211_P2P_DEV_IF)
+	const char *name,
+#else
+	char *name,
+#endif /* WL_CFG80211_P2P_DEV_IF */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
+	unsigned char name_assign_type,
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) */
+	enum nl80211_iftype type,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
+	u32 *flags,
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0) */
+	struct vif_params *params)
+{
+	u16 wl_iftype;
+	u16 wl_mode;
+	struct net_device *primary_ndev;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct wireless_dev *wdev;
+
+	WL_DBG(("Enter iftype: %d\n", type));
+	if (!cfg) {
+		return ERR_PTR(-EINVAL);
+	}
+
+	/* Use primary I/F for sending cmds down to firmware */
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+	if (unlikely(!wl_get_drv_status(cfg, READY, primary_ndev))) {
+		WL_ERR(("device is not ready\n"));
+		return ERR_PTR(-ENODEV);
+	}
+
+	if (!name) {
+		WL_ERR(("Interface name not provided \n"));
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (cfg80211_to_wl_iftype(type, &wl_iftype, &wl_mode) < 0) {
+		return ERR_PTR(-EINVAL);
+	}
+
+	wdev = wl_cfg80211_add_if(cfg, primary_ndev, wl_iftype, name, NULL);
+	if (unlikely(!wdev)) {
+		return ERR_PTR(-ENODEV);
+	}
+	return wdev_to_cfgdev(wdev);
+}
+
+static s32
+wl_cfg80211_del_ibss(struct wiphy *wiphy, struct wireless_dev *wdev)
+{
+	WL_INFORM_MEM(("del ibss wdev_ptr:%p\n", wdev));
+#ifdef WLAIBSS_MCHAN
+	/* AIBSS */
+	return bcm_cfg80211_del_ibss_if(wiphy, wdev);
+#else
+	/* Normal IBSS */
+	return wl_cfg80211_del_iface(wiphy, wdev);
+#endif // endif
+}
+
+s32
+wl_cfg80211_del_if(struct bcm_cfg80211 *cfg, struct net_device *primary_ndev,
+	struct wireless_dev *wdev, char *ifname)
+{
+	int ret = BCME_OK;
+	mutex_lock(&cfg->if_sync);
+	ret = _wl_cfg80211_del_if(cfg, primary_ndev, wdev, ifname);
+	mutex_unlock(&cfg->if_sync);
+	return ret;
+}
+
+s32
+_wl_cfg80211_del_if(struct bcm_cfg80211 *cfg, struct net_device *primary_ndev,
+	struct wireless_dev *wdev, char *ifname)
+{
+	int ret = BCME_OK;
+	s32 bssidx;
+	struct wiphy *wiphy;
+	u16 wl_mode;
+	u16 wl_iftype;
+	struct net_info *netinfo;
+	dhd_pub_t *dhd;
+	BCM_REFERENCE(dhd);
+
+	if (!cfg) {
+		return -EINVAL;
+	}
+
+	dhd = (dhd_pub_t *)(cfg->pub);
+
+	if (!wdev && ifname) {
+		/* If only ifname is provided, fetch corresponding wdev ptr from our
+		 * internal data structure
+		 */
+		wdev = wl_cfg80211_get_wdev_from_ifname(cfg, ifname);
+	}
+
+	/* Check whether we have a valid wdev ptr */
+	if (unlikely(!wdev)) {
+		WL_ERR(("wdev not found. '%s' does not exists\n", ifname));
+		return -ENODEV;
+	}
+
+	WL_INFORM_MEM(("del vif. wdev cfg_iftype:%d\n", wdev->iftype));
+
+	wiphy = wdev->wiphy;
+#ifdef WL_CFG80211_P2P_DEV_IF
+	if (wdev->iftype == NL80211_IFTYPE_P2P_DEVICE) {
+		/* p2p discovery would be de-initialized in stop p2p
+		 * device context/from other virtual i/f creation context
+		 * so netinfo list may not have any node corresponding to
+		 * discovery I/F. Handle it before bssidx check.
+		 */
+		ret = wl_cfg80211_p2p_if_del(wiphy, wdev);
+		if (unlikely(ret)) {
+			goto exit;
+		} else {
+			/* success case. return from here */
+			if (cfg->vif_count) {
+				cfg->vif_count--;
+			}
+			return BCME_OK;
+		}
+	}
+#endif /* WL_CFG80211_P2P_DEV_IF */
+
+	if ((netinfo = wl_get_netinfo_by_wdev(cfg, wdev)) == NULL) {
+		WL_ERR(("Find netinfo from wdev %p failed\n", wdev));
+		ret = -ENODEV;
+		goto exit;
+	}
+
+	if (!wdev->netdev) {
+		WL_ERR(("ndev null! \n"));
+	} else {
+		/* Disable tx before del */
+		netif_tx_disable(wdev->netdev);
+	}
+
+	wl_iftype = netinfo->iftype;
+	wl_mode = wl_iftype_to_mode(wl_iftype);
+	bssidx = netinfo->bssidx;
+	WL_INFORM_MEM(("[IFDEL] cfg_iftype:%d wl_iftype:%d mode:%d bssidx:%d\n",
+		wdev->iftype, wl_iftype, wl_mode, bssidx));
+
+	/* Do pre-interface del ops */
+	wl_cfg80211_iface_state_ops(wdev, WL_IF_DELETE_REQ, wl_iftype, wl_mode);
+
+	switch (wl_iftype) {
+		case WL_IF_TYPE_P2P_GO:
+		case WL_IF_TYPE_P2P_GC:
+		case WL_IF_TYPE_AP:
+		case WL_IF_TYPE_STA:
+		case WL_IF_TYPE_NAN:
+			ret = wl_cfg80211_del_iface(wiphy, wdev);
+			break;
+		case WL_IF_TYPE_IBSS:
+			ret = wl_cfg80211_del_ibss(wiphy, wdev);
+			break;
+
+		default:
+			WL_ERR(("Unsupported interface type\n"));
+			ret = BCME_ERROR;
+	}
+
+exit:
+	if (ret == BCME_OK) {
+		/* Successful case */
+		if (cfg->vif_count) {
+			cfg->vif_count--;
+		}
+		wl_cfg80211_iface_state_ops(primary_ndev->ieee80211_ptr,
+				WL_IF_DELETE_DONE, wl_iftype, wl_mode);
+#ifdef WL_NAN
+		if (!((cfg->nancfg.mac_rand) && (wl_iftype == WL_IF_TYPE_NAN)))
+#endif /* WL_NAN */
+		{
+			wl_release_vif_macaddr(cfg, wdev->netdev->dev_addr, wl_iftype);
+		}
+		WL_INFORM_MEM(("vif deleted. vif_count:%d\n", cfg->vif_count));
+	} else {
+		if (!wdev->netdev) {
+			WL_ERR(("ndev null! \n"));
+		} else {
+			/* IF del failed. revert back tx queue status */
+			netif_tx_start_all_queues(wdev->netdev);
+		}
+
+		/* Skip generating log files and sending HANG event
+		 * if driver state is not READY
+		 */
+		if (wl_get_drv_status(cfg, READY, bcmcfg_to_prmry_ndev(cfg))) {
+			SUPP_LOG(("IF_DEL fail. err:%d\n", ret));
+			wl_flush_fw_log_buffer(primary_ndev, FW_LOGSET_MASK_ALL);
+			/* IF dongle is down due to previous hang or other conditions, sending
+			* one more hang notification is not needed.
+			*/
+			if (dhd_query_bus_erros(dhd) || (ret == BCME_DONGLE_DOWN)) {
+				goto end;
+			}
+			dhd->iface_op_failed = TRUE;
+#if defined(DHD_FW_COREDUMP)
+			if (dhd->memdump_enabled && (ret != -EBADTYPE)) {
+				dhd->memdump_type = DUMP_TYPE_IFACE_OP_FAILURE;
+				dhd_bus_mem_dump(dhd);
+			}
+#endif /* DHD_FW_COREDUMP */
+			WL_ERR(("Notify hang event to upper layer \n"));
+			dhd->hang_reason = HANG_REASON_IFACE_DEL_FAILURE;
+			net_os_send_hang_message(bcmcfg_to_prmry_ndev(cfg));
+		}
+	}
+end:
+	return ret;
+}
+
+static s32
+wl_cfg80211_del_virtual_iface(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct wireless_dev *wdev = cfgdev_to_wdev(cfgdev);
+	int ret = BCME_OK;
+	u16 wl_iftype;
+	u16 wl_mode;
+	struct net_device *primary_ndev;
+
+	if (!cfg) {
+		return -EINVAL;
+	}
+
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+	wdev = cfgdev_to_wdev(cfgdev);
+	if (!wdev) {
+		WL_ERR(("wdev null"));
+		return -ENODEV;
+	}
+
+	WL_DBG(("Enter  wdev:%p iftype: %d\n", wdev, wdev->iftype));
+	if (cfg80211_to_wl_iftype(wdev->iftype, &wl_iftype, &wl_mode) < 0) {
+		WL_ERR(("Wrong iftype: %d\n", wdev->iftype));
+		return -ENODEV;
+	}
+
+	if ((ret = wl_cfg80211_del_if(cfg, primary_ndev,
+			wdev, NULL)) < 0) {
+		WL_ERR(("IF del failed\n"));
+	}
+
+	return ret;
+}
+
+static s32
+wl_cfg80211_change_p2prole(struct wiphy *wiphy, struct net_device *ndev, enum nl80211_iftype type)
+{
+	s32 wlif_type;
+	s32 mode = 0;
+	s32 index;
+	s32 err;
+	s32 conn_idx = -1;
+	chanspec_t chspec;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+
+	WL_INFORM_MEM(("Enter. current_role:%d new_role:%d \n", ndev->ieee80211_ptr->iftype, type));
+
+	if (!cfg->p2p || !wl_cfgp2p_vif_created(cfg)) {
+		WL_ERR(("P2P not initialized \n"));
+		return -EINVAL;
+	}
+
+	if (!is_p2p_group_iface(ndev->ieee80211_ptr)) {
+		WL_ERR(("Wrong if type \n"));
+		return -EINVAL;
+	}
+
+	/* Abort any on-going scans to avoid race condition issues */
+	wl_cfg80211_cancel_scan(cfg);
+
+	index = wl_get_bssidx_by_wdev(cfg, ndev->ieee80211_ptr);
+	if (index < 0) {
+		WL_ERR(("Find bsscfg index from ndev(%p) failed\n", ndev));
+		return BCME_ERROR;
+	}
+	if (wl_cfgp2p_find_type(cfg, index, &conn_idx) != BCME_OK) {
+		return BCME_ERROR;
+	}
+
+	/* In concurrency case, STA may be already associated in a particular
+	 * channel. so retrieve the current channel of primary interface and
+	 * then start the virtual interface on that.
+	 */
+	chspec = wl_cfg80211_get_shared_freq(wiphy);
+	if (type == NL80211_IFTYPE_P2P_GO) {
+		/* Dual p2p doesn't support multiple P2PGO interfaces,
+		 * p2p_go_count is the counter for GO creation
+		 * requests.
+		 */
+		if ((cfg->p2p->p2p_go_count > 0) && (type == NL80211_IFTYPE_P2P_GO)) {
+			WL_ERR(("FW does not support multiple GO\n"));
+			return BCME_ERROR;
+		}
+		mode = WL_MODE_AP;
+		wlif_type = WL_P2P_IF_GO;
+		dhd->op_mode &= ~DHD_FLAG_P2P_GC_MODE;
+		dhd->op_mode |= DHD_FLAG_P2P_GO_MODE;
+	} else {
+		wlif_type = WL_P2P_IF_CLIENT;
+		/* for GO */
+		if (wl_get_mode_by_netdev(cfg, ndev) == WL_MODE_AP) {
+			WL_INFORM_MEM(("Downgrading P2P GO to cfg_iftype:%d \n", type));
+			wl_add_remove_eventmsg(ndev, WLC_E_PROBREQ_MSG, false);
+			cfg->p2p->p2p_go_count--;
+			/* disable interface before bsscfg free */
+			err = wl_cfgp2p_ifdisable(cfg, wl_to_p2p_bss_macaddr(cfg, conn_idx));
+			/* if fw doesn't support "ifdis",
+			 * do not wait for link down of ap mode
+			 */
+			if (err == 0) {
+				WL_DBG(("Wait for Link Down event for GO !!!\n"));
+				wait_for_completion_timeout(&cfg->iface_disable,
+					msecs_to_jiffies(500));
+			} else if (err != BCME_UNSUPPORTED) {
+				msleep(300);
+			}
+		}
+	}
+
+	wl_set_p2p_status(cfg, IF_CHANGING);
+	wl_clr_p2p_status(cfg, IF_CHANGED);
+	wl_cfgp2p_ifchange(cfg, wl_to_p2p_bss_macaddr(cfg, conn_idx),
+		htod32(wlif_type), chspec, conn_idx);
+	wait_event_interruptible_timeout(cfg->netif_change_event,
+		(wl_get_p2p_status(cfg, IF_CHANGED) == true),
+		msecs_to_jiffies(MAX_WAIT_TIME));
+
+	wl_clr_p2p_status(cfg, IF_CHANGING);
+	wl_clr_p2p_status(cfg, IF_CHANGED);
+
+	if (mode == WL_MODE_AP) {
+		wl_set_drv_status(cfg, CONNECTED, ndev);
+	}
+
+	return BCME_OK;
+}
+
+static s32
+wl_cfg80211_change_virtual_iface(struct wiphy *wiphy, struct net_device *ndev,
+	enum nl80211_iftype type,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
+	u32 *flags,
+#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0) */
+	struct vif_params *params)
+{
+	s32 infra = 1;
+	s32 err = BCME_OK;
+	u16 wl_iftype;
+	u16 wl_mode;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_info *netinfo = NULL;
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+	struct net_device *primary_ndev;
+
+	if (!dhd)
+		return -EINVAL;
+
+	WL_INFORM_MEM(("[%s] Enter. current cfg_iftype:%d new cfg_iftype:%d \n",
+		ndev->name, ndev->ieee80211_ptr->iftype, type));
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+
+	if (cfg80211_to_wl_iftype(type, &wl_iftype, &wl_mode) < 0) {
+		WL_ERR(("Unknown role \n"));
+		return -EINVAL;
+	}
+
+	mutex_lock(&cfg->if_sync);
+	netinfo = wl_get_netinfo_by_wdev(cfg, ndev->ieee80211_ptr);
+	if (unlikely(!netinfo)) {
+#ifdef WL_STATIC_IF
+		if (wl_cfg80211_static_if(cfg, ndev)) {
+			/* Incase of static interfaces, the netinfo will be
+			 * allocated only when FW interface is initialized. So
+			 * store the value and use it during initialization.
+			 */
+			WL_INFORM_MEM(("skip change vif for static if\n"));
+			ndev->ieee80211_ptr->iftype = type;
+			err = BCME_OK;
+		} else
+#endif /* WL_STATIC_IF */
+		{
+			WL_ERR(("netinfo not found \n"));
+			err = -ENODEV;
+		}
+		goto fail;
+	}
+
+	/* perform pre-if-change tasks */
+	wl_cfg80211_iface_state_ops(ndev->ieee80211_ptr,
+		WL_IF_CHANGE_REQ, wl_iftype, wl_mode);
+
+	switch (type) {
+	case NL80211_IFTYPE_ADHOC:
+		infra = 0;
+		break;
+	case NL80211_IFTYPE_STATION:
+		/* Supplicant sets iftype to STATION while removing p2p GO */
+		if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_P2P_GO) {
+			/* Downgrading P2P GO */
+			err = wl_cfg80211_change_p2prole(wiphy, ndev, type);
+			if (unlikely(err)) {
+				WL_ERR(("P2P downgrade failed \n"));
+			}
+		} else if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_AP) {
+			/* Downgrade role from AP to STA */
+			if ((err = wl_cfg80211_add_del_bss(cfg, ndev,
+				netinfo->bssidx, wl_iftype, 0, NULL)) < 0) {
+				WL_ERR(("AP-STA Downgrade failed \n"));
+				goto fail;
+			}
+		}
+		break;
+	case NL80211_IFTYPE_AP:
+		/* intentional fall through */
+	case NL80211_IFTYPE_AP_VLAN:
+		{
+			if (!wl_get_drv_status(cfg, AP_CREATED, ndev) &&
+					wl_get_drv_status(cfg, READY, ndev)) {
+				err = wl_cfg80211_set_ap_role(cfg, ndev);
+				if (unlikely(err)) {
+					WL_ERR(("set ap role failed!\n"));
+					goto fail;
+				}
+			} else {
+				WL_INFORM_MEM(("AP_CREATED bit set. Skip role change\n"));
+			}
+			break;
+		}
+	case NL80211_IFTYPE_P2P_GO:
+		/* Intentional fall through */
+	case NL80211_IFTYPE_P2P_CLIENT:
+		infra = 1;
+		err = wl_cfg80211_change_p2prole(wiphy, ndev, type);
+		break;
+	case NL80211_IFTYPE_MONITOR:
+	case NL80211_IFTYPE_WDS:
+	case NL80211_IFTYPE_MESH_POINT:
+		/* Intentional fall through */
+	default:
+		WL_ERR(("Unsupported type:%d \n", type));
+		err = -EINVAL;
+		goto fail;
+	}
+
+	if (wl_get_drv_status(cfg, READY, ndev)) {
+		err = wldev_ioctl_set(ndev, WLC_SET_INFRA, &infra, sizeof(s32));
+		if (err < 0) {
+			WL_ERR(("SET INFRA/IBSS  error %d\n", err));
+			goto fail;
+		}
+	}
+
+	wl_cfg80211_iface_state_ops(primary_ndev->ieee80211_ptr,
+		WL_IF_CHANGE_DONE, wl_iftype, wl_mode);
+
+	/* Update new iftype in relevant structures */
+	ndev->ieee80211_ptr->iftype = type;
+	netinfo->iftype = wl_iftype;
+	WL_INFORM_MEM(("[%s] cfg_iftype changed to %d\n", ndev->name, type));
+#ifdef WL_EXT_IAPSTA
+	wl_ext_iapsta_update_iftype(ndev, netinfo->ifidx, wl_iftype);
+#endif
+
+fail:
+	if (err) {
+		wl_flush_fw_log_buffer(ndev, FW_LOGSET_MASK_ALL);
+	}
+	mutex_unlock(&cfg->if_sync);
+	return err;
+}
+
+s32
+wl_cfg80211_notify_ifadd(struct net_device *dev,
+	int ifidx, char *name, uint8 *mac, uint8 bssidx, uint8 role)
+{
+	bool ifadd_expected = FALSE;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	bool bss_pending_op = TRUE;
+
+	/* P2P may send WLC_E_IF_ADD and/or WLC_E_IF_CHANGE during IF updating ("p2p_ifupd")
+	 * redirect the IF_ADD event to ifchange as it is not a real "new" interface
+	 */
+	if (wl_get_p2p_status(cfg, IF_CHANGING))
+		return wl_cfg80211_notify_ifchange(dev, ifidx, name, mac, bssidx);
+
+	/* Okay, we are expecting IF_ADD (as IF_ADDING is true) */
+	if (wl_get_p2p_status(cfg, IF_ADDING)) {
+		ifadd_expected = TRUE;
+		wl_clr_p2p_status(cfg, IF_ADDING);
+	} else if (cfg->bss_pending_op) {
+		ifadd_expected = TRUE;
+		bss_pending_op = FALSE;
+	}
+
+	if (ifadd_expected) {
+		wl_if_event_info *if_event_info = &cfg->if_event_info;
+
+		if_event_info->valid = TRUE;
+		if_event_info->ifidx = ifidx;
+		if_event_info->bssidx = bssidx;
+		if_event_info->role = role;
+		strlcpy(if_event_info->name, name, sizeof(if_event_info->name));
+		if_event_info->name[IFNAMSIZ - 1] = '\0';
+		if (mac)
+			memcpy(if_event_info->mac, mac, ETHER_ADDR_LEN);
+
+		/* Update bss pendig operation status */
+		if (!bss_pending_op) {
+			cfg->bss_pending_op = FALSE;
+		}
+		WL_INFORM_MEM(("IF_ADD ifidx:%d bssidx:%d role:%d\n",
+			ifidx, bssidx, role));
+		OSL_SMP_WMB();
+		wake_up_interruptible(&cfg->netif_change_event);
+		return BCME_OK;
+	}
+
+	return BCME_ERROR;
+}
+
+s32
+wl_cfg80211_notify_ifdel(struct net_device *dev, int ifidx, char *name, uint8 *mac, uint8 bssidx)
+{
+	bool ifdel_expected = FALSE;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	wl_if_event_info *if_event_info = &cfg->if_event_info;
+	bool bss_pending_op = TRUE;
+
+	if (wl_get_p2p_status(cfg, IF_DELETING)) {
+		ifdel_expected = TRUE;
+		wl_clr_p2p_status(cfg, IF_DELETING);
+	} else if (cfg->bss_pending_op) {
+		ifdel_expected = TRUE;
+		bss_pending_op = FALSE;
+	}
+
+	if (ifdel_expected) {
+		if_event_info->valid = TRUE;
+		if_event_info->ifidx = ifidx;
+		if_event_info->bssidx = bssidx;
+		/* Update bss pendig operation status */
+		if (!bss_pending_op) {
+			cfg->bss_pending_op = FALSE;
+		}
+		WL_INFORM_MEM(("IF_DEL ifidx:%d bssidx:%d\n", ifidx, bssidx));
+		OSL_SMP_WMB();
+		wake_up_interruptible(&cfg->netif_change_event);
+		return BCME_OK;
+	}
+
+	return BCME_ERROR;
+}
+
+s32
+wl_cfg80211_notify_ifchange(struct net_device * dev, int ifidx, char *name, uint8 *mac,
+	uint8 bssidx)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+
+	if (wl_get_p2p_status(cfg, IF_CHANGING)) {
+		wl_set_p2p_status(cfg, IF_CHANGED);
+		OSL_SMP_WMB();
+		wake_up_interruptible(&cfg->netif_change_event);
+		return BCME_OK;
+	}
+
+	return BCME_ERROR;
+}
+
+static s32 wl_set_rts(struct net_device *dev, u32 rts_threshold)
+{
+	s32 err = 0;
+
+	err = wldev_iovar_setint(dev, "rtsthresh", rts_threshold);
+	if (unlikely(err)) {
+		WL_ERR(("Error (%d)\n", err));
+		return err;
+	}
+	return err;
+}
+
+static s32 wl_set_frag(struct net_device *dev, u32 frag_threshold)
+{
+	s32 err = 0;
+
+	err = wldev_iovar_setint_bsscfg(dev, "fragthresh", frag_threshold, 0);
+	if (unlikely(err)) {
+		WL_ERR(("Error (%d)\n", err));
+		return err;
+	}
+	return err;
+}
+
+static s32 wl_set_retry(struct net_device *dev, u32 retry, bool l)
+{
+	s32 err = 0;
+	u32 cmd = (l ? WLC_SET_LRL : WLC_SET_SRL);
+
+#ifdef CUSTOM_LONG_RETRY_LIMIT
+	if ((cmd == WLC_SET_LRL) &&
+		(retry != CUSTOM_LONG_RETRY_LIMIT)) {
+		WL_DBG(("CUSTOM_LONG_RETRY_LIMIT is used.Ignore configuration"));
+		return err;
+	}
+#endif /* CUSTOM_LONG_RETRY_LIMIT */
+
+	retry = htod32(retry);
+	err = wldev_ioctl_set(dev, cmd, &retry, sizeof(retry));
+	if (unlikely(err)) {
+		WL_ERR(("cmd (%d) , error (%d)\n", cmd, err));
+		return err;
+	}
+	return err;
+}
+
+static s32 wl_cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
+{
+	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *)wiphy_priv(wiphy);
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+	s32 err = 0;
+
+	RETURN_EIO_IF_NOT_UP(cfg);
+	WL_DBG(("Enter\n"));
+	if (changed & WIPHY_PARAM_RTS_THRESHOLD &&
+		(cfg->conf->rts_threshold != wiphy->rts_threshold)) {
+		cfg->conf->rts_threshold = wiphy->rts_threshold;
+		err = wl_set_rts(ndev, cfg->conf->rts_threshold);
+		if (err != BCME_OK)
+			return err;
+	}
+	if (changed & WIPHY_PARAM_FRAG_THRESHOLD &&
+		(cfg->conf->frag_threshold != wiphy->frag_threshold)) {
+		cfg->conf->frag_threshold = wiphy->frag_threshold;
+		err = wl_set_frag(ndev, cfg->conf->frag_threshold);
+		if (err != BCME_OK)
+			return err;
+	}
+	if (changed & WIPHY_PARAM_RETRY_LONG &&
+		(cfg->conf->retry_long != wiphy->retry_long)) {
+		cfg->conf->retry_long = wiphy->retry_long;
+		err = wl_set_retry(ndev, cfg->conf->retry_long, true);
+		if (err != BCME_OK)
+			return err;
+	}
+	if (changed & WIPHY_PARAM_RETRY_SHORT &&
+		(cfg->conf->retry_short != wiphy->retry_short)) {
+		cfg->conf->retry_short = wiphy->retry_short;
+		err = wl_set_retry(ndev, cfg->conf->retry_short, false);
+		if (err != BCME_OK) {
+			return err;
+		}
+	}
+
+	return err;
+}
+static chanspec_t
+channel_to_chanspec(struct wiphy *wiphy, struct net_device *dev, u32 channel, u32 bw_cap)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	u8 *buf = NULL;
+	wl_uint32_list_t *list;
+	int err = BCME_OK;
+	chanspec_t c = 0, ret_c = 0;
+	int bw = 0, tmp_bw = 0;
+	int i;
+	u32 tmp_c;
+
+#define LOCAL_BUF_SIZE	1024
+	buf = (u8 *)MALLOC(cfg->osh, LOCAL_BUF_SIZE);
+	if (!buf) {
+		WL_ERR(("buf memory alloc failed\n"));
+		goto exit;
+	}
+
+	err = wldev_iovar_getbuf_bsscfg(dev, "chanspecs", NULL,
+		0, buf, LOCAL_BUF_SIZE, 0, &cfg->ioctl_buf_sync);
+	if (err != BCME_OK) {
+		WL_ERR(("get chanspecs failed with %d\n", err));
+		goto exit;
+	}
+
+	list = (wl_uint32_list_t *)(void *)buf;
+	for (i = 0; i < dtoh32(list->count); i++) {
+		c = dtoh32(list->element[i]);
+		if (channel <= CH_MAX_2G_CHANNEL) {
+			if (!CHSPEC_IS20(c))
+				continue;
+			if (channel == CHSPEC_CHANNEL(c)) {
+				ret_c = c;
+				bw = 20;
+				goto exit;
+			}
+		}
+		tmp_c = wf_chspec_ctlchan(c);
+		tmp_bw = bw2cap[CHSPEC_BW(c) >> WL_CHANSPEC_BW_SHIFT];
+		if (tmp_c != channel)
+			continue;
+
+		if ((tmp_bw > bw) && (tmp_bw <= bw_cap)) {
+			bw = tmp_bw;
+			ret_c = c;
+			if (bw == bw_cap)
+				goto exit;
+		}
+	}
+exit:
+	if (buf) {
+		 MFREE(cfg->osh, buf, LOCAL_BUF_SIZE);
+	}
+#undef LOCAL_BUF_SIZE
+	WL_DBG(("return chanspec %x %d\n", ret_c, bw));
+	return ret_c;
+}
+
+void
+wl_cfg80211_ibss_vsie_set_buffer(struct net_device *dev, vndr_ie_setbuf_t *ibss_vsie,
+	int ibss_vsie_len)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+
+	if (cfg != NULL && ibss_vsie != NULL) {
+		if (cfg->ibss_vsie != NULL) {
+			MFREE(cfg->osh, cfg->ibss_vsie, cfg->ibss_vsie_len);
+		}
+		cfg->ibss_vsie = ibss_vsie;
+		cfg->ibss_vsie_len = ibss_vsie_len;
+	}
+}
+
+static void
+wl_cfg80211_ibss_vsie_free(struct bcm_cfg80211 *cfg)
+{
+	/* free & initiralize VSIE (Vendor Specific IE) */
+	if (cfg->ibss_vsie != NULL) {
+		MFREE(cfg->osh, cfg->ibss_vsie, cfg->ibss_vsie_len);
+		cfg->ibss_vsie_len = 0;
+	}
+}
+
+s32
+wl_cfg80211_ibss_vsie_delete(struct net_device *dev)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	char *ioctl_buf = NULL;
+	s32 ret = BCME_OK, bssidx;
+
+	if (cfg != NULL && cfg->ibss_vsie != NULL) {
+		ioctl_buf = (char *)MALLOC(cfg->osh, WLC_IOCTL_MEDLEN);
+		if (!ioctl_buf) {
+			WL_ERR(("ioctl memory alloc failed\n"));
+			return -ENOMEM;
+		}
+		if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+			WL_ERR(("Find index failed\n"));
+			ret = BCME_ERROR;
+			goto end;
+		}
+		/* change the command from "add" to "del" */
+		strlcpy(cfg->ibss_vsie->cmd, "del", sizeof(cfg->ibss_vsie->cmd));
+
+		ret = wldev_iovar_setbuf_bsscfg(dev, "vndr_ie",
+				cfg->ibss_vsie, cfg->ibss_vsie_len,
+				ioctl_buf, WLC_IOCTL_MEDLEN, bssidx, NULL);
+		WL_ERR(("ret=%d\n", ret));
+
+		if (ret == BCME_OK) {
+			/* Free & initialize VSIE */
+			MFREE(cfg->osh, cfg->ibss_vsie, cfg->ibss_vsie_len);
+			cfg->ibss_vsie_len = 0;
+		}
+end:
+		if (ioctl_buf) {
+			MFREE(cfg->osh, ioctl_buf, WLC_IOCTL_MEDLEN);
+		}
+	}
+
+	return ret;
+}
+
+#ifdef WLAIBSS_MCHAN
+static bcm_struct_cfgdev*
+bcm_cfg80211_add_ibss_if(struct wiphy *wiphy, char *name)
+{
+	int err = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct wireless_dev* wdev = NULL;
+	struct net_device *new_ndev = NULL;
+	struct net_device *primary_ndev = NULL;
+	long timeout;
+	wl_aibss_if_t aibss_if;
+	wl_if_event_info *event = NULL;
+
+	if (cfg->ibss_cfgdev != NULL) {
+		WL_ERR(("IBSS interface %s already exists\n", name));
+		return NULL;
+	}
+
+	WL_ERR(("Try to create IBSS interface %s\n", name));
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+	/* generate a new MAC address for the IBSS interface */
+	get_primary_mac(cfg, &cfg->ibss_if_addr);
+	cfg->ibss_if_addr.octet[4] ^= 0x40;
+	bzero(&aibss_if, sizeof(aibss_if));
+	memcpy(&aibss_if.addr, &cfg->ibss_if_addr, sizeof(aibss_if.addr));
+	aibss_if.chspec = 0;
+	aibss_if.len = sizeof(aibss_if);
+
+	cfg->bss_pending_op = TRUE;
+	bzero(&cfg->if_event_info, sizeof(cfg->if_event_info));
+	err = wldev_iovar_setbuf(primary_ndev, "aibss_ifadd", &aibss_if,
+		sizeof(aibss_if), cfg->ioctl_buf, WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+	if (err) {
+		WL_ERR(("IOVAR aibss_ifadd failed with error %d\n", err));
+		goto fail;
+	}
+	timeout = wait_event_interruptible_timeout(cfg->netif_change_event,
+		!cfg->bss_pending_op, msecs_to_jiffies(MAX_WAIT_TIME));
+	if (timeout <= 0 || cfg->bss_pending_op)
+		goto fail;
+
+	event = &cfg->if_event_info;
+	/* By calling wl_cfg80211_allocate_if (dhd_allocate_if eventually) we give the control
+	 * over this net_device interface to dhd_linux, hence the interface is managed by dhd_liux
+	 * and will be freed by dhd_detach unless it gets unregistered before that. The
+	 * wireless_dev instance new_ndev->ieee80211_ptr associated with this net_device will
+	 * be freed by wl_dealloc_netinfo
+	 */
+	new_ndev = wl_cfg80211_allocate_if(cfg, event->ifidx, event->name,
+		event->mac, event->bssidx, event->name);
+	if (new_ndev == NULL)
+		goto fail;
+	wdev = (struct wireless_dev *)MALLOCZ(cfg->osh, sizeof(*wdev));
+	if (wdev == NULL)
+		goto fail;
+	wdev->wiphy = wiphy;
+	wdev->iftype = NL80211_IFTYPE_ADHOC;
+	wdev->netdev = new_ndev;
+	new_ndev->ieee80211_ptr = wdev;
+	SET_NETDEV_DEV(new_ndev, wiphy_dev(wdev->wiphy));
+
+	/* rtnl lock must have been acquired, if this is not the case, wl_cfg80211_register_if
+	* needs to be modified to take one parameter (bool need_rtnl_lock)
+	 */
+	ASSERT_RTNL();
+	if (wl_cfg80211_register_if(cfg, event->ifidx, new_ndev, FALSE) != BCME_OK)
+		goto fail;
+
+	wl_alloc_netinfo(cfg, new_ndev, wdev, WL_IF_TYPE_IBSS,
+		PM_ENABLE, event->bssidx, event->ifidx);
+	cfg->ibss_cfgdev = ndev_to_cfgdev(new_ndev);
+	WL_ERR(("IBSS interface %s created\n", new_ndev->name));
+	return cfg->ibss_cfgdev;
+
+fail:
+	WL_ERR(("failed to create IBSS interface %s \n", name));
+	cfg->bss_pending_op = FALSE;
+	if (new_ndev)
+		wl_cfg80211_remove_if(cfg, event->ifidx, new_ndev, FALSE);
+	if (wdev) {
+		MFREE(cfg->osh, wdev, sizeof(*wdev));
+	}
+	return NULL;
+}
+
+static s32
+bcm_cfg80211_del_ibss_if(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev)
+{
+	int err = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *ndev = NULL;
+	struct net_device *primary_ndev = NULL;
+	long timeout;
+
+	if (!cfgdev || cfg->ibss_cfgdev != cfgdev || ETHER_ISNULLADDR(&cfg->ibss_if_addr.octet))
+		return -EINVAL;
+	ndev = (struct net_device *)cfgdev_to_ndev(cfg->ibss_cfgdev);
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+
+	cfg->bss_pending_op = TRUE;
+	bzero(&cfg->if_event_info, sizeof(cfg->if_event_info));
+	err = wldev_iovar_setbuf(primary_ndev, "aibss_ifdel", &cfg->ibss_if_addr,
+		sizeof(cfg->ibss_if_addr), cfg->ioctl_buf, WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+	if (err) {
+		WL_ERR(("IOVAR aibss_ifdel failed with error %d\n", err));
+		goto fail;
+	}
+	timeout = wait_event_interruptible_timeout(cfg->netif_change_event,
+		!cfg->bss_pending_op, msecs_to_jiffies(MAX_WAIT_TIME));
+	if (timeout <= 0 || cfg->bss_pending_op) {
+		WL_ERR(("timeout in waiting IF_DEL event\n"));
+		goto fail;
+	}
+
+	wl_cfg80211_remove_if(cfg, cfg->if_event_info.ifidx, ndev, FALSE);
+	cfg->ibss_cfgdev = NULL;
+	return 0;
+
+fail:
+	cfg->bss_pending_op = FALSE;
+	return -1;
+}
+#endif /* WLAIBSS_MCHAN */
+
+s32
+wl_cfg80211_to_fw_iftype(wl_iftype_t iftype)
+{
+	s32 ret = BCME_ERROR;
+
+	switch (iftype) {
+		case WL_IF_TYPE_AP:
+			ret = WL_INTERFACE_TYPE_AP;
+			break;
+		case WL_IF_TYPE_STA:
+			ret = WL_INTERFACE_TYPE_STA;
+			break;
+		case WL_IF_TYPE_NAN_NMI:
+		case WL_IF_TYPE_NAN:
+			ret = WL_INTERFACE_TYPE_NAN;
+			break;
+		case WL_IF_TYPE_P2P_DISC:
+			ret = WL_INTERFACE_TYPE_P2P_DISC;
+			break;
+		case WL_IF_TYPE_P2P_GO:
+			ret = WL_INTERFACE_TYPE_P2P_GO;
+			break;
+		case WL_IF_TYPE_P2P_GC:
+			ret = WL_INTERFACE_TYPE_P2P_GC;
+			break;
+
+		default:
+			WL_ERR(("Unsupported type:%d \n", iftype));
+			ret = -EINVAL;
+			break;
+	}
+	return ret;
+}
+
+s32
+wl_cfg80211_interface_ops(struct bcm_cfg80211 *cfg,
+	struct net_device *ndev, s32 bsscfg_idx,
+	wl_iftype_t cfg_iftype, s32 del, u8 *addr)
+{
+	s32 ret;
+	struct wl_interface_create_v2 iface;
+	wl_interface_create_v3_t iface_v3;
+	wl_interface_create_t iface_v0;
+	struct wl_interface_info_v1 *info;
+	wl_interface_info_v2_t *info_v2;
+	wl_interface_info_t *info_v0;
+	uint32 ifflags = 0;
+	bool use_iface_info_v2 = false;
+	u8 ioctl_buf[WLC_IOCTL_SMLEN];
+	s32 iftype;
+#ifdef WLEASYMESH
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+#endif /* WLEASYMESH */
+
+	if (del) {
+		ret = wldev_iovar_setbuf(ndev, "interface_remove",
+			NULL, 0, ioctl_buf, sizeof(ioctl_buf), NULL);
+		if (unlikely(ret))
+			WL_ERR(("Interface remove failed!! ret %d\n", ret));
+		return ret;
+	}
+
+	/* Interface create */
+	bzero(&iface, sizeof(iface));
+	/*
+	 * flags field is still used along with iftype inorder to support the old version of the
+	 * FW work with the latest app changes.
+	 */
+
+	iftype = wl_cfg80211_to_fw_iftype(cfg_iftype);
+	if (iftype < 0) {
+		return -ENOTSUPP;
+	}
+
+	if (addr) {
+		ifflags |= WL_INTERFACE_MAC_USE;
+	}
+#ifdef WLEASYMESH
+	if (dhd->conf->fw_type == FW_TYPE_EZMESH && iftype == WL_INTERFACE_TYPE_AP) {
+		// this can be removed for 4359
+		ifflags |= WL_INTERFACE_TYPE_AP;
+	}
+#endif /* WLEASYMESH */
+
+	/* Pass ver = 0 for fetching the interface_create iovar version */
+	if (wl_legacy_chip_check(ndev)) {
+		bzero(&iface_v0, sizeof(iface_v0));
+		iface_v0.ver = WL_INTERFACE_CREATE_VER;
+		iface_v0.flags = iftype | ifflags;
+		if (addr) {
+			memcpy(&iface_v0.mac_addr.octet, addr, ETH_ALEN);
+		}
+		ret = wldev_iovar_getbuf(ndev, "interface_create",
+			&iface_v0, sizeof(struct wl_interface_create),
+			ioctl_buf, sizeof(ioctl_buf), NULL);
+		if (ret == 0) {
+			info_v0 = (wl_interface_info_t *)ioctl_buf;
+			ret = info_v0->bsscfgidx;
+			goto exit;
+        }
+	} else {
+		ret = wldev_iovar_getbuf(ndev, "interface_create",
+			&iface, sizeof(struct wl_interface_create_v2),
+			ioctl_buf, sizeof(ioctl_buf), NULL);
+	}
+	if (ret == BCME_UNSUPPORTED) {
+		WL_ERR(("interface_create iovar not supported\n"));
+		return ret;
+	} else if ((ret == 0) && *((uint32 *)ioctl_buf) == WL_INTERFACE_CREATE_VER_3) {
+		WL_DBG(("interface_create version 3. flags:0x%x \n", ifflags));
+		use_iface_info_v2 = true;
+		bzero(&iface_v3, sizeof(wl_interface_create_v3_t));
+		iface_v3.ver = WL_INTERFACE_CREATE_VER_3;
+		iface_v3.iftype = iftype;
+		iface_v3.flags = ifflags;
+		if (addr) {
+			memcpy(&iface_v3.mac_addr.octet, addr, ETH_ALEN);
+		}
+		ret = wldev_iovar_getbuf(ndev, "interface_create",
+			&iface_v3, sizeof(wl_interface_create_v3_t),
+			ioctl_buf, sizeof(ioctl_buf), NULL);
+	} else {
+		/* On any other error, attempt with iovar version 2 */
+		WL_DBG(("interface_create version 2. get_ver:%d ifflags:0x%x\n", ret, ifflags));
+		iface.ver = WL_INTERFACE_CREATE_VER_2;
+		iface.iftype = iftype;
+		iface.flags = ifflags;
+		if (addr) {
+			memcpy(&iface.mac_addr.octet, addr, ETH_ALEN);
+		}
+		ret = wldev_iovar_getbuf(ndev, "interface_create",
+			&iface, sizeof(struct wl_interface_create_v2),
+			ioctl_buf, sizeof(ioctl_buf), NULL);
+	}
+
+	if (unlikely(ret)) {
+		WL_ERR(("Interface create failed!! ret %d\n", ret));
+		return ret;
+	}
+
+	/* success case */
+	if (use_iface_info_v2 == true) {
+		info_v2 = (wl_interface_info_v2_t *)ioctl_buf;
+		ret = info_v2->bsscfgidx;
+	} else {
+		/* Use v1 struct */
+		info = (struct wl_interface_info_v1 *)ioctl_buf;
+		ret = info->bsscfgidx;
+	}
+
+exit:
+#ifdef WLEASYMESH
+	//Give fw more time to process interface_create
+	if (dhd->conf->fw_type == FW_TYPE_EZMESH) {
+		wl_delay(500);
+	}
+#endif /* WLEASYMESH */
+	WL_DBG(("wl interface create success!! bssidx:%d \n", ret));
+	return ret;
+}
+
+s32
+wl_cfg80211_add_del_bss(struct bcm_cfg80211 *cfg,
+	struct net_device *ndev, s32 bsscfg_idx,
+	wl_iftype_t brcm_iftype, s32 del, u8 *addr)
+{
+	s32 ret = BCME_OK;
+	s32 val = 0;
+
+	struct {
+		s32 cfg;
+		s32 val;
+		struct ether_addr ea;
+	} bss_setbuf;
+
+	WL_DBG(("wl_iftype:%d del:%d \n", brcm_iftype, del));
+
+	bzero(&bss_setbuf, sizeof(bss_setbuf));
+
+	/* AP=2, STA=3, up=1, down=0, val=-1 */
+	if (del) {
+		val = WLC_AP_IOV_OP_DELETE;
+	} else if (brcm_iftype == WL_IF_TYPE_AP) {
+		/* Add/role change to AP Interface */
+		WL_DBG(("Adding AP Interface \n"));
+		val = WLC_AP_IOV_OP_MANUAL_AP_BSSCFG_CREATE;
+	} else if (brcm_iftype == WL_IF_TYPE_STA) {
+		/* Add/role change to STA Interface */
+		WL_DBG(("Adding STA Interface \n"));
+		val = WLC_AP_IOV_OP_MANUAL_STA_BSSCFG_CREATE;
+	} else {
+		WL_ERR((" add_del_bss NOT supported for IFACE type:0x%x", brcm_iftype));
+		return -EINVAL;
+	}
+
+	if (!del) {
+		wl_ext_bss_iovar_war(ndev, &val);
+	}
+
+	bss_setbuf.cfg = htod32(bsscfg_idx);
+	bss_setbuf.val = htod32(val);
+
+	if (addr) {
+		memcpy(&bss_setbuf.ea.octet, addr, ETH_ALEN);
+	}
+
+	WL_MSG(ndev->name, "wl bss %d bssidx:%d\n", val, bsscfg_idx);
+	ret = wldev_iovar_setbuf(ndev, "bss", &bss_setbuf, sizeof(bss_setbuf),
+		cfg->ioctl_buf, WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+	if (ret != 0)
+		WL_ERR(("'bss %d' failed with %d\n", val, ret));
+
+	return ret;
+}
+
+s32
+wl_cfg80211_bss_up(struct bcm_cfg80211 *cfg, struct net_device *ndev, s32 bsscfg_idx, s32 bss_up)
+{
+	s32 ret = BCME_OK;
+	s32 val = bss_up ? 1 : 0;
+
+	struct {
+		s32 cfg;
+		s32 val;
+	} bss_setbuf;
+
+	bss_setbuf.cfg = htod32(bsscfg_idx);
+	bss_setbuf.val = htod32(val);
+
+	WL_INFORM_MEM(("wl bss -C %d %s\n", bsscfg_idx, bss_up ? "up" : "down"));
+	ret = wldev_iovar_setbuf(ndev, "bss", &bss_setbuf, sizeof(bss_setbuf),
+		cfg->ioctl_buf, WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
+
+	if (ret != 0) {
+		WL_ERR(("'bss %d' failed with %d\n", bss_up, ret));
+	}
+
+	return ret;
+}
+
+bool
+wl_cfg80211_bss_isup(struct net_device *ndev, int bsscfg_idx)
+{
+	s32 result, val;
+	bool isup = false;
+	s8 getbuf[64];
+
+	/* Check if the BSS is up */
+	*(int*)getbuf = -1;
+	result = wldev_iovar_getbuf_bsscfg(ndev, "bss", &bsscfg_idx,
+		sizeof(bsscfg_idx), getbuf, sizeof(getbuf), 0, NULL);
+	if (result != 0) {
+		WL_ERR(("'cfg bss -C %d' failed: %d\n", bsscfg_idx, result));
+		WL_ERR(("NOTE: this ioctl error is normal "
+			"when the BSS has not been created yet.\n"));
+	} else {
+		val = *(int*)getbuf;
+		val = dtoh32(val);
+		WL_DBG(("wl bss -C %d = %d\n", bsscfg_idx, val));
+		isup = (val ? TRUE : FALSE);
+	}
+	return isup;
+}
+
+s32
+wl_iftype_to_mode(wl_iftype_t iftype)
+{
+	s32 mode = BCME_ERROR;
+
+	switch (iftype) {
+		case WL_IF_TYPE_STA:
+		case WL_IF_TYPE_P2P_GC:
+		case WL_IF_TYPE_P2P_DISC:
+			mode = WL_MODE_BSS;
+			break;
+		case WL_IF_TYPE_AP:
+		case WL_IF_TYPE_P2P_GO:
+			mode = WL_MODE_AP;
+			break;
+		case WL_IF_TYPE_NAN:
+			mode = WL_MODE_NAN;
+			break;
+		case WL_IF_TYPE_AIBSS:
+			/* Intentional fall through */
+		case WL_IF_TYPE_IBSS:
+			mode = WL_MODE_IBSS;
+			break;
+#ifdef WLMESH_CFG80211
+		case WL_IF_TYPE_MESH:
+			mode = WL_MODE_MESH;
+			break;
+#endif /* WLMESH_CFG80211 */
+		default:
+			WL_ERR(("Unsupported type:%d\n", iftype));
+			break;
+	}
+	return mode;
+}
+
+s32
+cfg80211_to_wl_iftype(uint16 type, uint16 *role, uint16 *mode)
+{
+	switch (type) {
+		case NL80211_IFTYPE_STATION:
+			*role = WL_IF_TYPE_STA;
+			*mode = WL_MODE_BSS;
+			break;
+		case NL80211_IFTYPE_AP:
+			*role = WL_IF_TYPE_AP;
+			*mode = WL_MODE_AP;
+			break;
+#ifdef WL_CFG80211_P2P_DEV_IF
+		case NL80211_IFTYPE_P2P_DEVICE:
+			*role = WL_IF_TYPE_P2P_DISC;
+			*mode = WL_MODE_BSS;
+			break;
+#endif /* WL_CFG80211_P2P_DEV_IF */
+		case NL80211_IFTYPE_P2P_GO:
+			*role = WL_IF_TYPE_P2P_GO;
+			*mode = WL_MODE_AP;
+			break;
+		case NL80211_IFTYPE_P2P_CLIENT:
+			*role = WL_IF_TYPE_P2P_GC;
+			*mode = WL_MODE_BSS;
+			break;
+		case NL80211_IFTYPE_MONITOR:
+			WL_ERR(("Unsupported mode \n"));
+			return BCME_UNSUPPORTED;
+		case NL80211_IFTYPE_ADHOC:
+			*role = WL_IF_TYPE_IBSS;
+			*mode = WL_MODE_IBSS;
+			break;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+		case NL80211_IFTYPE_NAN:
+			*role = WL_IF_TYPE_NAN;
+			*mode = WL_MODE_NAN;
+			break;
+#endif // endif
+#ifdef WLMESH_CFG80211
+		case NL80211_IFTYPE_MESH_POINT:
+			*role = WLC_E_IF_ROLE_AP;
+			*mode = WL_MODE_MESH;
+			break;
+#endif /* WLMESH_CFG80211 */
+		default:
+			WL_ERR(("Unknown interface type:0x%x\n", type));
+			return BCME_ERROR;
+	}
+	return BCME_OK;
+}
+
+static s32
+wl_role_to_cfg80211_type(uint16 role, uint16 *wl_iftype, uint16 *mode)
+{
+	switch (role) {
+	case WLC_E_IF_ROLE_STA:
+		*wl_iftype = WL_IF_TYPE_STA;
+		*mode = WL_MODE_BSS;
+		return NL80211_IFTYPE_STATION;
+	case WLC_E_IF_ROLE_AP:
+		*wl_iftype = WL_IF_TYPE_AP;
+		*mode = WL_MODE_AP;
+		return NL80211_IFTYPE_AP;
+	case WLC_E_IF_ROLE_P2P_GO:
+		*wl_iftype = WL_IF_TYPE_P2P_GO;
+		*mode = WL_MODE_AP;
+		return NL80211_IFTYPE_P2P_GO;
+	case WLC_E_IF_ROLE_P2P_CLIENT:
+		*wl_iftype = WL_IF_TYPE_P2P_GC;
+		*mode = WL_MODE_BSS;
+		return NL80211_IFTYPE_P2P_CLIENT;
+	case WLC_E_IF_ROLE_IBSS:
+		*wl_iftype = WL_IF_TYPE_IBSS;
+		*mode = WL_MODE_IBSS;
+		return NL80211_IFTYPE_ADHOC;
+	case WLC_E_IF_ROLE_NAN:
+		*wl_iftype = WL_IF_TYPE_NAN;
+		*mode = WL_MODE_NAN;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)) && defined(WL_CFG80211_NAN)
+		/* NL80211_IFTYPE_NAN should only be used with CFG80211 NAN MGMT
+		 * For Vendor HAL based NAN implementation, continue advertising
+		 * as a STA interface
+		 */
+		return NL80211_IFTYPE_NAN;
+#else
+		return NL80211_IFTYPE_STATION;
+#endif /* ((LINUX_VER >= KERNEL_VERSION(4, 9, 0))) && WL_CFG80211_NAN */
+#ifdef WLDWDS
+	case WLC_E_IF_ROLE_WDS:
+		*wl_iftype = WL_IF_TYPE_AP;
+		*mode = WL_MODE_AP;
+		return NL80211_IFTYPE_AP;
+#endif
+#ifdef WLMESH_CFG80211
+	case WLC_E_IF_ROLE_MESH:
+		*wl_iftype = WL_IF_TYPE_MESH;
+		*mode = WL_MODE_MESH;
+		return NL80211_IFTYPE_MESH_POINT;
+#endif /* WLMESH_CFG80211 */
+
+	default:
+		WL_ERR(("Unknown interface role:0x%x. Forcing type station\n", role));
+		return BCME_ERROR;
+	}
+}
+
+struct net_device *
+wl_cfg80211_post_ifcreate(struct net_device *ndev,
+	wl_if_event_info *event, u8 *addr,
+	const char *name, bool rtnl_lock_reqd)
+{
+	struct bcm_cfg80211 *cfg;
+	struct net_device *primary_ndev;
+	struct net_device *new_ndev = NULL;
+	struct wireless_dev *wdev = NULL;
+	s32 iface_type;
+	s32 ret = BCME_OK;
+	u16 mode;
+	u8 mac_addr[ETH_ALEN];
+	u16 wl_iftype;
+#ifdef WL_STATIC_IF
+	int static_ifidx;
+#endif
+
+	if (!ndev || !event) {
+		WL_ERR(("Wrong arg\n"));
+		return NULL;
+	}
+
+	cfg = wl_get_cfg(ndev);
+	if (!cfg) {
+		WL_ERR(("cfg null\n"));
+		return NULL;
+	}
+
+	WL_DBG(("Enter. role:%d ifidx:%d bssidx:%d\n",
+		event->role, event->ifidx, event->bssidx));
+	if (!event->ifidx || !event->bssidx) {
+		/* Fw returned primary idx (0) for virtual interface */
+		WL_ERR(("Wrong index. ifidx:%d bssidx:%d \n",
+			event->ifidx, event->bssidx));
+		return NULL;
+	}
+
+#if defined(WLMESH_CFG80211) && defined(WL_EXT_IAPSTA)
+	if (wl_ext_iapsta_mesh_creating(ndev)) {
+		event->role = WLC_E_IF_ROLE_MESH;
+		WL_MSG(ndev->name, "change role to WLC_E_IF_ROLE_MESH\n");
+	}
+#endif /* WLMESH_CFG80211 && WL_EXT_IAPSTA */
+
+	iface_type = wl_role_to_cfg80211_type(event->role, &wl_iftype, &mode);
+	if (iface_type < 0) {
+		/* Unknown iface type */
+		WL_ERR(("Wrong iface type \n"));
+		return NULL;
+	}
+
+	WL_DBG(("mac_ptr:%p name:%s role:%d nl80211_iftype:%d " MACDBG "\n",
+		addr, name, event->role, iface_type, MAC2STRDBG(event->mac)));
+	if (!name) {
+		/* If iface name is not provided, use dongle ifname */
+		name = event->name;
+	}
+
+	if (!addr) {
+		/* If mac address is not set, use primary mac with locally administered
+		 * bit set.
+		 */
+		primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+		memcpy(mac_addr, primary_ndev->dev_addr, ETH_ALEN);
+		/* For customer6 builds, use primary mac address for virtual interface */
+		mac_addr[0] |= 0x02;
+		addr = mac_addr;
+	}
+
+#ifdef WL_STATIC_IF
+	static_ifidx = wl_cfg80211_static_if_name(cfg, name);
+	if (static_ifidx >= 0) {
+		new_ndev = wl_cfg80211_post_static_ifcreate(cfg, event, addr, iface_type,
+			static_ifidx);
+		if (!new_ndev) {
+			WL_ERR(("failed to get I/F pointer\n"));
+			return NULL;
+		}
+		wdev = new_ndev->ieee80211_ptr;
+	} else
+#endif /* WL_STATIC_IF */
+	{
+		new_ndev = wl_cfg80211_allocate_if(cfg, event->ifidx,
+			name, addr, event->bssidx, event->name);
+		if (!new_ndev) {
+			WL_ERR(("I/F allocation failed! \n"));
+			return NULL;
+		} else {
+			WL_DBG(("I/F allocation succeeded! ifidx:0x%x bssidx:0x%x \n",
+			 event->ifidx, event->bssidx));
+		}
+
+		wdev = (struct wireless_dev *)MALLOCZ(cfg->osh, sizeof(*wdev));
+		if (!wdev) {
+			WL_ERR(("wireless_dev alloc failed! \n"));
+			wl_cfg80211_remove_if(cfg, event->ifidx, new_ndev, rtnl_lock_reqd);
+			return NULL;
+		}
+
+		wdev->wiphy = bcmcfg_to_wiphy(cfg);
+		wdev->iftype = iface_type;
+
+		new_ndev->ieee80211_ptr = wdev;
+#ifdef WLDWDS
+		/* set wds0.x to 4addr interface here */
+		if (event->role == WLC_E_IF_ROLE_WDS) {
+			WL_MSG(ndev->name, "set vwdev 4addr to %s\n", event->name);
+			wdev->use_4addr = true;
+		}
+#endif /* WLDWDS */
+		SET_NETDEV_DEV(new_ndev, wiphy_dev(wdev->wiphy));
+
+		memcpy(new_ndev->dev_addr, addr, ETH_ALEN);
+#ifdef WL_EXT_IAPSTA
+		wl_ext_iapsta_ifadding(new_ndev, event->ifidx);
+#endif /* WL_EXT_IAPSTA */
+		if (wl_cfg80211_register_if(cfg, event->ifidx, new_ndev, rtnl_lock_reqd)
+			!= BCME_OK) {
+			WL_ERR(("IFACE register failed \n"));
+			/* Post interface registration, wdev would be freed from the netdev
+			 * destructor path. For other cases, handle it here.
+			 */
+			MFREE(cfg->osh, wdev, sizeof(*wdev));
+			wl_cfg80211_remove_if(cfg, event->ifidx, new_ndev, rtnl_lock_reqd);
+			return NULL;
+		}
+	}
+
+	/* Initialize with the station mode params */
+	ret = wl_alloc_netinfo(cfg, new_ndev, wdev, wl_iftype,
+		PM_ENABLE, event->bssidx, event->ifidx);
+	if (unlikely(ret)) {
+		WL_ERR(("wl_alloc_netinfo Error (%d)\n", ret));
+		goto fail;
+	}
+
+	/* Apply the mode & infra setting based on iftype */
+	if ((ret = wl_config_infra(cfg, new_ndev, wl_iftype)) < 0) {
+		WL_ERR(("config ifmode failure (%d)\n", ret));
+		goto fail;
+	}
+
+	if (mode == WL_MODE_AP) {
+		wl_set_drv_status(cfg, AP_CREATING, new_ndev);
+	}
+#ifdef WL_EXT_IAPSTA
+	wl_ext_iapsta_update_iftype(new_ndev, event->ifidx, wl_iftype);
+#endif
+
+	WL_INFORM_MEM(("Network Interface (%s) registered with host."
+		" cfg_iftype:%d wl_role:%d " MACDBG "\n",
+		new_ndev->name, iface_type, event->role, MAC2STRDBG(new_ndev->dev_addr)));
+
+#ifdef SUPPORT_SET_CAC
+	wl_cfg80211_set_cac(cfg, 0);
+#endif /* SUPPORT_SET_CAC */
+
+	return new_ndev;
+
+fail:
+#ifdef WL_STATIC_IF
+	/* remove static if from iflist */
+	static_ifidx = wl_cfg80211_static_if_name(cfg, name);
+	if (static_ifidx >= 0) {
+		cfg->static_ndev_state[static_ifidx] = NDEV_STATE_FW_IF_FAILED;
+		wl_cfg80211_update_iflist_info(cfg, new_ndev, WL_STATIC_IFIDX+static_ifidx, addr,
+			event->bssidx, event->name, NDEV_STATE_FW_IF_FAILED);
+	}
+#endif /* WL_STATIC_IF */
+	if (new_ndev) {
+		/* wdev would be freed from netdev destructor call back */
+		wl_cfg80211_remove_if(cfg, event->ifidx, new_ndev, rtnl_lock_reqd);
+	}
+
+	return NULL;
+}
+
+s32
+wl_cfg80211_delete_iface(struct bcm_cfg80211 *cfg,
+	wl_iftype_t sec_data_if_type)
+{
+	struct net_info *iter, *next;
+	struct net_device *primary_ndev;
+	s32 ret = BCME_OK;
+	uint8 i = 0;
+
+	BCM_REFERENCE(i);
+	BCM_REFERENCE(ret);
+
+	/* Note: This function will clean up only the network interface and host
+	 * data structures. The firmware interface clean up will happen in the
+	 * during chip reset (ifconfig wlan0 down for built-in drivers/rmmod
+	 * context for the module case).
+	 */
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+	WL_DBG(("Enter, deleting iftype  %s\n",
+		wl_iftype_to_str(sec_data_if_type)));
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	for_each_ndev(cfg, iter, next) {
+		GCC_DIAGNOSTIC_POP();
+		if (iter->ndev && (iter->ndev != primary_ndev)) {
+			if (iter->iftype != sec_data_if_type) {
+				continue;
+			}
+			switch (sec_data_if_type) {
+				case WL_IF_TYPE_P2P_GO:
+				case WL_IF_TYPE_P2P_GC: {
+					ret = _wl_cfg80211_del_if(cfg,
+						iter->ndev, NULL, iter->ndev->name);
+					break;
+				}
+#ifdef WL_NAN
+				case WL_IF_TYPE_NAN: {
+					if (cfg->nan_enable == false) {
+						WL_INFORM_MEM(("Nan is not active,"
+							" ignore NDI delete\n"));
+					} else {
+						ret = wl_cfgnan_delete_ndp(cfg, iter->ndev);
+					}
+					break;
+				}
+#endif /* WL_NAN */
+				case WL_IF_TYPE_AP: {
+					/* Cleanup AP */
+#ifdef WL_STATIC_IF
+						/* handle static ap */
+					if (wl_cfg80211_static_if(cfg, iter->ndev)) {
+						dev_close(iter->ndev);
+					} else
+#endif /* WL_STATIC_IF */
+					{
+						/* handle virtual created AP */
+						ret = _wl_cfg80211_del_if(cfg, iter->ndev,
+							NULL, iter->ndev->name);
+					}
+					break;
+				}
+				default: {
+					WL_ERR(("Unsupported interface type\n"));
+					ret = -ENOTSUPP;
+					goto fail;
+				}
+			}
+		}
+	}
+fail:
+	return ret;
+}
+
+void
+wl_cfg80211_cleanup_virtual_ifaces(struct bcm_cfg80211 *cfg, bool rtnl_lock_reqd)
+{
+	struct net_info *iter, *next;
+	struct net_device *primary_ndev;
+
+	/* Note: This function will clean up only the network interface and host
+	 * data structures. The firmware interface clean up will happen in the
+	 * during chip reset (ifconfig wlan0 down for built-in drivers/rmmod
+	 * context for the module case).
+	 */
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+	WL_DBG(("Enter\n"));
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	for_each_ndev(cfg, iter, next) {
+		GCC_DIAGNOSTIC_POP();
+		if (iter->ndev && (iter->ndev != primary_ndev)) {
+			/* Ensure interfaces are down before deleting */
+#ifdef WL_STATIC_IF
+			/* Avoiding cleaning static ifaces */
+			if (!wl_cfg80211_static_if(cfg, iter->ndev))
+#endif /* WL_STATIC_IF */
+			{
+				dev_close(iter->ndev);
+				WL_DBG(("Cleaning up iface:%s \n", iter->ndev->name));
+				wl_cfg80211_post_ifdel(iter->ndev, rtnl_lock_reqd, 0);
+			}
+		}
+	}
+}
+
+s32
+wl_cfg80211_post_ifdel(struct net_device *ndev, bool rtnl_lock_reqd, s32 ifidx)
+{
+	s32 ret = BCME_OK;
+	struct bcm_cfg80211 *cfg;
+	struct net_info *netinfo = NULL;
+
+	if (!ndev || !ndev->ieee80211_ptr) {
+		/* No wireless dev done for this interface */
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	cfg = wl_get_cfg(ndev);
+	if (!cfg) {
+		WL_ERR(("cfg null\n"));
+		ret = BCME_ERROR;
+		goto exit;
+	}
+
+	if (ifidx <= 0) {
+		WL_ERR(("Invalid IF idx for iface:%s\n", ndev->name));
+		ifidx = dhd_net2idx(((struct dhd_pub *)(cfg->pub))->info, ndev);
+		BCM_REFERENCE(ifidx);
+		if (ifidx <= 0) {
+			ASSERT(0);
+			ret = BCME_ERROR;
+			goto exit;
+		}
+	}
+
+	if ((netinfo = wl_get_netinfo_by_wdev(cfg, ndev_to_wdev(ndev))) == NULL) {
+		WL_ERR(("Find netinfo from wdev %p failed\n", ndev_to_wdev(ndev)));
+		ret = -ENODEV;
+		goto exit;
+	}
+
+#ifdef WL_STATIC_IF
+	if (wl_cfg80211_static_if(cfg, ndev)) {
+		ret = wl_cfg80211_post_static_ifdel(cfg, ndev);
+	} else
+#endif /* WL_STATIC_IF */
+	{
+		WL_INFORM_MEM(("[%s] cfg80211_remove_if ifidx:%d, vif_count:%d\n",
+			ndev->name, ifidx, cfg->vif_count));
+		wl_cfg80211_remove_if(cfg, ifidx, ndev, rtnl_lock_reqd);
+		cfg->bss_pending_op = FALSE;
+	}
+
+#ifdef SUPPORT_SET_CAC
+	wl_cfg80211_set_cac(cfg, 1);
+#endif /* SUPPORT_SET_CAC */
+exit:
+	return ret;
+}
+
+int
+wl_cfg80211_deinit_p2p_discovery(struct bcm_cfg80211 *cfg)
+{
+	s32 ret = BCME_OK;
+	bcm_struct_cfgdev *cfgdev;
+
+	if (cfg->p2p) {
+		/* De-initialize the p2p discovery interface, if operational */
+		WL_ERR(("Disabling P2P Discovery Interface \n"));
+#ifdef WL_CFG80211_P2P_DEV_IF
+		cfgdev = bcmcfg_to_p2p_wdev(cfg);
+#else
+		cfgdev = cfg->p2p_net;
+#endif // endif
+		if (cfgdev) {
+			ret = wl_cfg80211_scan_stop(cfg, cfgdev);
+			if (unlikely(ret < 0)) {
+				CFGP2P_ERR(("P2P scan stop failed, ret=%d\n", ret));
+			}
+		}
+
+		wl_cfgp2p_disable_discovery(cfg);
+		wl_to_p2p_bss_bssidx(cfg, P2PAPI_BSSCFG_DEVICE) = 0;
+		p2p_on(cfg) = false;
+	}
+	return ret;
+}
+
+/* Create a Generic Network Interface and initialize it depending up on
+ * the interface type
+ */
+struct wireless_dev *
+wl_cfg80211_create_iface(struct wiphy *wiphy,
+	wl_iftype_t wl_iftype,
+	u8 *mac_addr, const char *name)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *new_ndev = NULL;
+	struct net_device *primary_ndev = NULL;
+	s32 ret = BCME_OK;
+	s32 bsscfg_idx = 0;
+	long timeout;
+	wl_if_event_info *event = NULL;
+	u8 addr[ETH_ALEN];
+	struct net_info *iter, *next;
+
+	WL_DBG(("Enter\n"));
+	if (!name) {
+		WL_ERR(("Interface name not provided\n"));
+		return NULL;
+	}
+	else {
+		GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+		for_each_ndev(cfg, iter, next) {
+			GCC_DIAGNOSTIC_POP();
+			if (iter->ndev) {
+				if (strncmp(iter->ndev->name, name, strlen(name)) == 0) {
+					WL_ERR(("Interface name,%s exists!\n", iter->ndev->name));
+					return NULL;
+				}
+			}
+		}
+	}
+	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
+	if (likely(!mac_addr)) {
+		/* Use primary MAC with the locally administered bit for the
+		 *  Secondary STA I/F
+		 */
+		memcpy(addr, primary_ndev->dev_addr, ETH_ALEN);
+		addr[0] |= 0x02;
+	} else {
+		/* Use the application provided mac address (if any) */
+		memcpy(addr, mac_addr, ETH_ALEN);
+	}
+
+	cfg->bss_pending_op = TRUE;
+	bzero(&cfg->if_event_info, sizeof(cfg->if_event_info));
+
+	/*
+	 * Intialize the firmware I/F.
+	 */
+	{
+		ret = wl_cfg80211_interface_ops(cfg, primary_ndev, bsscfg_idx,
+			wl_iftype, 0, addr);
+	}
+	if (ret == BCME_UNSUPPORTED) {
+		/* Use bssidx 1 by default */
+		bsscfg_idx = 1;
+		if ((ret = wl_cfg80211_add_del_bss(cfg, primary_ndev,
+			bsscfg_idx, wl_iftype, 0, addr)) < 0) {
+			goto exit;
+		}
+	} else if (ret < 0) {
+		WL_ERR(("Interface create failed!! ret:%d \n", ret));
+		goto exit;
+	} else {
+		/* Success */
+		bsscfg_idx = ret;
+	}
+
+	WL_DBG(("Interface created!! bssidx:%d \n", bsscfg_idx));
+	/*
+	 * Wait till the firmware send a confirmation event back.
+	 */
+	WL_DBG(("Wait for the FW I/F Event\n"));
+	timeout = wait_event_interruptible_timeout(cfg->netif_change_event,
+		!cfg->bss_pending_op, msecs_to_jiffies(MAX_WAIT_TIME));
+	if (timeout <= 0 || cfg->bss_pending_op) {
+		WL_ERR(("ADD_IF event, didn't come. Return. timeout:%lu bss_pending_op:%d\n",
+			timeout, cfg->bss_pending_op));
+		if (timeout == -ERESTARTSYS) {
+			WL_ERR(("waitqueue was interrupted by a signal, returns -ERESTARTSYS\n"));
+		}
+		goto exit;
+	}
+
+	event = &cfg->if_event_info;
+	/*
+	 * Since FW operation is successful,we can go ahead with the
+	 * the host interface creation.
+	 */
+	new_ndev = wl_cfg80211_post_ifcreate(primary_ndev,
+		event, addr, name, false);
+
+	if (new_ndev) {
+		/* Iface post ops successful. Return ndev/wdev ptr */
+		return new_ndev->ieee80211_ptr;
+	}
+
+exit:
+	cfg->bss_pending_op = FALSE;
+	return NULL;
+}
+
+s32
+wl_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *ndev = NULL;
+	s32 ret = BCME_OK;
+	s32 bsscfg_idx = 1;
+	long timeout;
+	u16 wl_iftype;
+	u16 wl_mode;
+
+	WL_DBG(("Enter\n"));
+
+	/* If any scan is going on, abort it */
+	if (wl_get_drv_status_all(cfg, SCANNING)) {
+		WL_DBG(("Scan in progress. Aborting the scan!\n"));
+		wl_cfg80211_cancel_scan(cfg);
+	}
+
+	bsscfg_idx = wl_get_bssidx_by_wdev(cfg, wdev);
+	if (bsscfg_idx <= 0) {
+		/* validate bsscfgidx */
+		WL_ERR(("Wrong bssidx! \n"));
+		return -EINVAL;
+	}
+
+	/* Handle p2p iface */
+	if ((ret = wl_cfg80211_p2p_if_del(wiphy, wdev)) != BCME_NOTFOUND) {
+		WL_DBG(("P2P iface del handled \n"));
+#ifdef SUPPORT_SET_CAC
+		wl_cfg80211_set_cac(cfg, 1);
+#endif /* SUPPORT_SET_CAC */
+		return ret;
+	}
+
+	ndev = wdev->netdev;
+	if (unlikely(!ndev)) {
+		WL_ERR(("ndev null! \n"));
+		return -EINVAL;
+	}
+
+	memset(&cfg->if_event_info, 0, sizeof(cfg->if_event_info));
+
+	if (cfg80211_to_wl_iftype(ndev->ieee80211_ptr->iftype,
+		&wl_iftype, &wl_mode) < 0) {
+		return -EINVAL;
+	}
+
+	WL_DBG(("del interface. bssidx:%d cfg_iftype:%d wl_iftype:%d",
+		bsscfg_idx, ndev->ieee80211_ptr->iftype, wl_iftype));
+	/* Delete the firmware interface. "interface_remove" command
+	 * should go on the interface to be deleted
+	 */
+	if (wl_cfg80211_get_bus_state(cfg)) {
+		WL_ERR(("Bus state is down: %d\n", __LINE__));
+		ret = BCME_DONGLE_DOWN;
+		goto exit;
+	}
+
+	cfg->bss_pending_op = true;
+	ret = wl_cfg80211_interface_ops(cfg, ndev, bsscfg_idx,
+		wl_iftype, 1, NULL);
+	if (ret == BCME_UNSUPPORTED) {
+		if ((ret = wl_cfg80211_add_del_bss(cfg, ndev,
+			bsscfg_idx, wl_iftype, true, NULL)) < 0) {
+			WL_ERR(("DEL bss failed ret:%d \n", ret));
+			goto exit;
+		}
+	} else if ((ret == BCME_NOTAP) || (ret == BCME_NOTSTA)) {
+		/* De-init sequence involving role downgrade not happened.
+		 * Do nothing and return error. The del command should be
+		 * retried.
+		 */
+		WL_ERR(("ifdel role mismatch:%d\n", ret));
+		ret = -EBADTYPE;
+		goto exit;
+	} else if (ret < 0) {
+		WL_ERR(("Interface DEL failed ret:%d \n", ret));
+		goto exit;
+	}
+
+	timeout = wait_event_interruptible_timeout(cfg->netif_change_event,
+		!cfg->bss_pending_op, msecs_to_jiffies(MAX_WAIT_TIME));
+	if (timeout <= 0 || cfg->bss_pending_op) {
+		WL_ERR(("timeout in waiting IF_DEL event\n"));
+		/* The interface unregister will happen from wifi reset context */
+		ret = -ETIMEDOUT;
+		/* fall through */
+	}
+
+exit:
+	if (ret < 0) {
+		WL_ERR(("iface del failed:%d\n", ret));
+#ifdef WL_STATIC_IF
+		if (wl_cfg80211_static_if(cfg, ndev)) {
+			/*
+			 * For static interface, clean up the host data,
+			 * irrespective of fw status. For dynamic
+			 * interfaces it gets cleaned from dhd_stop context
+			 */
+			wl_cfg80211_post_static_ifdel(cfg, ndev);
+		}
+#endif /* WL_STATIC_IF */
+	} else {
+		ret = wl_cfg80211_post_ifdel(ndev, false, cfg->if_event_info.ifidx);
+		if (unlikely(ret)) {
+			WL_ERR(("post_ifdel failed\n"));
+		}
+	}
+
+	cfg->bss_pending_op = false;
+	return ret;
+}
