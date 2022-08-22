@@ -2384,3 +2384,67 @@ UNUSUAL_DEV(  0x4102, 0x1059, 0x0000,  0x0000,
  * The key makes the SCSI stack print confusing (but harmless) messages
  */
 UNUSUAL_DEV(  0x4146, 0xba01, 0x0100, 0x0100,
+		"Iomega",
+		"Micro Mini 1GB",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL, US_FL_NOT_LOCKABLE ),
+
+/* "G-DRIVE" external HDD hangs on write without these.
+ * Patch submitted by Alexander Kappner <agk@godking.net>
+ */
+UNUSUAL_DEV(0x4971, 0x8024, 0x0000, 0x9999,
+		"SimpleTech",
+		"External HDD",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_ALWAYS_SYNC),
+
+/*
+ * Nick Bowler <nbowler@elliptictech.com>
+ * SCSI stack spams (otherwise harmless) error messages.
+ */
+UNUSUAL_DEV(  0xc251, 0x4003, 0x0100, 0x0100,
+		"Keil Software, Inc.",
+		"V2M MotherBoard",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_NOT_LOCKABLE),
+
+/* Reported by Andrew Simmons <andrew.simmons@gmail.com> */
+UNUSUAL_DEV(  0xed06, 0x4500, 0x0001, 0x0001,
+		"DataStor",
+		"USB4500 FW1.04",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_CAPACITY_HEURISTICS),
+
+/* Reported by Alessio Treglia <quadrispro@ubuntu.com> */
+UNUSUAL_DEV( 0xed10, 0x7636, 0x0001, 0x0001,
+		"TGE",
+		"Digital MP3 Audio Player",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL, US_FL_NOT_LOCKABLE ),
+
+/* Unusual uas devices */
+#if IS_ENABLED(CONFIG_USB_UAS)
+#include "unusual_uas.h"
+#endif
+
+/* Control/Bulk transport for all SubClass values */
+USUAL_DEV(USB_SC_RBC, USB_PR_CB),
+USUAL_DEV(USB_SC_8020, USB_PR_CB),
+USUAL_DEV(USB_SC_QIC, USB_PR_CB),
+USUAL_DEV(USB_SC_UFI, USB_PR_CB),
+USUAL_DEV(USB_SC_8070, USB_PR_CB),
+USUAL_DEV(USB_SC_SCSI, USB_PR_CB),
+
+/* Control/Bulk/Interrupt transport for all SubClass values */
+USUAL_DEV(USB_SC_RBC, USB_PR_CBI),
+USUAL_DEV(USB_SC_8020, USB_PR_CBI),
+USUAL_DEV(USB_SC_QIC, USB_PR_CBI),
+USUAL_DEV(USB_SC_UFI, USB_PR_CBI),
+USUAL_DEV(USB_SC_8070, USB_PR_CBI),
+USUAL_DEV(USB_SC_SCSI, USB_PR_CBI),
+
+/* Bulk-only transport for all SubClass values */
+USUAL_DEV(USB_SC_RBC, USB_PR_BULK),
+USUAL_DEV(USB_SC_8020, USB_PR_BULK),
+USUAL_DEV(USB_SC_QIC, USB_PR_BULK),
+USUAL_DEV(USB_SC_UFI, USB_PR_BULK),
+USUAL_DEV(USB_SC_8070, USB_PR_BULK),
+USUAL_DEV(USB_SC_SCSI, USB_PR_BULK),
