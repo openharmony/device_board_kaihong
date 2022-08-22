@@ -1373,3 +1373,1815 @@ ebc_io_ctl:
 	b	.L141
 .LVL116:
 	.p2align 3
+.L133:
+.LBE898:
+.LBE903:
+.LBE906:
+.LBE917:
+.LBE921:
+.LBE956:
+.LBB957:
+.LBB849:
+.LBB847:
+.LBB845:
+.LBB835:
+.LBB831:
+.LBB832:
+.LBB833:
+	.loc 9 157 0
+	sbfx	x0, x21, 0, 56
+.LVL117:
+.LBE833:
+.LBE832:
+	.loc 6 86 0
+	and	x0, x0, x21
+.LVL118:
+	b	.L134
+.LVL119:
+	.p2align 3
+.L117:
+.LBE831:
+.LBE835:
+.LBE845:
+.LBE847:
+.LBE849:
+.LBE957:
+.LBB958:
+.LBB884:
+.LBB880:
+.LBB869:
+.LBB866:
+.LBB861:
+.LBB862:
+.LBB863:
+	.loc 9 157 0
+	sbfx	x0, x21, 0, 56
+.LVL120:
+.LBE863:
+.LBE862:
+	.loc 6 86 0
+	and	x0, x0, x21
+.LVL121:
+	b	.L118
+.LVL122:
+	.p2align 3
+.L102:
+.LBE861:
+.LBE866:
+.LBE869:
+.LBE880:
+.LBE884:
+.LBE958:
+.LBB959:
+.LBB960:
+.LBB961:
+.LBB962:
+.LBB963:
+.LBB964:
+.LBB965:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x0, sp_el0
+// 0 "" 2
+.LVL123:
+#NO_APP
+.LBE965:
+.LBE964:
+	.loc 6 85 0
+	ldr	w2, [x0, 52]
+.LBE963:
+.LBE962:
+.LBE961:
+.LBE960:
+.LBE959:
+	.loc 1 1279 0
+	add	x22, x20, 236
+.LBB994:
+.LBB990:
+.LBB986:
+.LBB975:
+.LBB972:
+	.loc 6 77 0
+	ldr	x1, [x0, 8]
+.LVL124:
+	.loc 6 84 0
+	tbnz	x2, 21, .L136
+.LBB966:
+.LBB967:
+.LBB968:
+	.loc 7 106 0
+	ldr	x2, [x0]
+.LBE968:
+.LBE967:
+.LBE966:
+.LBE972:
+.LBE975:
+.LBE986:
+.LBE990:
+.LBE994:
+	.loc 1 1162 0
+	mov	x0, x21
+.LVL125:
+.LBB995:
+.LBB991:
+.LBB987:
+.LBB976:
+.LBB973:
+	.loc 6 84 0
+	tbnz	x2, 26, .L136
+.L137:
+.LVL126:
+	.loc 6 89 0
+#APP
+// 89 "./arch/arm64/include/asm/uaccess.h" 1
+		adds	x0, x0, 4
+	csel	x1, xzr, x1, hi
+	csinv	x0, x0, xzr, cc
+	sbcs	xzr, x0, x1
+	cset	x0, ls
+
+// 0 "" 2
+.LVL127:
+#NO_APP
+	mov	x3, x0
+.LBE973:
+.LBE976:
+	.loc 8 114 0
+	cbz	x0, .L153
+.LBB977:
+.LBB978:
+.LBB979:
+.LBB980:
+.LBB981:
+	.loc 9 157 0
+	sbfx	x0, x21, 0, 56
+.LBE981:
+.LBE980:
+.LBE979:
+.LBB982:
+.LBB983:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x1, sp_el0
+// 0 "" 2
+.LVL128:
+#NO_APP
+.LBE983:
+.LBE982:
+.LBB984:
+	.loc 6 254 0
+	and	x0, x0, x21
+.LVL129:
+.LBE984:
+	.loc 6 249 0
+	ldr	x2, [x1, 8]
+#APP
+// 249 "./arch/arm64/include/asm/uaccess.h" 1
+		bics	xzr, x0, x2
+	csel	x1, x21, xzr, eq
+
+// 0 "" 2
+.LVL130:
+	.loc 6 257 0
+// 257 "./arch/arm64/include/asm/uaccess.h" 1
+	hint #20
+// 0 "" 2
+#NO_APP
+.LBE978:
+.LBE977:
+	.loc 8 116 0
+	mov	x2, 4
+	mov	x0, x22
+.LVL131:
+	bl	__arch_copy_from_user
+.LVL132:
+	.loc 8 118 0
+	cbnz	x0, .L179
+.LBE987:
+.LBE991:
+.LBE995:
+	.loc 1 1283 0
+	add	x20, x20, 184
+	ldr	w2, [x20, 52]
+	ldr	x0, [x20, 88]
+.LVL133:
+	adrp	x1, .LC7
+	add	x1, x1, :lo12:.LC7
+	bl	_dev_info
+.LVL134:
+	b	.L174
+.LVL135:
+	.p2align 3
+.L136:
+.LBB996:
+.LBB992:
+.LBB988:
+.LBB985:
+.LBB974:
+.LBB969:
+.LBB970:
+.LBB971:
+	.loc 9 157 0
+	sbfx	x0, x21, 0, 56
+.LVL136:
+.LBE971:
+.LBE970:
+	.loc 6 86 0
+	and	x0, x0, x21
+.LVL137:
+	b	.L137
+.LVL138:
+	.p2align 3
+.L104:
+.LBE969:
+.LBE974:
+.LBE985:
+.LBE988:
+.LBE992:
+.LBE996:
+.LBB997:
+.LBB998:
+.LBB999:
+.LBB1000:
+.LBB1001:
+.LBB1002:
+.LBB1003:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x0, sp_el0
+// 0 "" 2
+.LVL139:
+#NO_APP
+.LBE1003:
+.LBE1002:
+	.loc 6 85 0
+	ldr	w2, [x0, 52]
+	.loc 6 77 0
+	ldr	x1, [x0, 8]
+.LVL140:
+	.loc 6 84 0
+	tbnz	x2, 21, .L121
+.LBB1004:
+.LBB1005:
+.LBB1006:
+	.loc 7 106 0
+	ldr	x2, [x0]
+.LBE1006:
+.LBE1005:
+.LBE1004:
+.LBE1001:
+.LBE1000:
+.LBE999:
+.LBE998:
+.LBE997:
+	.loc 1 1162 0
+	mov	x0, x21
+.LVL141:
+.LBB1026:
+.LBB1024:
+.LBB1022:
+.LBB1012:
+.LBB1010:
+	.loc 6 84 0
+	tbnz	x2, 26, .L121
+.L122:
+.LVL142:
+	.loc 6 89 0
+#APP
+// 89 "./arch/arm64/include/asm/uaccess.h" 1
+		adds	x0, x0, 44
+	csel	x1, xzr, x1, hi
+	csinv	x0, x0, xzr, cc
+	sbcs	xzr, x0, x1
+	cset	x0, ls
+
+// 0 "" 2
+.LVL143:
+#NO_APP
+.LBE1010:
+.LBE1012:
+	.loc 8 114 0
+	cbz	x0, .L175
+.LBB1013:
+.LBB1014:
+.LBB1015:
+.LBB1016:
+.LBB1017:
+	.loc 9 157 0
+	sbfx	x0, x21, 0, 56
+.LVL144:
+.LBE1017:
+.LBE1016:
+.LBE1015:
+.LBB1018:
+.LBB1019:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x1, sp_el0
+// 0 "" 2
+.LVL145:
+#NO_APP
+.LBE1019:
+.LBE1018:
+.LBB1020:
+	.loc 6 254 0
+	and	x0, x0, x21
+.LVL146:
+.LBE1020:
+	.loc 6 249 0
+	ldr	x2, [x1, 8]
+#APP
+// 249 "./arch/arm64/include/asm/uaccess.h" 1
+		bics	xzr, x0, x2
+	csel	x1, x21, xzr, eq
+
+// 0 "" 2
+.LVL147:
+	.loc 6 257 0
+// 257 "./arch/arm64/include/asm/uaccess.h" 1
+	hint #20
+// 0 "" 2
+#NO_APP
+.LBE1014:
+.LBE1013:
+	.loc 8 116 0
+	mov	x2, 44
+	add	x0, x29, 104
+.LVL148:
+	bl	__arch_copy_from_user
+.LVL149:
+	.loc 8 118 0
+	cbnz	x0, .L175
+.LBE1022:
+.LBE1024:
+.LBE1026:
+	.loc 1 1225 0
+	bl	ebc_phy_buf_base_get
+.LVL150:
+	ldrsw	x1, [x29, 104]
+	.loc 1 1226 0
+	add	x0, x1, x0
+	bl	ebc_find_buf_by_phy_addr
+.LVL151:
+	mov	x21, x0
+.LVL152:
+	.loc 1 1227 0
+	cbz	x0, .L174
+	.loc 1 1228 0
+	ldr	w5, [x29, 108]
+	.loc 1 1237 0
+	add	x20, x20, 184
+	.loc 1 1232 0
+	ldp	w4, w2, [x29, 124]
+	.loc 1 1228 0
+	str	w5, [x21, 40]
+	.loc 1 1233 0
+	ldp	w3, w1, [x29, 132]
+	.loc 1 1232 0
+	stp	w4, w2, [x21, 48]
+	.loc 1 1233 0
+	stp	w3, w1, [x21, 56]
+	.loc 1 1235 0
+	bl	ebc_add_to_dsp_buf_list
+.LVL153:
+	.loc 1 1237 0
+	ldr	w0, [x20, 80]
+	cbz	w0, .L180
+.L126:
+	.loc 1 1241 0
+	ldr	w0, [x21, 40]
+	cmp	w0, 15
+	beq	.L181
+	.loc 1 1241 0 is_stmt 0 discriminator 3
+	cmp	w0, 17
+	bne	.L174
+.L128:
+	.loc 1 1242 0 is_stmt 1
+	mov	w0, 1
+	str	w0, [x20, 188]
+.LBB1027:
+.LBB1028:
+	.loc 1 1243 0
+	mov	w1, 0
+	add	x0, x29, 64
+	bl	init_wait_entry
+.LVL154:
+	adrp	x0, .LANCHOR1
+.LBB1029:
+	add	x0, x0, :lo12:.LANCHOR1
+	add	x21, x0, 328
+	b	.L132
+	.p2align 3
+.L182:
+.LVL155:
+	.loc 1 1243 0 is_stmt 0 discriminator 5
+	cbnz	x0, .L174
+	.loc 1 1243 0 discriminator 7
+	bl	schedule
+.LVL156:
+.L132:
+	.loc 1 1243 0 discriminator 9
+	add	x1, x29, 64
+	mov	w2, 1
+	mov	x0, x21
+	bl	prepare_to_wait_event
+.LVL157:
+	ldr	w1, [x20, 188]
+	cbnz	w1, .L182
+.L131:
+.LBE1029:
+	.loc 1 1243 0 discriminator 4
+	add	x1, x29, 64
+	mov	x0, x21
+	bl	finish_wait
+.LVL158:
+	b	.L174
+.LVL159:
+	.p2align 3
+.L121:
+.LBE1028:
+.LBE1027:
+.LBB1030:
+.LBB1025:
+.LBB1023:
+.LBB1021:
+.LBB1011:
+.LBB1007:
+.LBB1008:
+.LBB1009:
+	.loc 9 157 0 is_stmt 1
+	sbfx	x0, x21, 0, 56
+.LVL160:
+.LBE1009:
+.LBE1008:
+	.loc 6 86 0
+	and	x0, x0, x21
+.LVL161:
+	b	.L122
+.LVL162:
+	.p2align 3
+.L101:
+.LBE1007:
+.LBE1011:
+.LBE1021:
+.LBE1023:
+.LBE1025:
+.LBE1030:
+	.loc 1 1298 0
+	ldr	x0, [x20, 272]
+	adrp	x2, .LANCHOR2
+	adrp	x1, .LC6
+.LVL163:
+	add	x2, x2, :lo12:.LANCHOR2
+	add	x1, x1, :lo12:.LC6
+	bl	_dev_err
+.LVL164:
+	.loc 1 1299 0
+	mov	x0, 0
+	.loc 1 1302 0
+	b	.L97
+.LVL165:
+	.p2align 3
+.L108:
+	.loc 1 1271 0
+	ldr	x0, [x20, 272]
+	.loc 1 1270 0
+	mov	w2, 1
+	str	w2, [x20, 788]
+	.loc 1 1271 0
+	adrp	x1, .LC2
+.LVL166:
+	add	x1, x1, :lo12:.LC2
+	bl	_dev_info
+.LVL167:
+	.loc 1 1272 0
+	mov	x0, 0
+	b	.L97
+.LVL168:
+	.p2align 3
+.L107:
+	.loc 1 1276 0
+	ldr	x0, [x20, 272]
+	adrp	x1, .LC3
+.LVL169:
+	.loc 1 1274 0
+	str	wzr, [x20, 788]
+	.loc 1 1276 0
+	add	x1, x1, :lo12:.LC3
+	.loc 1 1275 0
+	str	wzr, [x20, 792]
+	.loc 1 1276 0
+	bl	_dev_info
+.LVL170:
+	.loc 1 1277 0
+	mov	x0, 0
+	b	.L97
+	.p2align 3
+.L177:
+	.loc 1 1264 0
+	mov	w2, 1
+	str	w2, [x20, 80]
+	.loc 1 1265 0
+	adrp	x0, .LANCHOR1
+	add	x0, x0, :lo12:.LANCHOR1
+	add	x0, x0, 304
+	mov	w1, w2
+	bl	__wake_up_sync
+.LVL171:
+	mov	x0, 0
+	b	.L97
+.LVL172:
+	.p2align 3
+.L180:
+	.loc 1 1238 0
+	mov	w2, 1
+	str	w2, [x20, 80]
+	.loc 1 1239 0
+	adrp	x0, .LANCHOR1
+	add	x0, x0, :lo12:.LANCHOR1
+	mov	w1, w2
+	add	x0, x0, 304
+	bl	__wake_up_sync
+.LVL173:
+	b	.L126
+.LVL174:
+	.p2align 3
+.L142:
+.LBB1031:
+.LBB922:
+.LBB918:
+.LBB907:
+.LBB908:
+.LBB909:
+.LBB910:
+.LBB911:
+	.loc 9 157 0
+	sbfx	x1, x21, 0, 56
+.LVL175:
+.LBE911:
+.LBE910:
+.LBE909:
+.LBB912:
+.LBB913:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x0, sp_el0
+// 0 "" 2
+.LVL176:
+#NO_APP
+.LBE913:
+.LBE912:
+.LBB914:
+	.loc 6 254 0
+	and	x1, x1, x21
+.LVL177:
+.LBE914:
+	.loc 6 249 0
+	ldr	x2, [x0, 8]
+.LVL178:
+#APP
+// 249 "./arch/arm64/include/asm/uaccess.h" 1
+		bics	xzr, x1, x2
+	csel	x0, x21, xzr, eq
+
+// 0 "" 2
+.LVL179:
+	.loc 6 257 0
+// 257 "./arch/arm64/include/asm/uaccess.h" 1
+	hint #20
+// 0 "" 2
+#NO_APP
+.LBE908:
+.LBE907:
+	.loc 8 134 0
+	mov	x2, 44
+	add	x1, x29, 104
+.LVL180:
+	bl	__arch_copy_to_user
+.LVL181:
+.LBE918:
+.LBE922:
+.LBE1031:
+	.loc 1 1292 0
+	cbz	x0, .L174
+	b	.L143
+.LVL182:
+	.p2align 3
+.L119:
+.LBB1032:
+.LBB885:
+.LBB881:
+.LBB870:
+.LBB871:
+.LBB872:
+.LBB873:
+.LBB874:
+	.loc 9 157 0
+	sbfx	x1, x21, 0, 56
+.LVL183:
+.LBE874:
+.LBE873:
+.LBE872:
+.LBB875:
+.LBB876:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x0, sp_el0
+// 0 "" 2
+.LVL184:
+#NO_APP
+.LBE876:
+.LBE875:
+.LBB877:
+	.loc 6 254 0
+	and	x1, x1, x21
+.LVL185:
+.LBE877:
+	.loc 6 249 0
+	ldr	x2, [x0, 8]
+.LVL186:
+#APP
+// 249 "./arch/arm64/include/asm/uaccess.h" 1
+		bics	xzr, x1, x2
+	csel	x0, x21, xzr, eq
+
+// 0 "" 2
+.LVL187:
+	.loc 6 257 0
+// 257 "./arch/arm64/include/asm/uaccess.h" 1
+	hint #20
+// 0 "" 2
+#NO_APP
+.LBE871:
+.LBE870:
+	.loc 8 134 0
+	mov	x2, 44
+	add	x1, x29, 104
+.LVL188:
+	bl	__arch_copy_to_user
+.LVL189:
+.LBE881:
+.LBE885:
+.LBE1032:
+	.loc 1 1215 0
+	cbz	w0, .L174
+	b	.L120
+.LVL190:
+	.p2align 3
+.L181:
+	.loc 1 1241 0 discriminator 1
+	ldr	w0, [x20, 592]
+	cbz	w0, .L128
+	b	.L174
+.LVL191:
+.L153:
+.LBB1033:
+.LBB993:
+.LBB989:
+	.loc 8 112 0
+	mov	x0, 4
+.LVL192:
+.L138:
+	.loc 8 119 0
+	mov	x2, x0
+	mov	w1, 0
+.LVL193:
+	add	x0, x22, x3
+.LVL194:
+	bl	memset
+.LVL195:
+.LBE989:
+.LBE993:
+.LBE1033:
+	.loc 1 1280 0
+	ldr	x0, [x20, 272]
+	adrp	x1, .LC4
+	add	x1, x1, :lo12:.LC4
+	bl	_dev_err
+.LVL196:
+	.loc 1 1281 0
+	mov	x0, -14
+	b	.L97
+.L116:
+	.loc 1 1191 0
+	mov	x0, -1
+	b	.L97
+.L178:
+	.loc 1 1303 0
+	bl	__stack_chk_fail
+.LVL197:
+.L179:
+	mov	x3, 4
+	sub	x3, x3, x0
+.LVL198:
+	b	.L138
+	.cfi_endproc
+.LFE2825:
+	.size	ebc_io_ctl, .-ebc_io_ctl
+	.align	2
+	.p2align 3,,7
+	.type	frame_done_callback, %function
+frame_done_callback:
+.LFB2817:
+	.loc 1 636 0
+	.cfi_startproc
+	stp	x29, x30, [sp, -48]!
+	.cfi_def_cfa_offset 48
+	.cfi_offset 29, -48
+	.cfi_offset 30, -40
+	.loc 1 637 0
+	adrp	x0, .LANCHOR0
+	add	x1, x0, :lo12:.LANCHOR0
+	.loc 1 636 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	stp	x19, x20, [sp, 16]
+	.cfi_offset 19, -32
+	.cfi_offset 20, -24
+	.loc 1 637 0
+	ldr	x20, [x0, #:lo12:.LANCHOR0]
+	.loc 1 636 0
+	str	x21, [sp, 32]
+	.cfi_offset 21, -16
+	.loc 1 639 0
+	add	x19, x20, 184
+	ldr	x0, [x19, 208]
+	ldr	w0, [x0, 40]
+	cmp	w0, 1
+	bhi	.L184
+	.loc 1 642 0
+	ldr	w0, [x19, 40]
+	cbz	w0, .L186
+	.loc 1 643 0
+	ldr	x0, [x1, 8]
+	bl	wake_up_process
+.LVL199:
+	.loc 1 669 0
+	ldr	x21, [sp, 32]
+	ldp	x19, x20, [sp, 16]
+	ldp	x29, x30, [sp], 48
+	.cfi_remember_state
+	.cfi_restore 20
+	.cfi_restore 19
+	.cfi_restore 21
+	.cfi_restore 29
+	.cfi_restore 30
+	.cfi_def_cfa 31, 0
+	ret
+	.p2align 3
+.L184:
+	.cfi_restore_state
+	.loc 1 657 0
+	ldr	w0, [x19, 44]
+	cbnz	w0, .L190
+	.loc 1 663 0
+	ldr	x0, [x19, 88]
+	.loc 1 662 0
+	mov	w20, 1
+	.loc 1 661 0
+	str	wzr, [x19, 28]
+	.loc 1 663 0
+	adrp	x1, .LC9
+	.loc 1 662 0
+	str	w20, [x19, 76]
+	.loc 1 663 0
+	add	x1, x1, :lo12:.LC9
+	.loc 1 664 0
+	adrp	x19, .LANCHOR1
+	add	x19, x19, :lo12:.LANCHOR1
+	.loc 1 663 0
+	bl	_dev_info
+.LVL200:
+	.loc 1 664 0
+	mov	w2, w20
+	add	x0, x19, 352
+	mov	w1, w20
+	bl	__wake_up_sync
+.LVL201:
+	.loc 1 665 0
+	mov	w2, w20
+	mov	w1, w20
+	add	x0, x19, 304
+	bl	__wake_up_sync
+.LVL202:
+	.loc 1 669 0
+	ldp	x19, x20, [sp, 16]
+	ldr	x21, [sp, 32]
+	ldp	x29, x30, [sp], 48
+	.cfi_remember_state
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_restore 21
+	.cfi_restore 19
+	.cfi_restore 20
+	.cfi_def_cfa 31, 0
+	ret
+	.p2align 3
+.L186:
+	.cfi_restore_state
+	.loc 1 646 0
+	ldr	x0, [x19, 88]
+	adrp	x1, .LC8
+	add	x1, x1, :lo12:.LC8
+	.loc 1 651 0
+	mov	w21, 1
+	.loc 1 646 0
+	bl	_dev_info
+.LVL203:
+	.loc 1 648 0
+	ldrsw	x2, [x19, 20]
+	mov	w1, 0
+	ldr	x0, [x19, 152]
+	bl	memset
+.LVL204:
+	.loc 1 649 0
+	adrp	x2, jiffies
+	add	x0, x20, 672
+	mov	x1, 402653184
+	ldr	x2, [x2, #:lo12:jiffies]
+	add	x1, x2, x1
+	bl	mod_timer
+.LVL205:
+	.loc 1 651 0
+	str	w21, [x19, 76]
+	.loc 1 650 0
+	str	wzr, [x19, 28]
+	.loc 1 652 0
+	adrp	x19, .LANCHOR1
+	add	x19, x19, :lo12:.LANCHOR1
+	mov	w2, w21
+	mov	w1, w21
+	add	x0, x19, 352
+	bl	__wake_up_sync
+.LVL206:
+	.loc 1 653 0
+	mov	w2, w21
+	mov	w1, w21
+	add	x0, x19, 304
+	bl	__wake_up_sync
+.LVL207:
+	.loc 1 669 0
+	ldp	x19, x20, [sp, 16]
+	ldr	x21, [sp, 32]
+	ldp	x29, x30, [sp], 48
+	.cfi_remember_state
+	.cfi_restore 20
+	.cfi_restore 19
+	.cfi_restore 21
+	.cfi_restore 29
+	.cfi_restore 30
+	.cfi_def_cfa 31, 0
+	ret
+	.p2align 3
+.L190:
+	.cfi_restore_state
+	.loc 1 659 0
+	ldr	x0, [x1, 8]
+	.loc 1 658 0
+	mov	w1, 1
+	str	w1, [x19, 28]
+	.loc 1 659 0
+	bl	wake_up_process
+.LVL208:
+	.loc 1 669 0
+	ldr	x21, [sp, 32]
+	ldp	x19, x20, [sp, 16]
+	ldp	x29, x30, [sp], 48
+	.cfi_restore 20
+	.cfi_restore 19
+	.cfi_restore 21
+	.cfi_restore 29
+	.cfi_restore 30
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2817:
+	.size	frame_done_callback, .-frame_done_callback
+	.align	2
+	.p2align 3,,7
+	.type	ebc_frame_timeout, %function
+ebc_frame_timeout:
+.LFB2823:
+	.loc 1 1088 0
+	.cfi_startproc
+.LVL209:
+	stp	x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_offset 29, -16
+	.cfi_offset 30, -8
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1089 0
+	bl	frame_done_callback
+.LVL210:
+	.loc 1 1091 0
+	ldp	x29, x30, [sp], 16
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2823:
+	.size	ebc_frame_timeout, .-ebc_frame_timeout
+	.align	2
+	.p2align 3,,7
+	.type	ebc_lut_update, %function
+ebc_lut_update:
+.LFB2818:
+	.loc 1 672 0
+	.cfi_startproc
+.LVL211:
+	stp	x29, x30, [sp, -64]!
+	.cfi_def_cfa_offset 64
+	.cfi_offset 29, -64
+	.cfi_offset 30, -56
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	stp	x19, x20, [sp, 16]
+	.cfi_offset 19, -48
+	.cfi_offset 20, -40
+	mov	x20, x0
+	str	x21, [sp, 32]
+	.cfi_offset 21, -32
+	.loc 1 672 0
+	adrp	x19, __stack_chk_guard
+	add	x0, x19, :lo12:__stack_chk_guard
+.LVL212:
+.LBB1034:
+.LBB1035:
+	.loc 3 50 0
+	add	x1, x29, 52
+.LBE1035:
+.LBE1034:
+	.loc 1 672 0
+	ldr	x2, [x0]
+	str	x2, [x29, 56]
+	mov	x2,0
+	add	x21, x20, 184
+	.loc 1 678 0
+	ldr	x2, [x20, 16]
+.LBB1037:
+.LBB1036:
+	.loc 3 50 0
+	mov	x0, x2
+	ldr	x2, [x2, 56]
+	blr	x2
+.LVL213:
+.LBE1036:
+.LBE1037:
+	.loc 1 679 0
+	ldr	w2, [x29, 52]
+	cmp	w2, 50
+	bhi	.L214
+.L194:
+	.loc 1 683 0
+	ldr	x0, [x21, 88]
+	adrp	x1, .LC11
+	add	x1, x1, :lo12:.LC11
+	bl	_dev_info
+.LVL214:
+	.loc 1 686 0
+	ldr	x0, [x21, 208]
+	ldr	w0, [x0, 40]
+	cmp	w0, 17
+	bls	.L215
+	.loc 1 733 0
+	ldr	w2, [x29, 52]
+.L213:
+	mov	w1, 7
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL215:
+	cbnz	w0, .L206
+.L208:
+	.loc 1 743 0
+	mov	w0, 0
+.L193:
+	.loc 1 744 0
+	add	x19, x19, :lo12:__stack_chk_guard
+	ldr	x2, [x29, 56]
+	ldr	x1, [x19]
+	eor	x1, x2, x1
+	cbnz	x1, .L216
+	ldp	x19, x20, [sp, 16]
+.LVL216:
+	ldr	x21, [sp, 32]
+	ldp	x29, x30, [sp], 64
+	.cfi_remember_state
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_restore 21
+	.cfi_restore 19
+	.cfi_restore 20
+	.cfi_def_cfa 31, 0
+	ret
+.LVL217:
+	.p2align 3
+.L215:
+	.cfi_restore_state
+	.loc 1 686 0
+	adrp	x1, .L197
+	.loc 1 688 0
+	ldr	w2, [x29, 52]
+	.loc 1 686 0
+	add	x1, x1, :lo12:.L197
+	ldrb	w0, [x1,w0,uxtw]
+	adr	x1, .Lrtx197
+	add	x0, x1, w0, sxtb #2
+	br	x0
+.Lrtx197:
+	.section	.rodata
+	.align	0
+	.align	2
+.L197:
+	.byte	(.L196 - .Lrtx197) / 4
+	.byte	(.L196 - .Lrtx197) / 4
+	.byte	(.L213 - .Lrtx197) / 4
+	.byte	(.L199 - .Lrtx197) / 4
+	.byte	(.L200 - .Lrtx197) / 4
+	.byte	(.L201 - .Lrtx197) / 4
+	.byte	(.L202 - .Lrtx197) / 4
+	.byte	(.L213 - .Lrtx197) / 4
+	.byte	(.L199 - .Lrtx197) / 4
+	.byte	(.L200 - .Lrtx197) / 4
+	.byte	(.L201 - .Lrtx197) / 4
+	.byte	(.L202 - .Lrtx197) / 4
+	.byte	(.L203 - .Lrtx197) / 4
+	.byte	(.L204 - .Lrtx197) / 4
+	.byte	(.L205 - .Lrtx197) / 4
+	.byte	(.L213 - .Lrtx197) / 4
+	.byte	(.L213 - .Lrtx197) / 4
+	.byte	(.L213 - .Lrtx197) / 4
+	.text
+	.p2align 3
+.L205:
+	.loc 1 688 0
+	mov	w1, 1
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL218:
+	cbz	w0, .L208
+	.p2align 2
+.L206:
+	.loc 1 739 0
+	ldr	x0, [x21, 88]
+	adrp	x1, .LC12
+	add	x1, x1, :lo12:.LC12
+	bl	_dev_err
+.LVL219:
+	.loc 1 740 0
+	mov	w0, -1
+	b	.L193
+	.p2align 3
+.L214:
+	.loc 1 680 0
+	ldr	x0, [x21, 88]
+	adrp	x1, .LC10
+	add	x1, x1, :lo12:.LC10
+	bl	_dev_err
+.LVL220:
+	.loc 1 681 0
+	mov	w0, 25
+	mov	w2, w0
+	str	w0, [x29, 52]
+	b	.L194
+	.p2align 3
+.L204:
+	.loc 1 709 0
+	mov	w1, 4
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL221:
+	cbnz	w0, .L206
+	b	.L208
+	.p2align 3
+.L196:
+	.loc 1 701 0
+	mov	w1, 5
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL222:
+	cbnz	w0, .L206
+	b	.L208
+	.p2align 3
+.L199:
+	.loc 1 714 0
+	mov	w1, 8
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL223:
+	cbnz	w0, .L206
+	b	.L208
+	.p2align 3
+.L200:
+	.loc 1 719 0
+	mov	w1, 9
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL224:
+	cbnz	w0, .L206
+	b	.L208
+	.p2align 3
+.L201:
+	.loc 1 724 0
+	mov	w1, 10
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL225:
+	cbnz	w0, .L206
+	b	.L208
+	.p2align 3
+.L202:
+	.loc 1 729 0
+	mov	w1, 11
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL226:
+	cbnz	w0, .L206
+	b	.L208
+	.p2align 3
+.L203:
+	.loc 1 705 0
+	mov	w1, 6
+	add	x0, x20, 280
+	bl	epd_lut_get
+.LVL227:
+	cbnz	w0, .L206
+	b	.L208
+.L216:
+	.loc 1 744 0
+	bl	__stack_chk_fail
+.LVL228:
+	.cfi_endproc
+.LFE2818:
+	.size	ebc_lut_update, .-ebc_lut_update
+	.align	2
+	.p2align 3,,7
+	.type	ebc_state_read, %function
+ebc_state_read:
+.LFB2834:
+	.loc 1 1428 0
+	.cfi_startproc
+.LVL229:
+	stp	x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_offset 29, -16
+	.cfi_offset 30, -8
+	.loc 1 1429 0
+	adrp	x3, .LANCHOR0
+	.loc 1 1428 0
+	mov	x0, x2
+.LVL230:
+	.loc 1 1429 0
+	adrp	x1, .LC13
+.LVL231:
+	.loc 1 1428 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1429 0
+	ldr	x2, [x3, #:lo12:.LANCHOR0]
+.LVL232:
+	add	x1, x1, :lo12:.LC13
+	ldr	w2, [x2, 608]
+	bl	sprintf
+.LVL233:
+	.loc 1 1430 0
+	sxtw	x0, w0
+	ldp	x29, x30, [sp], 16
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2834:
+	.size	ebc_state_read, .-ebc_state_read
+	.align	2
+	.p2align 3,,7
+	.type	ebc_version_read, %function
+ebc_version_read:
+.LFB2833:
+	.loc 1 1419 0
+	.cfi_startproc
+.LVL234:
+	stp	x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_offset 29, -16
+	.cfi_offset 30, -8
+	mov	x0, x2
+.LVL235:
+	.loc 1 1420 0
+	adrp	x1, .LC15
+.LVL236:
+	adrp	x2, .LC14
+.LVL237:
+	.loc 1 1419 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1420 0
+	add	x2, x2, :lo12:.LC14
+	.loc 1 1419 0
+	.loc 1 1420 0
+	add	x1, x1, :lo12:.LC15
+	bl	sprintf
+.LVL238:
+	.loc 1 1421 0
+	sxtw	x0, w0
+	ldp	x29, x30, [sp], 16
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2833:
+	.size	ebc_version_read, .-ebc_version_read
+	.align	2
+	.p2align 3,,7
+	.type	pmic_vcom_read, %function
+pmic_vcom_read:
+.LFB2831:
+	.loc 1 1383 0
+	.cfi_startproc
+.LVL239:
+	stp	x29, x30, [sp, -32]!
+	.cfi_def_cfa_offset 32
+	.cfi_offset 29, -32
+	.cfi_offset 30, -24
+	.loc 1 1384 0
+	adrp	x0, .LANCHOR0
+.LVL240:
+	.loc 1 1383 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1387 0
+	ldr	x0, [x0, #:lo12:.LANCHOR0]
+	.loc 1 1383 0
+	str	x19, [sp, 16]
+	.cfi_offset 19, -16
+	.loc 1 1383 0
+	mov	x19, x2
+	.loc 1 1387 0
+	ldr	x1, [x0, 16]
+.LVL241:
+.LBB1038:
+.LBB1039:
+	.loc 3 55 0
+	mov	x0, x1
+	ldr	x1, [x1, 64]
+	blr	x1
+.LVL242:
+.LBE1039:
+.LBE1038:
+	.loc 1 1389 0
+	mov	w2, w0
+	adrp	x1, .LC13
+	mov	x0, x19
+	add	x1, x1, :lo12:.LC13
+	bl	sprintf
+.LVL243:
+	.loc 1 1390 0
+	sxtw	x0, w0
+	ldr	x19, [sp, 16]
+.LVL244:
+	ldp	x29, x30, [sp], 32
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_restore 19
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2831:
+	.size	pmic_vcom_read, .-pmic_vcom_read
+	.align	2
+	.p2align 3,,7
+	.type	pmic_temp_read, %function
+pmic_temp_read:
+.LFB2830:
+	.loc 1 1369 0
+	.cfi_startproc
+.LVL245:
+	stp	x29, x30, [sp, -48]!
+	.cfi_def_cfa_offset 48
+	.cfi_offset 29, -48
+	.cfi_offset 30, -40
+	.loc 1 1370 0
+	adrp	x0, .LANCHOR0
+.LVL246:
+	.loc 1 1369 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1373 0
+	ldr	x0, [x0, #:lo12:.LANCHOR0]
+.LBB1040:
+.LBB1041:
+	.loc 3 50 0
+	add	x1, x29, 36
+.LVL247:
+.LBE1041:
+.LBE1040:
+	.loc 1 1369 0
+	stp	x19, x20, [sp, 16]
+	.cfi_offset 19, -32
+	.cfi_offset 20, -24
+	.loc 1 1369 0
+	adrp	x19, __stack_chk_guard
+	add	x19, x19, :lo12:__stack_chk_guard
+	mov	x20, x2
+	ldr	x2, [x19]
+	str	x2, [x29, 40]
+	mov	x2,0
+.LVL248:
+	.loc 1 1373 0
+	ldr	x2, [x0, 16]
+.LBB1043:
+.LBB1042:
+	.loc 3 50 0
+	mov	x0, x2
+	ldr	x2, [x2, 56]
+	blr	x2
+.LVL249:
+.LBE1042:
+.LBE1043:
+	.loc 1 1375 0
+	ldr	w2, [x29, 36]
+	adrp	x1, .LC13
+	mov	x0, x20
+	add	x1, x1, :lo12:.LC13
+	bl	sprintf
+.LVL250:
+	.loc 1 1376 0
+	ldr	x2, [x29, 40]
+	ldr	x1, [x19]
+	eor	x1, x2, x1
+	cbnz	x1, .L226
+	ldp	x19, x20, [sp, 16]
+.LVL251:
+	sxtw	x0, w0
+	ldp	x29, x30, [sp], 48
+	.cfi_remember_state
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_restore 19
+	.cfi_restore 20
+	.cfi_def_cfa 31, 0
+	ret
+.LVL252:
+.L226:
+	.cfi_restore_state
+	bl	__stack_chk_fail
+.LVL253:
+	.cfi_endproc
+.LFE2830:
+	.size	pmic_temp_read, .-pmic_temp_read
+	.align	2
+	.p2align 3,,7
+	.type	pmic_name_read, %function
+pmic_name_read:
+.LFB2829:
+	.loc 1 1358 0
+	.cfi_startproc
+.LVL254:
+	stp	x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_offset 29, -16
+	.cfi_offset 30, -8
+	.loc 1 1359 0
+	adrp	x3, .LANCHOR0
+	.loc 1 1358 0
+	mov	x0, x2
+.LVL255:
+	.loc 1 1361 0
+	adrp	x1, .LC15
+.LVL256:
+	.loc 1 1358 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1361 0
+	ldr	x2, [x3, #:lo12:.LANCHOR0]
+.LVL257:
+	add	x1, x1, :lo12:.LC15
+	ldr	x2, [x2, 16]
+	add	x2, x2, 8
+	bl	sprintf
+.LVL258:
+	.loc 1 1362 0
+	sxtw	x0, w0
+	ldp	x29, x30, [sp], 16
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2829:
+	.size	pmic_name_read, .-pmic_name_read
+	.align	2
+	.p2align 3,,7
+	.type	pmic_vcom_write, %function
+pmic_vcom_write:
+.LFB2832:
+	.loc 1 1395 0
+	.cfi_startproc
+.LVL259:
+	stp	x29, x30, [sp, -64]!
+	.cfi_def_cfa_offset 64
+	.cfi_offset 29, -64
+	.cfi_offset 30, -56
+	.loc 1 1396 0
+	adrp	x0, .LANCHOR0
+.LVL260:
+	.loc 1 1395 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	stp	x19, x20, [sp, 16]
+	.cfi_offset 19, -48
+	.cfi_offset 20, -40
+	adrp	x19, __stack_chk_guard
+	stp	x21, x22, [sp, 32]
+	.cfi_offset 21, -32
+	.cfi_offset 22, -24
+	.loc 1 1395 0
+	add	x1, x19, :lo12:__stack_chk_guard
+.LVL261:
+	mov	x21, x2
+	.loc 1 1396 0
+	ldr	x22, [x0, #:lo12:.LANCHOR0]
+.LVL262:
+	.loc 1 1395 0
+	ldr	x2, [x1]
+	str	x2, [x29, 56]
+	mov	x2,0
+.LVL263:
+	mov	x20, x3
+	.loc 1 1399 0
+	add	x2, x29, 52
+	mov	w1, 0
+	mov	x0, x21
+	bl	kstrtouint
+.LVL264:
+	.loc 1 1400 0
+	cbnz	w0, .L236
+.LVL265:
+	.loc 1 1404 0
+	ldr	w1, [x29, 52]
+	ldr	x0, [x22, 16]
+	bl	ebc_pmic_set_vcom
+.LVL266:
+	.loc 1 1405 0
+	cbnz	w0, .L237
+.L229:
+	.loc 1 1411 0
+	add	x19, x19, :lo12:__stack_chk_guard
+	mov	x0, x20
+.LVL267:
+	ldr	x2, [x29, 56]
+	ldr	x1, [x19]
+	eor	x1, x2, x1
+	cbnz	x1, .L238
+	ldp	x19, x20, [sp, 16]
+	ldp	x21, x22, [sp, 32]
+.LVL268:
+	ldp	x29, x30, [sp], 64
+	.cfi_remember_state
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_restore 21
+	.cfi_restore 22
+	.cfi_restore 19
+	.cfi_restore 20
+	.cfi_def_cfa 31, 0
+	ret
+.LVL269:
+	.p2align 3
+.L236:
+	.cfi_restore_state
+	.loc 1 1401 0
+	ldr	x0, [x22]
+	adrp	x1, .LC16
+	mov	x2, x21
+	add	x1, x1, :lo12:.LC16
+	.loc 1 1402 0
+	mov	x20, -1
+.LVL270:
+	.loc 1 1401 0
+	bl	_dev_err
+.LVL271:
+	.loc 1 1402 0
+	b	.L229
+.LVL272:
+	.p2align 3
+.L237:
+	.loc 1 1406 0
+	ldr	x0, [x22]
+	adrp	x1, .LC17
+	.loc 1 1407 0
+	mov	x20, -1
+.LVL273:
+	.loc 1 1406 0
+	add	x1, x1, :lo12:.LC17
+	bl	_dev_err
+.LVL274:
+	.loc 1 1407 0
+	b	.L229
+.L238:
+	.loc 1 1411 0
+	bl	__stack_chk_fail
+.LVL275:
+	.cfi_endproc
+.LFE2832:
+	.size	pmic_vcom_write, .-pmic_vcom_write
+	.align	2
+	.p2align 3,,7
+	.type	waveform_version_read, %function
+waveform_version_read:
+.LFB2828:
+	.loc 1 1347 0
+	.cfi_startproc
+.LVL276:
+	stp	x29, x30, [sp, -32]!
+	.cfi_def_cfa_offset 32
+	.cfi_offset 29, -32
+	.cfi_offset 30, -24
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	str	x19, [sp, 16]
+	.cfi_offset 19, -16
+	.loc 1 1347 0
+	mov	x19, x2
+	.loc 1 1348 0
+	bl	epd_lut_get_wf_version
+.LVL277:
+	.loc 1 1350 0
+	mov	x2, x0
+	adrp	x1, .LC15
+	mov	x0, x19
+	add	x1, x1, :lo12:.LC15
+	bl	sprintf
+.LVL278:
+	.loc 1 1351 0
+	sxtw	x0, w0
+	ldr	x19, [sp, 16]
+.LVL279:
+	ldp	x29, x30, [sp], 32
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_restore 19
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2828:
+	.size	waveform_version_read, .-waveform_version_read
+	.section	.init.text,"ax",@progbits
+	.align	2
+	.type	ebc_init, %function
+ebc_init:
+.LFB2845:
+	.loc 1 1869 0
+	.cfi_startproc
+	stp	x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_offset 29, -16
+	.cfi_offset 30, -8
+	.loc 1 1870 0
+	mov	x1, 0
+	adrp	x0, .LANCHOR1
+	add	x0, x0, :lo12:.LANCHOR1
+	.loc 1 1869 0
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	.loc 1 1870 0
+	bl	__platform_driver_register
+.LVL280:
+	.loc 1 1871 0
+	ldp	x29, x30, [sp], 16
+	.cfi_restore 30
+	.cfi_restore 29
+	.cfi_def_cfa 31, 0
+	ret
+	.cfi_endproc
+.LFE2845:
+	.size	ebc_init, .-ebc_init
+	.text
+	.align	2
+	.p2align 3,,7
+	.type	direct_mode_data_change.isra.0, %function
+direct_mode_data_change.isra.0:
+.LFB2847:
+	.loc 1 423 0
+	.cfi_startproc
+.LVL281:
+	.loc 1 427 0
+	adrp	x6, .LANCHOR0
+	.loc 1 423 0
+	and	w3, w3, 255
+	.loc 1 433 0
+	sub	w3, w3, w4
+.LVL282:
+	.loc 1 427 0
+	ldr	x13, [x6, #:lo12:.LANCHOR0]
+	.loc 1 434 0
+	lsl	w3, w3, 16
+.LVL283:
+	add	x5, x5, x3, sxtw
+.LVL284:
+	.loc 1 435 0
+	add	x13, x13, 24
+	ldr	w16, [x13, 156]
+	.loc 1 438 0
+	ldp	w3, w15, [x13, 84]
+.LVL285:
+	.loc 1 443 0
+	cmp	w15, 0
+	ble	.L255
+	lsr	w14, w3, 4
+	mov	w12, 0
+.LVL286:
+	sub	w11, w14, #1
+	add	x11, x11, 1
+	lsl	x11, x11, 3
+	.loc 1 444 0
+	cbz	w16, .L258
+.LVL287:
+.L269:
+	.loc 1 445 0
+	ldr	w6, [x13, 88]
+.LVL288:
+	sub	w6, w6, #1
+	sub	w6, w6, w12
+	mul	w6, w6, w3
+	lsr	w6, w6, 2
+	add	x6, x0, x6
+.LVL289:
+.L259:
+	.loc 1 449 0
+	cbz	w14, .L267
+	.loc 1 423 0
+	stp	x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_offset 29, -16
+	.cfi_offset 30, -8
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+.LVL290:
+	.p2align 2
+.L260:
+	.loc 1 449 0
+	mov	x7, 0
+	.p2align 2
+.L249:
+	.loc 1 451 0
+	ldr	x4, [x2, x7]
+.LVL291:
+	add	x6, x6, 4
+	.loc 1 450 0
+	ldr	x3, [x1, x7]
+.LVL292:
+	add	x7, x7, 8
+	.loc 1 453 0
+	and	w9, w4, 65535
+	.loc 1 449 0
+	cmp	x11, x7
+	.loc 1 453 0
+	and	w8, w3, 65535
+.LBB1044:
+.LBB1045:
+	.loc 1 132 0
+	ubfiz	w30, w9, 8, 8
+	.loc 1 133 0
+	and	w9, w9, 65280
+	.loc 1 132 0
+	add	w30, w30, w8, uxtb
+	.loc 1 133 0
+	add	w9, w9, w8, lsr 8
+.LBE1045:
+.LBE1044:
+	.loc 1 454 0
+	lsr	w10, w4, 16
+	lsr	w8, w3, 16
+.LBB1049:
+.LBB1050:
+	.loc 1 132 0
+	ubfiz	w18, w10, 8, 8
+.LBE1050:
+.LBE1049:
+.LBB1056:
+.LBB1046:
+	ldrb	w30, [x5, w30, sxtw]
+.LBE1046:
+.LBE1056:
+.LBB1057:
+.LBB1051:
+	.loc 1 133 0
+	and	w10, w10, 65280
+.LBE1051:
+.LBE1057:
+.LBB1058:
+.LBB1047:
+	ldrb	w17, [x5, w9, sxtw]
+.LBE1047:
+.LBE1058:
+.LBB1059:
+.LBB1052:
+	.loc 1 132 0
+	add	w18, w18, w8, uxtb
+	.loc 1 133 0
+	add	w10, w10, w8, lsr 8
+.LBE1052:
+.LBE1059:
+	.loc 1 455 0
+	ubfx	x9, x4, 32, 16
+	ubfx	x8, x3, 32, 16
+	.loc 1 456 0
+	lsr	x4, x4, 48
+.LVL293:
+.LBB1060:
+.LBB1048:
+	.loc 1 132 0
+	orr	w17, w30, w17, lsl 4
+.LBE1048:
+.LBE1060:
+	.loc 1 453 0
+	strb	w17, [x6, -4]
+.LBB1061:
+.LBB1062:
+	.loc 1 132 0
+	ubfiz	w17, w9, 8, 8
+	.loc 1 133 0
+	and	w9, w9, 65280
+.LBE1062:
+.LBE1061:
+.LBB1068:
+.LBB1053:
+	ldrb	w10, [x5, w10, sxtw]
+.LBE1053:
+.LBE1068:
+.LBB1069:
+.LBB1063:
+	.loc 1 132 0
+	add	w17, w17, w8, uxtb
+.LBE1063:
+.LBE1069:
+.LBB1070:
+.LBB1054:
+	ldrb	w18, [x5, w18, sxtw]
+.LBE1054:
+.LBE1070:
+.LBB1071:
+.LBB1064:
+	.loc 1 133 0
+	add	w8, w9, w8, lsr 8
+.LBE1064:
+.LBE1071:
+	.loc 1 456 0
+	lsr	x3, x3, 48
+.LVL294:
+.LBB1072:
+.LBB1055:
+	.loc 1 132 0
+	orr	w9, w18, w10, lsl 4
+.LBE1055:
+.LBE1072:
+	.loc 1 454 0
+	strb	w9, [x6, -3]
+.LBB1073:
+.LBB1074:
+	.loc 1 132 0
+	ubfiz	w9, w4, 8, 8
+	.loc 1 133 0
+	and	w4, w4, 65280
+.LBE1074:
+.LBE1073:
+.LBB1078:
+.LBB1065:
+	ldrb	w10, [x5, w8, sxtw]
+.LBE1065:
+.LBE1078:
+.LBB1079:
+.LBB1075:
+	.loc 1 132 0
+	add	w8, w9, w3, uxtb
+.LBE1075:
+.LBE1079:
+.LBB1080:
+.LBB1066:
+	ldrb	w17, [x5, w17, sxtw]
+.LBE1066:
+.LBE1080:
+.LBB1081:
+.LBB1076:
+	.loc 1 133 0
+	add	w3, w4, w3, lsr 8
+.LBE1076:
+.LBE1081:
+.LBB1082:
+.LBB1067:
+	.loc 1 132 0
+	orr	w4, w17, w10, lsl 4
+.LBE1067:
+.LBE1082:
+	.loc 1 455 0
+	strb	w4, [x6, -2]
