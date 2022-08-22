@@ -1915,3 +1915,350 @@ void rga2_slt(void)
 	src_size = srcW * srcH * 4;
 	dst_size = dstW * dstH * 4;
 
+	src_order = get_order(src_size);
+	src_vir = (unsigned long *)__get_free_pages(GFP_KERNEL | GFP_DMA32, src_order);
+	if (src_vir == NULL) {
+		ERR("%s[%d], can not alloc pages for src, order = %d\n",
+		    __func__, __LINE__, src_order);
+		return;
+	}
+
+	dst_order = get_order(dst_size);
+	dst_vir = (unsigned long *)__get_free_pages(GFP_KERNEL | GFP_DMA32, dst_order);
+	if (dst_vir == NULL) {
+		ERR("%s[%d], can not alloc pages for dst, order = %d\n",
+		    __func__, __LINE__, dst_order);
+		return;
+	}
+
+	/* Init session */
+	session.pid = current->pid;
+
+	INIT_LIST_HEAD(&session.waiting);
+	INIT_LIST_HEAD(&session.running);
+	INIT_LIST_HEAD(&session.list_session);
+	init_waitqueue_head(&session.wait);
+	mutex_lock(&rga2_service.lock);
+	list_add_tail(&session.list_session, &rga2_service.session);
+	mutex_unlock(&rga2_service.lock);
+	atomic_set(&session.task_running, 0);
+	atomic_set(&session.num_done, 0);
+
+	INFO("**********************************\n");
+	INFO("************ RGA_TEST ************\n");
+	INFO("**********************************\n");
+
+	memset(src_vir, 0x50, src_size);
+	memset(dst_vir, 0x50, dst_size);
+
+	rga2_dma_flush_range(src_vir, src_vir + src_size);
+	rga2_dma_flush_range(dst_vir, dst_vir + dst_size);
+
+	memset(&req, 0, sizeof(struct rga2_req));
+	req.src.x_offset = 0;
+	req.src.y_offset = 0;
+	req.src.act_w = srcW;
+	req.src.act_h = srcH;
+	req.src.vir_w = srcW;
+	req.src.vir_h = srcW;
+	req.src.format = RGA2_FORMAT_RGBA_8888;
+
+	req.src.yrgb_addr = 0;
+	req.src.uv_addr = (unsigned long)virt_to_phys(src_vir);
+	req.src.v_addr = req.src.uv_addr + srcH * srcW;
+
+	req.dst.x_offset = 0;
+	req.dst.y_offset = 0;
+	req.dst.act_w = dstW;
+	req.dst.act_h = dstH;
+	req.dst.vir_w = dstW;
+	req.dst.vir_h = dstH;
+	req.dst.format = RGA2_FORMAT_RGBA_8888;
+
+	req.dst.yrgb_addr = 0;
+	req.dst.uv_addr = (unsigned long)virt_to_phys(dst_vir);
+	req.dst.v_addr = req.dst.uv_addr + dstH * dstW;
+
+	rga2_blit_sync(&session, &req);
+
+	/* Check buffer */
+	pstd = (unsigned int *)src_vir;
+	pnow = (unsigned int *)dst_vir;
+
+	INFO("[  num   : srcInfo    dstInfo ]\n");
+	for (i = 0; i < dst_size / 4; i++) {
+		if (*pstd != *pnow) {
+			INFO("[X%.8d : 0x%x 0x%x]", i, *pstd, *pnow);
+			if (i % 4 == 0)
+				INFO("\n");
+			err_count++;
+		} else {
+			if (i % (640 * 1024) == 0)
+				INFO("[Y%.8d : 0x%.8x 0x%.8x]\n",
+				     i, *pstd, *pnow);
+			right_count++;
+		}
+		pstd++;
+		pnow++;
+		if (err_count > 64)
+			break;
+	}
+
+	INFO("err_count=%d, right_count=%d\n", err_count, right_count);
+	if (err_count != 0)
+		INFO("rga slt err !!\n");
+	else
+		INFO("rga slt success !!\n");
+
+	/* Deinit session */
+	task_running = atomic_read(&session.task_running);
+	if (task_running) {
+		pr_err("%s[%d], session %d still has %d task running when closing\n",
+		       __func__, __LINE__, session.pid, task_running);
+		msleep(100);
+	}
+	wake_up(&session.wait);
+	mutex_lock(&rga2_service.lock);
+	list_del(&session.list_session);
+	rga2_service_session_clear(&session);
+	mutex_unlock(&rga2_service.lock);
+
+	free_pages((unsigned long)src_vir, src_order);
+	free_pages((unsigned long)dst_vir, dst_order);
+}
+#endif
+
+void rga2_test_0(void);
+
+static int __init rga2_init(void)
+{
+	int ret;
+	int order = 0;
+	uint32_t *buf_p;
+	uint32_t *buf;
+
+	/*
+	 * malloc pre scale mid buf mmu table:
+	 * RGA2_PHY_PAGE_SIZE * channel_num * address_size
+	 */
+	order = get_order(RGA2_PHY_PAGE_SIZE * 3 * sizeof(buf_p));
+	buf_p = (uint32_t *)__get_free_pages(GFP_KERNEL | GFP_DMA32, order);
+	if (buf_p == NULL) {
+		ERR("Can not alloc pages for mmu_page_table\n");
+	}
+
+	rga2_mmu_buf.buf_virtual = buf_p;
+	rga2_mmu_buf.buf_order = order;
+#if (defined(CONFIG_ARM) && defined(CONFIG_ARM_LPAE))
+	buf = (uint32_t *)(uint32_t)virt_to_phys((void *)((unsigned long)buf_p));
+#else
+	buf = (uint32_t *)virt_to_phys((void *)((unsigned long)buf_p));
+#endif
+	rga2_mmu_buf.buf = buf;
+	rga2_mmu_buf.front = 0;
+	rga2_mmu_buf.back = RGA2_PHY_PAGE_SIZE * 3;
+	rga2_mmu_buf.size = RGA2_PHY_PAGE_SIZE * 3;
+
+	order = get_order(RGA2_PHY_PAGE_SIZE * sizeof(struct page *));
+	rga2_mmu_buf.pages = (struct page **)__get_free_pages(GFP_KERNEL | GFP_DMA32, order);
+	if (rga2_mmu_buf.pages == NULL) {
+		ERR("Can not alloc pages for rga2_mmu_buf.pages\n");
+	}
+	rga2_mmu_buf.pages_order = order;
+
+	ret = platform_driver_register(&rga2_driver);
+	if (ret != 0) {
+		printk(KERN_ERR "Platform device register failed (%d).\n", ret);
+		return ret;
+	}
+
+	rga2_session_global.pid = 0x0000ffff;
+	INIT_LIST_HEAD(&rga2_session_global.waiting);
+	INIT_LIST_HEAD(&rga2_session_global.running);
+	INIT_LIST_HEAD(&rga2_session_global.list_session);
+
+	INIT_LIST_HEAD(&rga2_service.waiting);
+	INIT_LIST_HEAD(&rga2_service.running);
+	INIT_LIST_HEAD(&rga2_service.done);
+	INIT_LIST_HEAD(&rga2_service.session);
+	init_waitqueue_head(&rga2_session_global.wait);
+	//mutex_lock(&rga_service.lock);
+	list_add_tail(&rga2_session_global.list_session, &rga2_service.session);
+	//mutex_unlock(&rga_service.lock);
+	atomic_set(&rga2_session_global.task_running, 0);
+	atomic_set(&rga2_session_global.num_done, 0);
+
+#if RGA2_TEST_CASE
+	rga2_test_0();
+#endif
+	INFO("Module initialized.\n");
+
+	return 0;
+}
+
+static void __exit rga2_exit(void)
+{
+	rga2_power_off();
+
+	free_pages((unsigned long)rga2_mmu_buf.buf_virtual, rga2_mmu_buf.buf_order);
+	free_pages((unsigned long)rga2_mmu_buf.pages, rga2_mmu_buf.pages_order);
+
+	platform_driver_unregister(&rga2_driver);
+}
+
+
+#if RGA2_TEST_CASE
+
+void rga2_test_0(void)
+{
+	struct rga2_req req;
+	rga2_session session;
+	unsigned int *src, *dst;
+
+	session.pid	= current->pid;
+	INIT_LIST_HEAD(&session.waiting);
+	INIT_LIST_HEAD(&session.running);
+	INIT_LIST_HEAD(&session.list_session);
+	init_waitqueue_head(&session.wait);
+	/* no need to protect */
+	list_add_tail(&session.list_session, &rga2_service.session);
+	atomic_set(&session.task_running, 0);
+	atomic_set(&session.num_done, 0);
+
+	memset(&req, 0, sizeof(struct rga2_req));
+	src = kmalloc(800*480*4, GFP_KERNEL);
+	dst = kmalloc(800*480*4, GFP_KERNEL);
+
+	printk("\n********************************\n");
+	printk("************ RGA2_TEST ************\n");
+	printk("********************************\n\n");
+
+#if 1
+	memset(src, 0x80, 800 * 480 * 4);
+	memset(dst, 0xcc, 800 * 480 * 4);
+#endif
+#if 0
+	dmac_flush_range(src, &src[800 * 480]);
+	outer_flush_range(virt_to_phys(src), virt_to_phys(&src[800 * 480]));
+
+	dmac_flush_range(dst, &dst[800 * 480]);
+	outer_flush_range(virt_to_phys(dst), virt_to_phys(&dst[800 * 480]));
+#endif
+
+#if 0
+	req.pat.act_w = 16;
+	req.pat.act_h = 16;
+	req.pat.vir_w = 16;
+	req.pat.vir_h = 16;
+	req.pat.yrgb_addr = virt_to_phys(src);
+	req.render_mode = 0;
+	rga2_blit_sync(&session, &req);
+#endif
+	{
+		uint32_t i, j;
+		uint8_t *sp;
+
+		sp = (uint8_t *)src;
+		for (j = 0; j < 240; j++) {
+			sp = (uint8_t *)src + j * 320 * 10 / 8;
+			for (i = 0; i < 320; i++) {
+				if ((i & 3) == 0) {
+					sp[i * 5 / 4] = 0;
+					sp[i * 5 / 4+1] = 0x1;
+				} else if ((i & 3) == 1) {
+					sp[i * 5 / 4+1] = 0x4;
+				} else if ((i & 3) == 2) {
+					sp[i * 5 / 4+1] = 0x10;
+				} else if ((i & 3) == 3) {
+					sp[i * 5 / 4+1] = 0x40;
+			    }
+			}
+		}
+		sp = (uint8_t *)src;
+		for (j = 0; j < 100; j++)
+			printk("src %.2x\n", sp[j]);
+	}
+	req.src.act_w = 320;
+	req.src.act_h = 240;
+
+	req.src.vir_w = 320;
+	req.src.vir_h = 240;
+	req.src.yrgb_addr = 0;//(uint32_t)virt_to_phys(src);
+	req.src.uv_addr = (unsigned long)virt_to_phys(src);
+	req.src.v_addr = 0;
+	req.src.format = RGA2_FORMAT_YCbCr_420_SP_10B;
+
+	req.dst.act_w  = 320;
+	req.dst.act_h = 240;
+	req.dst.x_offset = 0;
+	req.dst.y_offset = 0;
+
+	req.dst.vir_w = 320;
+	req.dst.vir_h = 240;
+
+	req.dst.yrgb_addr = 0;//((uint32_t)virt_to_phys(dst));
+	req.dst.uv_addr = (unsigned long)virt_to_phys(dst);
+	req.dst.format = RGA2_FORMAT_YCbCr_420_SP;
+
+	//dst = dst0;
+
+	//req.render_mode = color_fill_mode;
+	//req.fg_color = 0x80ffffff;
+
+	req.rotate_mode = 0;
+	req.scale_bicu_mode = 2;
+
+#if 0
+	//req.alpha_rop_flag = 0;
+	//req.alpha_rop_mode = 0x19;
+	//req.PD_mode = 3;
+
+	//req.mmu_info.mmu_flag = 0x21;
+	//req.mmu_info.mmu_en = 1;
+
+	//printk("src = %.8x\n", req.src.yrgb_addr);
+	//printk("src = %.8x\n", req.src.uv_addr);
+	//printk("dst = %.8x\n", req.dst.yrgb_addr);
+#endif
+
+	rga2_blit_sync(&session, &req);
+
+#if 0
+	uint32_t j;
+	for (j = 0; j < 320 * 240 * 10 / 8; j++) {
+        if (src[j] != dst[j])
+		printk("error value dst not equal src j %d, s %.2x d %.2x\n",
+			j, src[j], dst[j]);
+	}
+#endif
+
+#if 1
+	{
+		uint32_t j;
+		uint8_t *dp = (uint8_t *)dst;
+
+		for (j = 0; j < 100; j++)
+			printk("%d %.2x\n", j, dp[j]);
+	}
+#endif
+
+	kfree(src);
+	kfree(dst);
+}
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+#ifdef CONFIG_ROCKCHIP_THUNDER_BOOT
+module_init(rga2_init);
+#else
+late_initcall(rga2_init);
+#endif
+#else
+fs_initcall(rga2_init);
+#endif
+module_exit(rga2_exit);
+
+/* Module information */
+MODULE_AUTHOR("zsq@rock-chips.com");
+MODULE_DESCRIPTION("Driver for rga device");
+MODULE_LICENSE("GPL");
