@@ -723,3 +723,1383 @@ static int dwc2_uframe_schedule_split(struct dwc2_hsotg *hsotg,
 	/*
 	 * We always try to find space in the low speed schedule first, then
 	 * try to find high speed time that matches.  If we don't, we'll bump
+	 * up the place we start searching in the low speed schedule and try
+	 * again.  To start we'll look right at the beginning of the low speed
+	 * schedule.
+	 *
+	 * Note that this will tend to front-load the high speed schedule.
+	 * We may eventually want to try to avoid this by either considering
+	 * both schedules together or doing some sort of round robin.
+	 *
+	 * For isoc split out, start schedule at the 2 * DWC2_SLICES_PER_UFRAME
+	 * to transfer SSPLIT-begin OUT transaction like EHCI controller.
+	 */
+	if (qh->ep_type == USB_ENDPOINT_XFER_ISOC && !qh->ep_is_in)
+		ls_search_slice = 2 * DWC2_SLICES_PER_UFRAME;
+	else
+		ls_search_slice = 0;
+
+	while (ls_search_slice < DWC2_LS_SCHEDULE_SLICES) {
+		int start_s_uframe;
+		int ssplit_s_uframe;
+		int second_s_uframe;
+		int rel_uframe;
+		int first_count;
+		int middle_count;
+		int end_count;
+		int first_data_bytes;
+		int other_data_bytes;
+		int i;
+
+		if (qh->schedule_low_speed) {
+			err = dwc2_ls_pmap_schedule(hsotg, qh, ls_search_slice);
+
+			/*
+			 * If we got an error here there's no other magic we
+			 * can do, so bail.  All the looping above is only
+			 * helpful to redo things if we got a low speed slot
+			 * and then couldn't find a matching high speed slot.
+			 */
+			if (err)
+				return err;
+		} else {
+			/* Must be missing the tt structure?  Why? */
+			WARN_ON_ONCE(1);
+		}
+
+		/*
+		 * This will give us a number 0 - 7 if
+		 * DWC2_LS_SCHEDULE_FRAMES == 1, or 0 - 15 if == 2, or ...
+		 */
+		start_s_uframe = qh->ls_start_schedule_slice /
+				 DWC2_SLICES_PER_UFRAME;
+
+		/* Get a number that's always 0 - 7 */
+		rel_uframe = (start_s_uframe % 8);
+
+		/*
+		 * If we were going to start in uframe 7 then we would need to
+		 * issue a start split in uframe 6, which spec says is not OK.
+		 * Move on to the next full frame (assuming there is one).
+		 *
+		 * See 11.18.4 Host Split Transaction Scheduling Requirements
+		 * bullet 1.
+		 */
+		if (rel_uframe == 7) {
+			if (qh->schedule_low_speed)
+				dwc2_ls_pmap_unschedule(hsotg, qh);
+			ls_search_slice =
+				(qh->ls_start_schedule_slice /
+				 DWC2_LS_PERIODIC_SLICES_PER_FRAME + 1) *
+				DWC2_LS_PERIODIC_SLICES_PER_FRAME;
+			continue;
+		}
+
+		/*
+		 * For ISOC in:
+		 * - start split            (frame -1)
+		 * - complete split w/ data (frame +1)
+		 * - complete split w/ data (frame +2)
+		 * - ...
+		 * - complete split w/ data (frame +num_data_packets)
+		 * - complete split w/ data (frame +num_data_packets+1)
+		 * - complete split w/ data (frame +num_data_packets+2, max 8)
+		 *   ...though if frame was "0" then max is 7...
+		 *
+		 * For ISOC out we might need to do:
+		 * - start split w/ data    (frame -1)
+		 * - start split w/ data    (frame +0)
+		 * - ...
+		 * - start split w/ data    (frame +num_data_packets-2)
+		 *
+		 * For INTERRUPT in we might need to do:
+		 * - start split            (frame -1)
+		 * - complete split w/ data (frame +1)
+		 * - complete split w/ data (frame +2)
+		 * - complete split w/ data (frame +3, max 8)
+		 *
+		 * For INTERRUPT out we might need to do:
+		 * - start split w/ data    (frame -1)
+		 * - complete split         (frame +1)
+		 * - complete split         (frame +2)
+		 * - complete split         (frame +3, max 8)
+		 *
+		 * Start adjusting!
+		 */
+		ssplit_s_uframe = (start_s_uframe +
+				   host_interval_in_sched - 1) %
+				  host_interval_in_sched;
+		if (qh->ep_type == USB_ENDPOINT_XFER_ISOC && !qh->ep_is_in)
+			second_s_uframe = start_s_uframe;
+		else
+			second_s_uframe = start_s_uframe + 1;
+
+		/* First data transfer might not be all 188 bytes. */
+		first_data_bytes = 188 -
+			DIV_ROUND_UP(188 * (qh->ls_start_schedule_slice %
+					    DWC2_SLICES_PER_UFRAME),
+				     DWC2_SLICES_PER_UFRAME);
+		if (first_data_bytes > bytecount)
+			first_data_bytes = bytecount;
+		other_data_bytes = bytecount - first_data_bytes;
+
+		/*
+		 * For now, skip OUT xfers where first xfer is partial
+		 *
+		 * Main dwc2 code assumes:
+		 * - INT transfers never get split in two.
+		 * - ISOC transfers can always transfer 188 bytes the first
+		 *   time.
+		 *
+		 * Until that code is fixed, try again if the first transfer
+		 * couldn't transfer everything.
+		 *
+		 * This code can be removed if/when the rest of dwc2 handles
+		 * the above cases.  Until it's fixed we just won't be able
+		 * to schedule quite as tightly.
+		 */
+		if (!qh->ep_is_in &&
+		    (first_data_bytes != min_t(int, 188, bytecount))) {
+			dwc2_sch_dbg(hsotg,
+				     "QH=%p avoiding broken 1st xfer (%d, %d)\n",
+				     qh, first_data_bytes, bytecount);
+			if (qh->schedule_low_speed)
+				dwc2_ls_pmap_unschedule(hsotg, qh);
+			ls_search_slice = (start_s_uframe + 1) *
+				DWC2_SLICES_PER_UFRAME;
+			continue;
+		}
+
+		/* Start by assuming transfers for the bytes */
+		qh->num_hs_transfers = 1 + DIV_ROUND_UP(other_data_bytes, 188);
+
+		/*
+		 * Everything except ISOC OUT has extra transfers.  Rules are
+		 * complicated.  See 11.18.4 Host Split Transaction Scheduling
+		 * Requirements bullet 3.
+		 */
+		if (qh->ep_type == USB_ENDPOINT_XFER_INT) {
+			if (rel_uframe == 6)
+				qh->num_hs_transfers += 2;
+			else
+				qh->num_hs_transfers += 3;
+
+			if (qh->ep_is_in) {
+				/*
+				 * First is start split, middle/end is data.
+				 * Allocate full data bytes for all data.
+				 */
+				first_count = 4;
+				middle_count = bytecount;
+				end_count = bytecount;
+			} else {
+				/*
+				 * First is data, middle/end is complete.
+				 * First transfer and second can have data.
+				 * Rest should just have complete split.
+				 */
+				first_count = first_data_bytes;
+				middle_count = max_t(int, 4, other_data_bytes);
+				end_count = 4;
+			}
+		} else {
+			if (qh->ep_is_in) {
+				int last;
+
+				/* Account for the start split */
+				qh->num_hs_transfers++;
+
+				/* Calculate "L" value from spec */
+				last = rel_uframe + qh->num_hs_transfers + 1;
+
+				/* Start with basic case */
+				if (last <= 6)
+					qh->num_hs_transfers += 2;
+				else
+					qh->num_hs_transfers += 1;
+
+				/* Adjust downwards */
+				if (last >= 6 && rel_uframe == 0)
+					qh->num_hs_transfers--;
+
+				/* 1st = start; rest can contain data */
+				first_count = 4;
+				middle_count = min_t(int, 188, bytecount);
+				end_count = middle_count;
+			} else {
+				/* All contain data, last might be smaller */
+				first_count = first_data_bytes;
+				middle_count = min_t(int, 188,
+						     other_data_bytes);
+				end_count = other_data_bytes % 188;
+			}
+		}
+
+		/* Assign durations per uFrame */
+		qh->hs_transfers[0].duration_us = HS_USECS_ISO(first_count);
+		for (i = 1; i < qh->num_hs_transfers - 1; i++)
+			qh->hs_transfers[i].duration_us =
+				HS_USECS_ISO(middle_count);
+		if (qh->num_hs_transfers > 1)
+			qh->hs_transfers[qh->num_hs_transfers - 1].duration_us =
+				HS_USECS_ISO(end_count);
+
+		/*
+		 * Assign start us.  The call below to dwc2_hs_pmap_schedule()
+		 * will start with these numbers but may adjust within the same
+		 * microframe.
+		 */
+		qh->hs_transfers[0].start_schedule_us =
+			ssplit_s_uframe * DWC2_HS_PERIODIC_US_PER_UFRAME;
+		for (i = 1; i < qh->num_hs_transfers; i++)
+			qh->hs_transfers[i].start_schedule_us =
+				((second_s_uframe + i - 1) %
+				 DWC2_HS_SCHEDULE_UFRAMES) *
+				DWC2_HS_PERIODIC_US_PER_UFRAME;
+
+		/* Try to schedule with filled in hs_transfers above */
+		for (i = 0; i < qh->num_hs_transfers; i++) {
+			err = dwc2_hs_pmap_schedule(hsotg, qh, true, i);
+			if (err)
+				break;
+		}
+
+		/* If we scheduled all w/out breaking out then we're all good */
+		if (i == qh->num_hs_transfers)
+			break;
+
+		for (; i >= 0; i--)
+			dwc2_hs_pmap_unschedule(hsotg, qh, i);
+
+		if (qh->schedule_low_speed)
+			dwc2_ls_pmap_unschedule(hsotg, qh);
+
+		/* Try again starting in the next microframe */
+		ls_search_slice = (start_s_uframe + 1) * DWC2_SLICES_PER_UFRAME;
+	}
+
+	if (ls_search_slice >= DWC2_LS_SCHEDULE_SLICES)
+		return -ENOSPC;
+
+	return 0;
+}
+
+/**
+ * dwc2_uframe_schedule_hs - Schedule a QH for a periodic high speed xfer.
+ *
+ * Basically this just wraps dwc2_hs_pmap_schedule() to provide a clean
+ * interface.
+ *
+ * @hsotg:       The HCD state structure for the DWC OTG controller.
+ * @qh:          QH for the periodic transfer.
+ */
+static int dwc2_uframe_schedule_hs(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	/* In non-split host and device time are the same */
+	WARN_ON(qh->host_us != qh->device_us);
+	WARN_ON(qh->host_interval != qh->device_interval);
+	WARN_ON(qh->num_hs_transfers != 1);
+
+	/* We'll have one transfer; init start to 0 before calling scheduler */
+	qh->hs_transfers[0].start_schedule_us = 0;
+	qh->hs_transfers[0].duration_us = qh->host_us;
+
+	return dwc2_hs_pmap_schedule(hsotg, qh, false, 0);
+}
+
+/**
+ * dwc2_uframe_schedule_ls - Schedule a QH for a periodic low/full speed xfer.
+ *
+ * Basically this just wraps dwc2_ls_pmap_schedule() to provide a clean
+ * interface.
+ *
+ * @hsotg:       The HCD state structure for the DWC OTG controller.
+ * @qh:          QH for the periodic transfer.
+ */
+static int dwc2_uframe_schedule_ls(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	/* In non-split host and device time are the same */
+	WARN_ON(qh->host_us != qh->device_us);
+	WARN_ON(qh->host_interval != qh->device_interval);
+	WARN_ON(!qh->schedule_low_speed);
+
+	/* Run on the main low speed schedule (no split = no hub = no TT) */
+	return dwc2_ls_pmap_schedule(hsotg, qh, 0);
+}
+
+/**
+ * dwc2_uframe_schedule - Schedule a QH for a periodic xfer.
+ *
+ * Calls one of the 3 sub-function depending on what type of transfer this QH
+ * is for.  Also adds some printing.
+ *
+ * @hsotg:       The HCD state structure for the DWC OTG controller.
+ * @qh:          QH for the periodic transfer.
+ */
+static int dwc2_uframe_schedule(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	int ret;
+
+	if (qh->dev_speed == USB_SPEED_HIGH)
+		ret = dwc2_uframe_schedule_hs(hsotg, qh);
+	else if (!qh->do_split)
+		ret = dwc2_uframe_schedule_ls(hsotg, qh);
+	else
+		ret = dwc2_uframe_schedule_split(hsotg, qh);
+
+	if (ret)
+		dwc2_sch_dbg(hsotg, "QH=%p Failed to schedule %d\n", qh, ret);
+	else
+		dwc2_qh_schedule_print(hsotg, qh);
+
+	return ret;
+}
+
+/**
+ * dwc2_uframe_unschedule - Undoes dwc2_uframe_schedule().
+ *
+ * @hsotg:       The HCD state structure for the DWC OTG controller.
+ * @qh:          QH for the periodic transfer.
+ */
+static void dwc2_uframe_unschedule(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	int i;
+
+	for (i = 0; i < qh->num_hs_transfers; i++)
+		dwc2_hs_pmap_unschedule(hsotg, qh, i);
+
+	if (qh->schedule_low_speed)
+		dwc2_ls_pmap_unschedule(hsotg, qh);
+
+	dwc2_sch_dbg(hsotg, "QH=%p Unscheduled\n", qh);
+}
+
+/**
+ * dwc2_pick_first_frame() - Choose 1st frame for qh that's already scheduled
+ *
+ * Takes a qh that has already been scheduled (which means we know we have the
+ * bandwdith reserved for us) and set the next_active_frame and the
+ * start_active_frame.
+ *
+ * This is expected to be called on qh's that weren't previously actively
+ * running.  It just picks the next frame that we can fit into without any
+ * thought about the past.
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    QH for a periodic endpoint
+ *
+ */
+static void dwc2_pick_first_frame(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	u16 frame_number;
+	u16 earliest_frame;
+	u16 next_active_frame;
+	u16 relative_frame;
+	u16 interval;
+
+	/*
+	 * Use the real frame number rather than the cached value as of the
+	 * last SOF to give us a little extra slop.
+	 */
+	frame_number = dwc2_hcd_get_frame_number(hsotg);
+
+	/*
+	 * We wouldn't want to start any earlier than the next frame just in
+	 * case the frame number ticks as we're doing this calculation.
+	 *
+	 * NOTE: if we could quantify how long till we actually get scheduled
+	 * we might be able to avoid the "+ 1" by looking at the upper part of
+	 * HFNUM (the FRREM field).  For now we'll just use the + 1 though.
+	 */
+	earliest_frame = dwc2_frame_num_inc(frame_number, 1);
+	next_active_frame = earliest_frame;
+
+	/* Get the "no microframe schduler" out of the way... */
+	if (!hsotg->params.uframe_sched) {
+		if (qh->do_split)
+			/* Splits are active at microframe 0 minus 1 */
+			next_active_frame |= 0x7;
+		goto exit;
+	}
+
+	if (qh->dev_speed == USB_SPEED_HIGH || qh->do_split) {
+		/*
+		 * We're either at high speed or we're doing a split (which
+		 * means we're talking high speed to a hub).  In any case
+		 * the first frame should be based on when the first scheduled
+		 * event is.
+		 */
+		WARN_ON(qh->num_hs_transfers < 1);
+
+		relative_frame = qh->hs_transfers[0].start_schedule_us /
+				 DWC2_HS_PERIODIC_US_PER_UFRAME;
+
+		/* Adjust interval as per high speed schedule */
+		interval = gcd(qh->host_interval, DWC2_HS_SCHEDULE_UFRAMES);
+
+	} else {
+		/*
+		 * Low or full speed directly on dwc2.  Just about the same
+		 * as high speed but on a different schedule and with slightly
+		 * different adjustments.  Note that this works because when
+		 * the host and device are both low speed then frames in the
+		 * controller tick at low speed.
+		 */
+		relative_frame = qh->ls_start_schedule_slice /
+				 DWC2_LS_PERIODIC_SLICES_PER_FRAME;
+		interval = gcd(qh->host_interval, DWC2_LS_SCHEDULE_FRAMES);
+	}
+
+	/* Scheduler messed up if frame is past interval */
+	WARN_ON(relative_frame >= interval);
+
+	/*
+	 * We know interval must divide (HFNUM_MAX_FRNUM + 1) now that we've
+	 * done the gcd(), so it's safe to move to the beginning of the current
+	 * interval like this.
+	 *
+	 * After this we might be before earliest_frame, but don't worry,
+	 * we'll fix it...
+	 */
+	next_active_frame = (next_active_frame / interval) * interval;
+
+	/*
+	 * Actually choose to start at the frame number we've been
+	 * scheduled for.
+	 */
+	next_active_frame = dwc2_frame_num_inc(next_active_frame,
+					       relative_frame);
+
+	/*
+	 * We actually need 1 frame before since the next_active_frame is
+	 * the frame number we'll be put on the ready list and we won't be on
+	 * the bus until 1 frame later.
+	 */
+	next_active_frame = dwc2_frame_num_dec(next_active_frame, 1);
+
+	/*
+	 * By now we might actually be before the earliest_frame.  Let's move
+	 * up intervals until we're not.
+	 */
+	while (dwc2_frame_num_gt(earliest_frame, next_active_frame))
+		next_active_frame = dwc2_frame_num_inc(next_active_frame,
+						       interval);
+
+exit:
+	qh->next_active_frame = next_active_frame;
+	qh->start_active_frame = next_active_frame;
+
+	dwc2_sch_vdbg(hsotg, "QH=%p First fn=%04x nxt=%04x\n",
+		      qh, frame_number, qh->next_active_frame);
+}
+
+/**
+ * dwc2_do_reserve() - Make a periodic reservation
+ *
+ * Try to allocate space in the periodic schedule.  Depending on parameters
+ * this might use the microframe scheduler or the dumb scheduler.
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    QH for the periodic transfer.
+ *
+ * Returns: 0 upon success; error upon failure.
+ */
+static int dwc2_do_reserve(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	int status;
+
+	if (hsotg->params.uframe_sched) {
+		status = dwc2_uframe_schedule(hsotg, qh);
+	} else {
+		status = dwc2_periodic_channel_available(hsotg);
+		if (status) {
+			dev_info(hsotg->dev,
+				 "%s: No host channel available for periodic transfer\n",
+				 __func__);
+			return status;
+		}
+
+		status = dwc2_check_periodic_bandwidth(hsotg, qh);
+	}
+
+	if (status) {
+		dev_dbg(hsotg->dev,
+			"%s: Insufficient periodic bandwidth for periodic transfer\n",
+			__func__);
+		return status;
+	}
+
+	if (!hsotg->params.uframe_sched)
+		/* Reserve periodic channel */
+		hsotg->periodic_channels++;
+
+	/* Update claimed usecs per (micro)frame */
+	hsotg->periodic_usecs += qh->host_us;
+
+	dwc2_pick_first_frame(hsotg, qh);
+
+	return 0;
+}
+
+/**
+ * dwc2_do_unreserve() - Actually release the periodic reservation
+ *
+ * This function actually releases the periodic bandwidth that was reserved
+ * by the given qh.
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    QH for the periodic transfer.
+ */
+static void dwc2_do_unreserve(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	assert_spin_locked(&hsotg->lock);
+
+	WARN_ON(!qh->unreserve_pending);
+
+	/* No more unreserve pending--we're doing it */
+	qh->unreserve_pending = false;
+
+	if (WARN_ON(!list_empty(&qh->qh_list_entry)))
+		list_del_init(&qh->qh_list_entry);
+
+	/* Update claimed usecs per (micro)frame */
+	hsotg->periodic_usecs -= qh->host_us;
+
+	if (hsotg->params.uframe_sched) {
+		dwc2_uframe_unschedule(hsotg, qh);
+	} else {
+		/* Release periodic channel reservation */
+		hsotg->periodic_channels--;
+	}
+}
+
+/**
+ * dwc2_unreserve_timer_fn() - Timer function to release periodic reservation
+ *
+ * According to the kernel doc for usb_submit_urb() (specifically the part about
+ * "Reserved Bandwidth Transfers"), we need to keep a reservation active as
+ * long as a device driver keeps submitting.  Since we're using HCD_BH to give
+ * back the URB we need to give the driver a little bit of time before we
+ * release the reservation.  This worker is called after the appropriate
+ * delay.
+ *
+ * @t: Address to a qh unreserve_work.
+ */
+static void dwc2_unreserve_timer_fn(struct timer_list *t)
+{
+	struct dwc2_qh *qh = from_timer(qh, t, unreserve_timer);
+	struct dwc2_hsotg *hsotg = qh->hsotg;
+	unsigned long flags;
+
+	/*
+	 * Wait for the lock, or for us to be scheduled again.  We
+	 * could be scheduled again if:
+	 * - We started executing but didn't get the lock yet.
+	 * - A new reservation came in, but cancel didn't take effect
+	 *   because we already started executing.
+	 * - The timer has been kicked again.
+	 * In that case cancel and wait for the next call.
+	 */
+	while (!spin_trylock_irqsave(&hsotg->lock, flags)) {
+		if (timer_pending(&qh->unreserve_timer))
+			return;
+	}
+
+	/*
+	 * Might be no more unreserve pending if:
+	 * - We started executing but didn't get the lock yet.
+	 * - A new reservation came in, but cancel didn't take effect
+	 *   because we already started executing.
+	 *
+	 * We can't put this in the loop above because unreserve_pending needs
+	 * to be accessed under lock, so we can only check it once we got the
+	 * lock.
+	 */
+	if (qh->unreserve_pending)
+		dwc2_do_unreserve(hsotg, qh);
+
+	spin_unlock_irqrestore(&hsotg->lock, flags);
+}
+
+/**
+ * dwc2_check_max_xfer_size() - Checks that the max transfer size allowed in a
+ * host channel is large enough to handle the maximum data transfer in a single
+ * (micro)frame for a periodic transfer
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    QH for a periodic endpoint
+ *
+ * Return: 0 if successful, negative error code otherwise
+ */
+static int dwc2_check_max_xfer_size(struct dwc2_hsotg *hsotg,
+				    struct dwc2_qh *qh)
+{
+	u32 max_xfer_size;
+	u32 max_channel_xfer_size;
+	int status = 0;
+
+	max_xfer_size = qh->maxp * qh->maxp_mult;
+	max_channel_xfer_size = hsotg->params.max_transfer_size;
+
+	if (max_xfer_size > max_channel_xfer_size) {
+		dev_err(hsotg->dev,
+			"%s: Periodic xfer length %d > max xfer length for channel %d\n",
+			__func__, max_xfer_size, max_channel_xfer_size);
+		status = -ENOSPC;
+	}
+
+	return status;
+}
+
+/**
+ * dwc2_schedule_periodic() - Schedules an interrupt or isochronous transfer in
+ * the periodic schedule
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    QH for the periodic transfer. The QH should already contain the
+ *         scheduling information.
+ *
+ * Return: 0 if successful, negative error code otherwise
+ */
+static int dwc2_schedule_periodic(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	int status;
+
+	status = dwc2_check_max_xfer_size(hsotg, qh);
+	if (status) {
+		dev_dbg(hsotg->dev,
+			"%s: Channel max transfer size too small for periodic transfer\n",
+			__func__);
+		return status;
+	}
+
+	/* Cancel pending unreserve; if canceled OK, unreserve was pending */
+	if (del_timer(&qh->unreserve_timer))
+		WARN_ON(!qh->unreserve_pending);
+
+	/*
+	 * Only need to reserve if there's not an unreserve pending, since if an
+	 * unreserve is pending then by definition our old reservation is still
+	 * valid.  Unreserve might still be pending even if we didn't cancel if
+	 * dwc2_unreserve_timer_fn() already started.  Code in the timer handles
+	 * that case.
+	 */
+	if (!qh->unreserve_pending) {
+		status = dwc2_do_reserve(hsotg, qh);
+		if (status)
+			return status;
+	} else {
+		/*
+		 * It might have been a while, so make sure that frame_number
+		 * is still good.  Note: we could also try to use the similar
+		 * dwc2_next_periodic_start() but that schedules much more
+		 * tightly and we might need to hurry and queue things up.
+		 */
+		if (dwc2_frame_num_le(qh->next_active_frame,
+				      hsotg->frame_number))
+			dwc2_pick_first_frame(hsotg, qh);
+	}
+
+	qh->unreserve_pending = 0;
+
+	if (hsotg->params.dma_desc_enable)
+		/* Don't rely on SOF and start in ready schedule */
+		list_add_tail(&qh->qh_list_entry, &hsotg->periodic_sched_ready);
+	else
+		/* Always start in inactive schedule */
+		list_add_tail(&qh->qh_list_entry,
+			      &hsotg->periodic_sched_inactive);
+
+	return 0;
+}
+
+/**
+ * dwc2_deschedule_periodic() - Removes an interrupt or isochronous transfer
+ * from the periodic schedule
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:	   QH for the periodic transfer
+ */
+static void dwc2_deschedule_periodic(struct dwc2_hsotg *hsotg,
+				     struct dwc2_qh *qh)
+{
+	bool did_modify;
+
+	assert_spin_locked(&hsotg->lock);
+
+	/*
+	 * Schedule the unreserve to happen in a little bit.  Cases here:
+	 * - Unreserve worker might be sitting there waiting to grab the lock.
+	 *   In this case it will notice it's been schedule again and will
+	 *   quit.
+	 * - Unreserve worker might not be scheduled.
+	 *
+	 * We should never already be scheduled since dwc2_schedule_periodic()
+	 * should have canceled the scheduled unreserve timer (hence the
+	 * warning on did_modify).
+	 *
+	 * We add + 1 to the timer to guarantee that at least 1 jiffy has
+	 * passed (otherwise if the jiffy counter might tick right after we
+	 * read it and we'll get no delay).
+	 */
+	did_modify = mod_timer(&qh->unreserve_timer,
+			       jiffies + DWC2_UNRESERVE_DELAY + 1);
+	WARN_ON(did_modify);
+	qh->unreserve_pending = 1;
+
+	list_del_init(&qh->qh_list_entry);
+}
+
+/**
+ * dwc2_wait_timer_fn() - Timer function to re-queue after waiting
+ *
+ * As per the spec, a NAK indicates that "a function is temporarily unable to
+ * transmit or receive data, but will eventually be able to do so without need
+ * of host intervention".
+ *
+ * That means that when we encounter a NAK we're supposed to retry.
+ *
+ * ...but if we retry right away (from the interrupt handler that saw the NAK)
+ * then we can end up with an interrupt storm (if the other side keeps NAKing
+ * us) because on slow enough CPUs it could take us longer to get out of the
+ * interrupt routine than it takes for the device to send another NAK.  That
+ * leads to a constant stream of NAK interrupts and the CPU locks.
+ *
+ * ...so instead of retrying right away in the case of a NAK we'll set a timer
+ * to retry some time later.  This function handles that timer and moves the
+ * qh back to the "inactive" list, then queues transactions.
+ *
+ * @t: Pointer to wait_timer in a qh.
+ *
+ * Return: HRTIMER_NORESTART to not automatically restart this timer.
+ */
+static enum hrtimer_restart dwc2_wait_timer_fn(struct hrtimer *t)
+{
+	struct dwc2_qh *qh = container_of(t, struct dwc2_qh, wait_timer);
+	struct dwc2_hsotg *hsotg = qh->hsotg;
+	unsigned long flags;
+
+	spin_lock_irqsave(&hsotg->lock, flags);
+
+	/*
+	 * We'll set wait_timer_cancel to true if we want to cancel this
+	 * operation in dwc2_hcd_qh_unlink().
+	 */
+	if (!qh->wait_timer_cancel) {
+		enum dwc2_transaction_type tr_type;
+
+		qh->want_wait = false;
+
+		list_move(&qh->qh_list_entry,
+			  &hsotg->non_periodic_sched_inactive);
+
+		tr_type = dwc2_hcd_select_transactions(hsotg);
+		if (tr_type != DWC2_TRANSACTION_NONE)
+			dwc2_hcd_queue_transactions(hsotg, tr_type);
+	}
+
+	spin_unlock_irqrestore(&hsotg->lock, flags);
+	return HRTIMER_NORESTART;
+}
+
+/**
+ * dwc2_qh_init() - Initializes a QH structure
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    The QH to init
+ * @urb:   Holds the information about the device/endpoint needed to initialize
+ *         the QH
+ * @mem_flags: Flags for allocating memory.
+ */
+static void dwc2_qh_init(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
+			 struct dwc2_hcd_urb *urb, gfp_t mem_flags)
+{
+	int dev_speed = dwc2_host_get_speed(hsotg, urb->priv);
+	u8 ep_type = dwc2_hcd_get_pipe_type(&urb->pipe_info);
+	bool ep_is_in = !!dwc2_hcd_is_pipe_in(&urb->pipe_info);
+	bool ep_is_isoc = (ep_type == USB_ENDPOINT_XFER_ISOC);
+	bool ep_is_int = (ep_type == USB_ENDPOINT_XFER_INT);
+	u32 hprt = dwc2_readl(hsotg, HPRT0);
+	u32 prtspd = (hprt & HPRT0_SPD_MASK) >> HPRT0_SPD_SHIFT;
+	bool do_split = (prtspd == HPRT0_SPD_HIGH_SPEED &&
+			 dev_speed != USB_SPEED_HIGH);
+	int maxp = dwc2_hcd_get_maxp(&urb->pipe_info);
+	int maxp_mult = dwc2_hcd_get_maxp_mult(&urb->pipe_info);
+	int bytecount = maxp_mult * maxp;
+	char *speed, *type;
+
+	/* Initialize QH */
+	qh->hsotg = hsotg;
+	timer_setup(&qh->unreserve_timer, dwc2_unreserve_timer_fn, 0);
+	hrtimer_init(&qh->wait_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	qh->wait_timer.function = &dwc2_wait_timer_fn;
+	qh->ep_type = ep_type;
+	qh->ep_is_in = ep_is_in;
+
+	qh->data_toggle = DWC2_HC_PID_DATA0;
+	qh->maxp = maxp;
+	qh->maxp_mult = maxp_mult;
+	INIT_LIST_HEAD(&qh->qtd_list);
+	INIT_LIST_HEAD(&qh->qh_list_entry);
+
+	qh->do_split = do_split;
+	qh->dev_speed = dev_speed;
+
+	if (ep_is_int || ep_is_isoc) {
+		/* Compute scheduling parameters once and save them */
+		int host_speed = do_split ? USB_SPEED_HIGH : dev_speed;
+		struct dwc2_tt *dwc_tt = dwc2_host_get_tt_info(hsotg, urb->priv,
+							       mem_flags,
+							       &qh->ttport);
+		int device_ns;
+
+		qh->dwc_tt = dwc_tt;
+
+		qh->host_us = NS_TO_US(usb_calc_bus_time(host_speed, ep_is_in,
+				       ep_is_isoc, bytecount));
+		device_ns = usb_calc_bus_time(dev_speed, ep_is_in,
+					      ep_is_isoc, bytecount);
+
+		if (do_split && dwc_tt)
+			device_ns += dwc_tt->usb_tt->think_time;
+		qh->device_us = NS_TO_US(device_ns);
+
+		qh->device_interval = urb->interval;
+		qh->host_interval = urb->interval * (do_split ? 8 : 1);
+
+		/*
+		 * Schedule low speed if we're running the host in low or
+		 * full speed OR if we've got a "TT" to deal with to access this
+		 * device.
+		 */
+		qh->schedule_low_speed = prtspd != HPRT0_SPD_HIGH_SPEED ||
+					 dwc_tt;
+
+		if (do_split) {
+			/* We won't know num transfers until we schedule */
+			qh->num_hs_transfers = -1;
+		} else if (dev_speed == USB_SPEED_HIGH) {
+			qh->num_hs_transfers = 1;
+		} else {
+			qh->num_hs_transfers = 0;
+		}
+
+		/* We'll schedule later when we have something to do */
+	}
+
+	switch (dev_speed) {
+	case USB_SPEED_LOW:
+		speed = "low";
+		break;
+	case USB_SPEED_FULL:
+		speed = "full";
+		break;
+	case USB_SPEED_HIGH:
+		speed = "high";
+		break;
+	default:
+		speed = "?";
+		break;
+	}
+
+	switch (qh->ep_type) {
+	case USB_ENDPOINT_XFER_ISOC:
+		type = "isochronous";
+		break;
+	case USB_ENDPOINT_XFER_INT:
+		type = "interrupt";
+		break;
+	case USB_ENDPOINT_XFER_CONTROL:
+		type = "control";
+		break;
+	case USB_ENDPOINT_XFER_BULK:
+		type = "bulk";
+		break;
+	default:
+		type = "?";
+		break;
+	}
+
+	dwc2_sch_dbg(hsotg, "QH=%p Init %s, %s speed, %d bytes:\n", qh, type,
+		     speed, bytecount);
+	dwc2_sch_dbg(hsotg, "QH=%p ...addr=%d, ep=%d, %s\n", qh,
+		     dwc2_hcd_get_dev_addr(&urb->pipe_info),
+		     dwc2_hcd_get_ep_num(&urb->pipe_info),
+		     ep_is_in ? "IN" : "OUT");
+	if (ep_is_int || ep_is_isoc) {
+		dwc2_sch_dbg(hsotg,
+			     "QH=%p ...duration: host=%d us, device=%d us\n",
+			     qh, qh->host_us, qh->device_us);
+		dwc2_sch_dbg(hsotg, "QH=%p ...interval: host=%d, device=%d\n",
+			     qh, qh->host_interval, qh->device_interval);
+		if (qh->schedule_low_speed)
+			dwc2_sch_dbg(hsotg, "QH=%p ...low speed schedule=%p\n",
+				     qh, dwc2_get_ls_map(hsotg, qh));
+	}
+}
+
+/**
+ * dwc2_hcd_qh_create() - Allocates and initializes a QH
+ *
+ * @hsotg:        The HCD state structure for the DWC OTG controller
+ * @urb:          Holds the information about the device/endpoint needed
+ *                to initialize the QH
+ * @mem_flags:   Flags for allocating memory.
+ *
+ * Return: Pointer to the newly allocated QH, or NULL on error
+ */
+struct dwc2_qh *dwc2_hcd_qh_create(struct dwc2_hsotg *hsotg,
+				   struct dwc2_hcd_urb *urb,
+					  gfp_t mem_flags)
+{
+	struct dwc2_qh *qh;
+
+	if (!urb->priv)
+		return NULL;
+
+	/* Allocate memory */
+	qh = kzalloc(sizeof(*qh), mem_flags);
+	if (!qh)
+		return NULL;
+
+	dwc2_qh_init(hsotg, qh, urb, mem_flags);
+
+	if (hsotg->params.dma_desc_enable &&
+	    dwc2_hcd_qh_init_ddma(hsotg, qh, mem_flags) < 0) {
+		dwc2_hcd_qh_free(hsotg, qh);
+		return NULL;
+	}
+
+	return qh;
+}
+
+/**
+ * dwc2_hcd_qh_free() - Frees the QH
+ *
+ * @hsotg: HCD instance
+ * @qh:    The QH to free
+ *
+ * QH should already be removed from the list. QTD list should already be empty
+ * if called from URB Dequeue.
+ *
+ * Must NOT be called with interrupt disabled or spinlock held
+ */
+void dwc2_hcd_qh_free(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	/* Make sure any unreserve work is finished. */
+	if (del_timer_sync(&qh->unreserve_timer)) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&hsotg->lock, flags);
+		dwc2_do_unreserve(hsotg, qh);
+		spin_unlock_irqrestore(&hsotg->lock, flags);
+	}
+
+	/*
+	 * We don't have the lock so we can safely wait until the wait timer
+	 * finishes.  Of course, at this point in time we'd better have set
+	 * wait_timer_active to false so if this timer was still pending it
+	 * won't do anything anyway, but we want it to finish before we free
+	 * memory.
+	 */
+	hrtimer_cancel(&qh->wait_timer);
+
+	dwc2_host_put_tt_info(hsotg, qh->dwc_tt);
+
+	if (qh->desc_list)
+		dwc2_hcd_qh_free_ddma(hsotg, qh);
+	else if (hsotg->unaligned_cache && qh->dw_align_buf)
+		kmem_cache_free(hsotg->unaligned_cache, qh->dw_align_buf);
+
+	kfree(qh);
+}
+
+/**
+ * dwc2_hcd_qh_add() - Adds a QH to either the non periodic or periodic
+ * schedule if it is not already in the schedule. If the QH is already in
+ * the schedule, no action is taken.
+ *
+ * @hsotg: The HCD state structure for the DWC OTG controller
+ * @qh:    The QH to add
+ *
+ * Return: 0 if successful, negative error code otherwise
+ */
+int dwc2_hcd_qh_add(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	int status;
+	u32 intr_mask;
+	ktime_t delay;
+
+	if (dbg_qh(qh))
+		dev_vdbg(hsotg->dev, "%s()\n", __func__);
+
+	if (!list_empty(&qh->qh_list_entry))
+		/* QH already in a schedule */
+		return 0;
+
+	/* Add the new QH to the appropriate schedule */
+	if (dwc2_qh_is_non_per(qh)) {
+		/* Schedule right away */
+		qh->start_active_frame = hsotg->frame_number;
+		qh->next_active_frame = qh->start_active_frame;
+
+		if (qh->want_wait) {
+			list_add_tail(&qh->qh_list_entry,
+				      &hsotg->non_periodic_sched_waiting);
+			qh->wait_timer_cancel = false;
+			delay = ktime_set(0, DWC2_RETRY_WAIT_DELAY);
+			hrtimer_start(&qh->wait_timer, delay, HRTIMER_MODE_REL);
+		} else {
+			list_add_tail(&qh->qh_list_entry,
+				      &hsotg->non_periodic_sched_inactive);
+		}
+		return 0;
+	}
+
+	status = dwc2_schedule_periodic(hsotg, qh);
+	if (status)
+		return status;
+	if (!hsotg->periodic_qh_count) {
+		intr_mask = dwc2_readl(hsotg, GINTMSK);
+		intr_mask |= GINTSTS_SOF;
+		dwc2_writel(hsotg, intr_mask, GINTMSK);
+	}
+	hsotg->periodic_qh_count++;
+
+	return 0;
+}
+
+/**
+ * dwc2_hcd_qh_unlink() - Removes a QH from either the non-periodic or periodic
+ * schedule. Memory is not freed.
+ *
+ * @hsotg: The HCD state structure
+ * @qh:    QH to remove from schedule
+ */
+void dwc2_hcd_qh_unlink(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
+{
+	u32 intr_mask;
+
+	dev_vdbg(hsotg->dev, "%s()\n", __func__);
+
+	/* If the wait_timer is pending, this will stop it from acting */
+	qh->wait_timer_cancel = true;
+
+	if (list_empty(&qh->qh_list_entry))
+		/* QH is not in a schedule */
+		return;
+
+	if (dwc2_qh_is_non_per(qh)) {
+		if (hsotg->non_periodic_qh_ptr == &qh->qh_list_entry)
+			hsotg->non_periodic_qh_ptr =
+					hsotg->non_periodic_qh_ptr->next;
+		list_del_init(&qh->qh_list_entry);
+		return;
+	}
+
+	dwc2_deschedule_periodic(hsotg, qh);
+	hsotg->periodic_qh_count--;
+	if (!hsotg->periodic_qh_count &&
+	    !hsotg->params.dma_desc_enable) {
+		intr_mask = dwc2_readl(hsotg, GINTMSK);
+		intr_mask &= ~GINTSTS_SOF;
+		dwc2_writel(hsotg, intr_mask, GINTMSK);
+	}
+}
+
+/**
+ * dwc2_next_for_periodic_split() - Set next_active_frame midway thru a split.
+ *
+ * This is called for setting next_active_frame for periodic splits for all but
+ * the first packet of the split.  Confusing?  I thought so...
+ *
+ * Periodic splits are single low/full speed transfers that we end up splitting
+ * up into several high speed transfers.  They always fit into one full (1 ms)
+ * frame but might be split over several microframes (125 us each).  We to put
+ * each of the parts on a very specific high speed frame.
+ *
+ * This function figures out where the next active uFrame needs to be.
+ *
+ * @hsotg:        The HCD state structure
+ * @qh:           QH for the periodic transfer.
+ * @frame_number: The current frame number.
+ *
+ * Return: number missed by (or 0 if we didn't miss).
+ */
+static int dwc2_next_for_periodic_split(struct dwc2_hsotg *hsotg,
+					struct dwc2_qh *qh, u16 frame_number)
+{
+	u16 old_frame = qh->next_active_frame;
+	u16 prev_frame_number = dwc2_frame_num_dec(frame_number, 1);
+	int missed = 0;
+	u16 incr;
+
+	/*
+	 * See dwc2_uframe_schedule_split() for split scheduling.
+	 *
+	 * Basically: increment 1 normally, but 2 right after the start split
+	 * (except for ISOC out).
+	 */
+	if (old_frame == qh->start_active_frame &&
+	    !(qh->ep_type == USB_ENDPOINT_XFER_ISOC && !qh->ep_is_in))
+		incr = 2;
+	else
+		incr = 1;
+
+	qh->next_active_frame = dwc2_frame_num_inc(old_frame, incr);
+
+	/*
+	 * Note that it's OK for frame_number to be 1 frame past
+	 * next_active_frame.  Remember that next_active_frame is supposed to
+	 * be 1 frame _before_ when we want to be scheduled.  If we're 1 frame
+	 * past it just means schedule ASAP.
+	 *
+	 * It's _not_ OK, however, if we're more than one frame past.
+	 */
+	if (dwc2_frame_num_gt(prev_frame_number, qh->next_active_frame)) {
+		/*
+		 * OOPS, we missed.  That's actually pretty bad since
+		 * the hub will be unhappy; try ASAP I guess.
+		 */
+		missed = dwc2_frame_num_dec(prev_frame_number,
+					    qh->next_active_frame);
+		qh->next_active_frame = frame_number;
+	}
+
+	return missed;
+}
+
+/**
+ * dwc2_next_periodic_start() - Set next_active_frame for next transfer start
+ *
+ * This is called for setting next_active_frame for a periodic transfer for
+ * all cases other than midway through a periodic split.  This will also update
+ * start_active_frame.
+ *
+ * Since we _always_ keep start_active_frame as the start of the previous
+ * transfer this is normally pretty easy: we just add our interval to
+ * start_active_frame and we've got our answer.
+ *
+ * The tricks come into play if we miss.  In that case we'll look for the next
+ * slot we can fit into.
+ *
+ * @hsotg:        The HCD state structure
+ * @qh:           QH for the periodic transfer.
+ * @frame_number: The current frame number.
+ *
+ * Return: number missed by (or 0 if we didn't miss).
+ */
+static int dwc2_next_periodic_start(struct dwc2_hsotg *hsotg,
+				    struct dwc2_qh *qh, u16 frame_number)
+{
+	int missed = 0;
+	u16 interval = qh->host_interval;
+	u16 prev_frame_number = dwc2_frame_num_dec(frame_number, 1);
+
+	qh->start_active_frame = dwc2_frame_num_inc(qh->start_active_frame,
+						    interval);
+
+	/*
+	 * The dwc2_frame_num_gt() function used below won't work terribly well
+	 * with if we just incremented by a really large intervals since the
+	 * frame counter only goes to 0x3fff.  It's terribly unlikely that we
+	 * will have missed in this case anyway.  Just go to exit.  If we want
+	 * to try to do better we'll need to keep track of a bigger counter
+	 * somewhere in the driver and handle overflows.
+	 */
+	if (interval >= 0x1000)
+		goto exit;
+
+	/*
+	 * Test for misses, which is when it's too late to schedule.
+	 *
+	 * A few things to note:
+	 * - We compare against prev_frame_number since start_active_frame
+	 *   and next_active_frame are always 1 frame before we want things
+	 *   to be active and we assume we can still get scheduled in the
+	 *   current frame number.
+	 * - It's possible for start_active_frame (now incremented) to be
+	 *   next_active_frame if we got an EO MISS (even_odd miss) which
+	 *   basically means that we detected there wasn't enough time for
+	 *   the last packet and dwc2_hc_set_even_odd_frame() rescheduled us
+	 *   at the last second.  We want to make sure we don't schedule
+	 *   another transfer for the same frame.  My test webcam doesn't seem
+	 *   terribly upset by missing a transfer but really doesn't like when
+	 *   we do two transfers in the same frame.
+	 * - Some misses are expected.  Specifically, in order to work
+	 *   perfectly dwc2 really needs quite spectacular interrupt latency
+	 *   requirements.  It needs to be able to handle its interrupts
+	 *   completely within 125 us of them being asserted. That not only
+	 *   means that the dwc2 interrupt handler needs to be fast but it
+	 *   means that nothing else in the system has to block dwc2 for a long
+	 *   time.  We can help with the dwc2 parts of this, but it's hard to
+	 *   guarantee that a system will have interrupt latency < 125 us, so
+	 *   we have to be robust to some misses.
+	 */
+	if (qh->start_active_frame == qh->next_active_frame ||
+	    dwc2_frame_num_gt(prev_frame_number, qh->start_active_frame)) {
+		u16 ideal_start = qh->start_active_frame;
+		int periods_in_map;
+
+		/*
+		 * Adjust interval as per gcd with map size.
+		 * See pmap_schedule() for more details here.
+		 */
+		if (qh->do_split || qh->dev_speed == USB_SPEED_HIGH)
+			periods_in_map = DWC2_HS_SCHEDULE_UFRAMES;
+		else
+			periods_in_map = DWC2_LS_SCHEDULE_FRAMES;
+		interval = gcd(interval, periods_in_map);
+
+		do {
+			qh->start_active_frame = dwc2_frame_num_inc(
+				qh->start_active_frame, interval);
+		} while (dwc2_frame_num_gt(prev_frame_number,
+					   qh->start_active_frame));
+
+		missed = dwc2_frame_num_dec(qh->start_active_frame,
+					    ideal_start);
+	}
+
+exit:
+	qh->next_active_frame = qh->start_active_frame;
+
+	return missed;
+}
+
+/*
+ * Deactivates a QH. For non-periodic QHs, removes the QH from the active
+ * non-periodic schedule. The QH is added to the inactive non-periodic
+ * schedule if any QTDs are still attached to the QH.
+ *
+ * For periodic QHs, the QH is removed from the periodic queued schedule. If
+ * there are any QTDs still attached to the QH, the QH is added to either the
+ * periodic inactive schedule or the periodic ready schedule and its next
+ * scheduled frame is calculated. The QH is placed in the ready schedule if
+ * the scheduled frame has been reached already. Otherwise it's placed in the
+ * inactive schedule. If there are no QTDs attached to the QH, the QH is
+ * completely removed from the periodic schedule.
+ */
+void dwc2_hcd_qh_deactivate(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
+			    int sched_next_periodic_split)
+{
+	u16 old_frame = qh->next_active_frame;
+	u16 frame_number;
+	int missed;
+
+	if (dbg_qh(qh))
+		dev_vdbg(hsotg->dev, "%s()\n", __func__);
+
+	if (dwc2_qh_is_non_per(qh)) {
+		dwc2_hcd_qh_unlink(hsotg, qh);
+		if (!list_empty(&qh->qtd_list))
+			/* Add back to inactive/waiting non-periodic schedule */
+			dwc2_hcd_qh_add(hsotg, qh);
+		return;
+	}
+
+	/*
+	 * Use the real frame number rather than the cached value as of the
+	 * last SOF just to get us a little closer to reality.  Note that
+	 * means we don't actually know if we've already handled the SOF
+	 * interrupt for this frame.
+	 */
+	frame_number = dwc2_hcd_get_frame_number(hsotg);
+
+	if (sched_next_periodic_split)
+		missed = dwc2_next_for_periodic_split(hsotg, qh, frame_number);
+	else
+		missed = dwc2_next_periodic_start(hsotg, qh, frame_number);
+
+	dwc2_sch_vdbg(hsotg,
+		      "QH=%p next(%d) fn=%04x, sch=%04x=>%04x (%+d) miss=%d %s\n",
+		     qh, sched_next_periodic_split, frame_number, old_frame,
+		     qh->next_active_frame,
+		     dwc2_frame_num_dec(qh->next_active_frame, old_frame),
+		missed, missed ? "MISS" : "");
+
+	if (list_empty(&qh->qtd_list)) {
+		dwc2_hcd_qh_unlink(hsotg, qh);
+		return;
+	}
+
+	/*
+	 * Remove from periodic_sched_queued and move to
+	 * appropriate queue
+	 *
+	 * Note: we purposely use the frame_number from the "hsotg" structure
+	 * since we know SOF interrupt will handle future frames.
+	 */
+	if (dwc2_frame_num_le(qh->next_active_frame, hsotg->frame_number))
+		list_move_tail(&qh->qh_list_entry,
+			       &hsotg->periodic_sched_ready);
+	else
+		list_move_tail(&qh->qh_list_entry,
+			       &hsotg->periodic_sched_inactive);
+}
+
+/**
+ * dwc2_hcd_qtd_init() - Initializes a QTD structure
+ *
+ * @qtd: The QTD to initialize
+ * @urb: The associated URB
+ */
+void dwc2_hcd_qtd_init(struct dwc2_qtd *qtd, struct dwc2_hcd_urb *urb)
+{
+	qtd->urb = urb;
+	if (dwc2_hcd_get_pipe_type(&urb->pipe_info) ==
+			USB_ENDPOINT_XFER_CONTROL) {
+		/*
+		 * The only time the QTD data toggle is used is on the data
+		 * phase of control transfers. This phase always starts with
+		 * DATA1.
+		 */
+		qtd->data_toggle = DWC2_HC_PID_DATA1;
+		qtd->control_phase = DWC2_CONTROL_SETUP;
+	}
+
+	/* Start split */
+	qtd->complete_split = 0;
+	qtd->isoc_split_pos = DWC2_HCSPLT_XACTPOS_ALL;
+	qtd->isoc_split_offset = 0;
+	qtd->in_process = 0;
+
+	/* Store the qtd ptr in the urb to reference the QTD */
+	urb->qtd = qtd;
+}
+
+/**
+ * dwc2_hcd_qtd_add() - Adds a QTD to the QTD-list of a QH
+ *			Caller must hold driver lock.
+ *
+ * @hsotg:        The DWC HCD structure
+ * @qtd:          The QTD to add
+ * @qh:           Queue head to add qtd to
+ *
+ * Return: 0 if successful, negative error code otherwise
+ *
+ * If the QH to which the QTD is added is not currently scheduled, it is placed
+ * into the proper schedule based on its EP type.
+ */
+int dwc2_hcd_qtd_add(struct dwc2_hsotg *hsotg, struct dwc2_qtd *qtd,
+		     struct dwc2_qh *qh)
+{
+	int retval;
+
+	if (unlikely(!qh)) {
+		dev_err(hsotg->dev, "%s: Invalid QH\n", __func__);
+		retval = -EINVAL;
+		goto fail;
+	}
+
+	retval = dwc2_hcd_qh_add(hsotg, qh);
+	if (retval)
+		goto fail;
+
+	qtd->qh = qh;
+	list_add_tail(&qtd->qtd_list_entry, &qh->qtd_list);
+
+	return 0;
+fail:
+	return retval;
+}
