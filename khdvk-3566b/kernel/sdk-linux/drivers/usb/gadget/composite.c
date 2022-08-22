@@ -1921,3 +1921,672 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			f = cdev->config->interface[intf];
 			if (!f)
 				break;
+			value = 0;
+			if (f->func_suspend)
+				value = f->func_suspend(f, w_index >> 8);
+			if (value < 0) {
+				ERROR(cdev,
+				      "func_suspend() returned error %d\n",
+				      value);
+				value = 0;
+			}
+			break;
+		}
+		break;
+	default:
+unknown:
+		/*
+		 * OS descriptors handling
+		 */
+		if (cdev->use_os_string && cdev->os_desc_config &&
+		    (ctrl->bRequestType & USB_TYPE_VENDOR) &&
+		    ctrl->bRequest == cdev->b_vendor_code) {
+			struct usb_configuration	*os_desc_cfg;
+			u8				*buf;
+			int				interface;
+			int				count = 0;
+
+			req = cdev->os_desc_req;
+			req->context = cdev;
+			req->complete = composite_setup_complete;
+			buf = req->buf;
+			os_desc_cfg = cdev->os_desc_config;
+			w_length = min_t(u16, w_length, USB_COMP_EP0_OS_DESC_BUFSIZ);
+			memset(buf, 0, w_length);
+			buf[5] = 0x01;
+			switch (ctrl->bRequestType & USB_RECIP_MASK) {
+			case USB_RECIP_DEVICE:
+				if (w_index != 0x4 || (w_value >> 8))
+					break;
+				buf[6] = w_index;
+				/* Number of ext compat interfaces */
+				count = count_ext_compat(os_desc_cfg);
+				buf[8] = count;
+				count *= 24; /* 24 B/ext compat desc */
+				count += 16; /* header */
+				put_unaligned_le32(count, buf);
+				value = w_length;
+				if (w_length > 0x10) {
+					value = fill_ext_compat(os_desc_cfg, buf);
+					value = min_t(u16, w_length, value);
+				}
+				break;
+			case USB_RECIP_INTERFACE:
+				if (w_index != 0x5 || (w_value >> 8))
+					break;
+				interface = w_value & 0xFF;
+				if (interface >= MAX_CONFIG_INTERFACES ||
+				    !os_desc_cfg->interface[interface])
+					break;
+				buf[6] = w_index;
+				count = count_ext_prop(os_desc_cfg,
+					interface);
+				put_unaligned_le16(count, buf + 8);
+				count = len_ext_prop(os_desc_cfg,
+					interface);
+				put_unaligned_le32(count, buf);
+				value = w_length;
+				if (w_length > 0x0A) {
+					value = fill_ext_prop(os_desc_cfg,
+							      interface, buf);
+					if (value >= 0)
+						value = min_t(u16, w_length, value);
+				}
+				break;
+			}
+
+			goto check_value;
+		}
+
+		VDBG(cdev,
+			"non-core control req%02x.%02x v%04x i%04x l%d\n",
+			ctrl->bRequestType, ctrl->bRequest,
+			w_value, w_index, w_length);
+
+		/* functions always handle their interfaces and endpoints...
+		 * punt other recipients (other, WUSB, ...) to the current
+		 * configuration code.
+		 */
+		if (cdev->config) {
+			list_for_each_entry(f, &cdev->config->functions, list)
+				if (f->req_match &&
+				    f->req_match(f, ctrl, false))
+					goto try_fun_setup;
+		} else {
+			struct usb_configuration *c;
+			list_for_each_entry(c, &cdev->configs, list)
+				list_for_each_entry(f, &c->functions, list)
+					if (f->req_match &&
+					    f->req_match(f, ctrl, true))
+						goto try_fun_setup;
+		}
+		f = NULL;
+
+		switch (ctrl->bRequestType & USB_RECIP_MASK) {
+		case USB_RECIP_INTERFACE:
+			if (!cdev->config || intf >= MAX_CONFIG_INTERFACES)
+				break;
+			f = cdev->config->interface[intf];
+			break;
+
+		case USB_RECIP_ENDPOINT:
+			if (!cdev->config)
+				break;
+			endp = ((w_index & 0x80) >> 3) | (w_index & 0x0f);
+			list_for_each_entry(f, &cdev->config->functions, list) {
+				if (test_bit(endp, f->endpoints))
+					break;
+			}
+			if (&f->list == &cdev->config->functions)
+				f = NULL;
+			break;
+		}
+try_fun_setup:
+		if (f && f->setup)
+			value = f->setup(f, ctrl);
+		else {
+			struct usb_configuration	*c;
+
+			c = cdev->config;
+			if (!c)
+				goto done;
+
+			/* try current config's setup */
+			if (c->setup) {
+				value = c->setup(c, ctrl);
+				goto done;
+			}
+
+			/* try the only function in the current config */
+			if (!list_is_singular(&c->functions))
+				goto done;
+			f = list_first_entry(&c->functions, struct usb_function,
+					     list);
+			if (f->setup)
+				value = f->setup(f, ctrl);
+		}
+
+		goto done;
+	}
+
+check_value:
+	/* respond with data transfer before status phase? */
+	if (value >= 0 && value != USB_GADGET_DELAYED_STATUS) {
+		req->length = value;
+		req->context = cdev;
+		req->zero = value < w_length;
+		value = composite_ep0_queue(cdev, req, GFP_ATOMIC);
+		if (value < 0) {
+			DBG(cdev, "ep_queue --> %d\n", value);
+			req->status = 0;
+			composite_setup_complete(gadget->ep0, req);
+		}
+	} else if (value == USB_GADGET_DELAYED_STATUS && w_length != 0) {
+		WARN(cdev,
+			"%s: Delayed status not supported for w_length != 0",
+			__func__);
+	}
+
+done:
+	/* device either stalls (value < 0) or reports success */
+	return value;
+}
+
+static void __composite_disconnect(struct usb_gadget *gadget)
+{
+	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
+	unsigned long			flags;
+
+	/* REVISIT:  should we have config and device level
+	 * disconnect callbacks?
+	 */
+	spin_lock_irqsave(&cdev->lock, flags);
+	cdev->suspended = 0;
+	if (cdev->config)
+		reset_config(cdev);
+	if (cdev->driver->disconnect)
+		cdev->driver->disconnect(cdev);
+	spin_unlock_irqrestore(&cdev->lock, flags);
+}
+
+void composite_disconnect(struct usb_gadget *gadget)
+{
+	usb_gadget_vbus_draw(gadget, 0);
+	__composite_disconnect(gadget);
+}
+
+void composite_reset(struct usb_gadget *gadget)
+{
+	/*
+	 * Section 1.4.13 Standard Downstream Port of the USB battery charging
+	 * specification v1.2 states that a device connected on a SDP shall only
+	 * draw at max 100mA while in a connected, but unconfigured state.
+	 */
+	usb_gadget_vbus_draw(gadget, 100);
+	__composite_disconnect(gadget);
+}
+
+/*-------------------------------------------------------------------------*/
+
+static ssize_t suspended_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	struct usb_gadget *gadget = dev_to_usb_gadget(dev);
+	struct usb_composite_dev *cdev = get_gadget_data(gadget);
+
+	return sprintf(buf, "%d\n", cdev->suspended);
+}
+static DEVICE_ATTR_RO(suspended);
+
+static void __composite_unbind(struct usb_gadget *gadget, bool unbind_driver)
+{
+	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
+	struct usb_gadget_strings	*gstr = cdev->driver->strings[0];
+	struct usb_string		*dev_str = gstr->strings;
+
+	/* composite_disconnect() must already have been called
+	 * by the underlying peripheral controller driver!
+	 * so there's no i/o concurrency that could affect the
+	 * state protected by cdev->lock.
+	 */
+	WARN_ON(cdev->config);
+
+	while (!list_empty(&cdev->configs)) {
+		struct usb_configuration	*c;
+		c = list_first_entry(&cdev->configs,
+				struct usb_configuration, list);
+		remove_config(cdev, c);
+	}
+	if (cdev->driver->unbind && unbind_driver)
+		cdev->driver->unbind(cdev);
+
+	composite_dev_cleanup(cdev);
+
+	if (dev_str[USB_GADGET_MANUFACTURER_IDX].s == cdev->def_manufacturer)
+		dev_str[USB_GADGET_MANUFACTURER_IDX].s = "";
+
+	kfree(cdev->def_manufacturer);
+	kfree(cdev);
+	set_gadget_data(gadget, NULL);
+}
+
+static void composite_unbind(struct usb_gadget *gadget)
+{
+	__composite_unbind(gadget, true);
+}
+
+static void update_unchanged_dev_desc(struct usb_device_descriptor *new,
+		const struct usb_device_descriptor *old)
+{
+	__le16 idVendor;
+	__le16 idProduct;
+	__le16 bcdDevice;
+	u8 iSerialNumber;
+	u8 iManufacturer;
+	u8 iProduct;
+
+	/*
+	 * these variables may have been set in
+	 * usb_composite_overwrite_options()
+	 */
+	idVendor = new->idVendor;
+	idProduct = new->idProduct;
+	bcdDevice = new->bcdDevice;
+	iSerialNumber = new->iSerialNumber;
+	iManufacturer = new->iManufacturer;
+	iProduct = new->iProduct;
+
+	*new = *old;
+	if (idVendor)
+		new->idVendor = idVendor;
+	if (idProduct)
+		new->idProduct = idProduct;
+	if (bcdDevice)
+		new->bcdDevice = bcdDevice;
+	else
+		new->bcdDevice = cpu_to_le16(get_default_bcdDevice());
+	if (iSerialNumber)
+		new->iSerialNumber = iSerialNumber;
+	if (iManufacturer)
+		new->iManufacturer = iManufacturer;
+	if (iProduct)
+		new->iProduct = iProduct;
+}
+
+int composite_dev_prepare(struct usb_composite_driver *composite,
+		struct usb_composite_dev *cdev)
+{
+	struct usb_gadget *gadget = cdev->gadget;
+	int ret = -ENOMEM;
+
+	/* preallocate control response and buffer */
+	cdev->req = usb_ep_alloc_request(gadget->ep0, GFP_KERNEL);
+	if (!cdev->req)
+		return -ENOMEM;
+
+	cdev->req->buf = kzalloc(USB_COMP_EP0_BUFSIZ, GFP_KERNEL);
+	if (!cdev->req->buf)
+		goto fail;
+
+	ret = device_create_file(&gadget->dev, &dev_attr_suspended);
+	if (ret)
+		goto fail_dev;
+
+	cdev->req->complete = composite_setup_complete;
+	cdev->req->context = cdev;
+	gadget->ep0->driver_data = cdev;
+
+	cdev->driver = composite;
+
+	/*
+	 * As per USB compliance update, a device that is actively drawing
+	 * more than 100mA from USB must report itself as bus-powered in
+	 * the GetStatus(DEVICE) call.
+	 */
+	if (CONFIG_USB_GADGET_VBUS_DRAW <= USB_SELF_POWER_VBUS_MAX_DRAW)
+		usb_gadget_set_selfpowered(gadget);
+
+	/* interface and string IDs start at zero via kzalloc.
+	 * we force endpoints to start unassigned; few controller
+	 * drivers will zero ep->driver_data.
+	 */
+	usb_ep_autoconfig_reset(gadget);
+	return 0;
+fail_dev:
+	kfree(cdev->req->buf);
+fail:
+	usb_ep_free_request(gadget->ep0, cdev->req);
+	cdev->req = NULL;
+	return ret;
+}
+
+int composite_os_desc_req_prepare(struct usb_composite_dev *cdev,
+				  struct usb_ep *ep0)
+{
+	int ret = 0;
+
+	cdev->os_desc_req = usb_ep_alloc_request(ep0, GFP_KERNEL);
+	if (!cdev->os_desc_req) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	cdev->os_desc_req->buf = kmalloc(USB_COMP_EP0_OS_DESC_BUFSIZ,
+					 GFP_KERNEL);
+	if (!cdev->os_desc_req->buf) {
+		ret = -ENOMEM;
+		usb_ep_free_request(ep0, cdev->os_desc_req);
+		goto end;
+	}
+	cdev->os_desc_req->context = cdev;
+	cdev->os_desc_req->complete = composite_setup_complete;
+end:
+	return ret;
+}
+
+void composite_dev_cleanup(struct usb_composite_dev *cdev)
+{
+	struct usb_gadget_string_container *uc, *tmp;
+	struct usb_ep			   *ep, *tmp_ep;
+
+	list_for_each_entry_safe(uc, tmp, &cdev->gstrings, list) {
+		list_del(&uc->list);
+		kfree(uc);
+	}
+	if (cdev->os_desc_req) {
+		if (cdev->os_desc_pending)
+			usb_ep_dequeue(cdev->gadget->ep0, cdev->os_desc_req);
+
+		kfree(cdev->os_desc_req->buf);
+		cdev->os_desc_req->buf = NULL;
+		usb_ep_free_request(cdev->gadget->ep0, cdev->os_desc_req);
+		cdev->os_desc_req = NULL;
+	}
+	if (cdev->req) {
+		if (cdev->setup_pending)
+			usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
+
+		kfree(cdev->req->buf);
+		cdev->req->buf = NULL;
+		usb_ep_free_request(cdev->gadget->ep0, cdev->req);
+		cdev->req = NULL;
+	}
+	cdev->next_string_id = 0;
+	device_remove_file(&cdev->gadget->dev, &dev_attr_suspended);
+
+	/*
+	 * Some UDC backends have a dynamic EP allocation scheme.
+	 *
+	 * In that case, the dispose() callback is used to notify the
+	 * backend that the EPs are no longer in use.
+	 *
+	 * Note: The UDC backend can remove the EP from the ep_list as
+	 *	 a result, so we need to use the _safe list iterator.
+	 */
+	list_for_each_entry_safe(ep, tmp_ep,
+				 &cdev->gadget->ep_list, ep_list) {
+		if (ep->ops->dispose)
+			ep->ops->dispose(ep);
+	}
+}
+
+static int composite_bind(struct usb_gadget *gadget,
+		struct usb_gadget_driver *gdriver)
+{
+	struct usb_composite_dev	*cdev;
+	struct usb_composite_driver	*composite = to_cdriver(gdriver);
+	int				status = -ENOMEM;
+
+	cdev = kzalloc(sizeof *cdev, GFP_KERNEL);
+	if (!cdev)
+		return status;
+
+	spin_lock_init(&cdev->lock);
+	cdev->gadget = gadget;
+	set_gadget_data(gadget, cdev);
+	INIT_LIST_HEAD(&cdev->configs);
+	INIT_LIST_HEAD(&cdev->gstrings);
+
+	status = composite_dev_prepare(composite, cdev);
+	if (status)
+		goto fail;
+
+	/* composite gadget needs to assign strings for whole device (like
+	 * serial number), register function drivers, potentially update
+	 * power state and consumption, etc
+	 */
+	status = composite->bind(cdev);
+	if (status < 0)
+		goto fail;
+
+	if (cdev->use_os_string) {
+		status = composite_os_desc_req_prepare(cdev, gadget->ep0);
+		if (status)
+			goto fail;
+	}
+
+	update_unchanged_dev_desc(&cdev->desc, composite->dev);
+
+	/* has userspace failed to provide a serial number? */
+	if (composite->needs_serial && !cdev->desc.iSerialNumber)
+		WARNING(cdev, "userspace failed to provide iSerialNumber\n");
+
+	INFO(cdev, "%s ready\n", composite->name);
+	return 0;
+
+fail:
+	__composite_unbind(gadget, false);
+	return status;
+}
+
+/*-------------------------------------------------------------------------*/
+
+void composite_suspend(struct usb_gadget *gadget)
+{
+	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
+	struct usb_function		*f;
+
+	/* REVISIT:  should we have config level
+	 * suspend/resume callbacks?
+	 */
+	DBG(cdev, "suspend\n");
+	if (cdev->config) {
+		list_for_each_entry(f, &cdev->config->functions, list) {
+			if (f->suspend)
+				f->suspend(f);
+		}
+	}
+	if (cdev->driver->suspend)
+		cdev->driver->suspend(cdev);
+
+	cdev->suspended = 1;
+
+	usb_gadget_set_selfpowered(gadget);
+	usb_gadget_vbus_draw(gadget, 2);
+}
+
+void composite_resume(struct usb_gadget *gadget)
+{
+	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
+	struct usb_function		*f;
+	unsigned			maxpower;
+
+	/* REVISIT:  should we have config level
+	 * suspend/resume callbacks?
+	 */
+	DBG(cdev, "resume\n");
+	if (cdev->driver->resume)
+		cdev->driver->resume(cdev);
+	if (cdev->config) {
+		list_for_each_entry(f, &cdev->config->functions, list) {
+			if (f->resume)
+				f->resume(f);
+		}
+
+		maxpower = cdev->config->MaxPower ?
+			cdev->config->MaxPower : CONFIG_USB_GADGET_VBUS_DRAW;
+		if (gadget->speed < USB_SPEED_SUPER)
+			maxpower = min(maxpower, 500U);
+		else
+			maxpower = min(maxpower, 900U);
+
+		if (maxpower > USB_SELF_POWER_VBUS_MAX_DRAW)
+			usb_gadget_clear_selfpowered(gadget);
+
+		usb_gadget_vbus_draw(gadget, maxpower);
+	}
+
+	cdev->suspended = 0;
+}
+
+/*-------------------------------------------------------------------------*/
+
+static const struct usb_gadget_driver composite_driver_template = {
+	.bind		= composite_bind,
+	.unbind		= composite_unbind,
+
+	.setup		= composite_setup,
+	.reset		= composite_reset,
+	.disconnect	= composite_disconnect,
+
+	.suspend	= composite_suspend,
+	.resume		= composite_resume,
+
+	.driver	= {
+		.owner		= THIS_MODULE,
+	},
+};
+
+/**
+ * usb_composite_probe() - register a composite driver
+ * @driver: the driver to register
+ *
+ * Context: single threaded during gadget setup
+ *
+ * This function is used to register drivers using the composite driver
+ * framework.  The return value is zero, or a negative errno value.
+ * Those values normally come from the driver's @bind method, which does
+ * all the work of setting up the driver to match the hardware.
+ *
+ * On successful return, the gadget is ready to respond to requests from
+ * the host, unless one of its components invokes usb_gadget_disconnect()
+ * while it was binding.  That would usually be done in order to wait for
+ * some userspace participation.
+ */
+int usb_composite_probe(struct usb_composite_driver *driver)
+{
+	struct usb_gadget_driver *gadget_driver;
+
+	if (!driver || !driver->dev || !driver->bind)
+		return -EINVAL;
+
+	if (!driver->name)
+		driver->name = "composite";
+
+	driver->gadget_driver = composite_driver_template;
+	gadget_driver = &driver->gadget_driver;
+
+	gadget_driver->function =  (char *) driver->name;
+	gadget_driver->driver.name = driver->name;
+	gadget_driver->max_speed = driver->max_speed;
+
+	return usb_gadget_probe_driver(gadget_driver);
+}
+EXPORT_SYMBOL_GPL(usb_composite_probe);
+
+/**
+ * usb_composite_unregister() - unregister a composite driver
+ * @driver: the driver to unregister
+ *
+ * This function is used to unregister drivers using the composite
+ * driver framework.
+ */
+void usb_composite_unregister(struct usb_composite_driver *driver)
+{
+	usb_gadget_unregister_driver(&driver->gadget_driver);
+}
+EXPORT_SYMBOL_GPL(usb_composite_unregister);
+
+/**
+ * usb_composite_setup_continue() - Continue with the control transfer
+ * @cdev: the composite device who's control transfer was kept waiting
+ *
+ * This function must be called by the USB function driver to continue
+ * with the control transfer's data/status stage in case it had requested to
+ * delay the data/status stages. A USB function's setup handler (e.g. set_alt())
+ * can request the composite framework to delay the setup request's data/status
+ * stages by returning USB_GADGET_DELAYED_STATUS.
+ */
+void usb_composite_setup_continue(struct usb_composite_dev *cdev)
+{
+	int			value;
+	struct usb_request	*req = cdev->req;
+	unsigned long		flags;
+
+	DBG(cdev, "%s\n", __func__);
+	spin_lock_irqsave(&cdev->lock, flags);
+
+	if (cdev->delayed_status == 0) {
+		WARN(cdev, "%s: Unexpected call\n", __func__);
+
+	} else if (--cdev->delayed_status == 0) {
+		DBG(cdev, "%s: Completing delayed status\n", __func__);
+		req->length = 0;
+		req->context = cdev;
+		value = composite_ep0_queue(cdev, req, GFP_ATOMIC);
+		if (value < 0) {
+			DBG(cdev, "ep_queue --> %d\n", value);
+			req->status = 0;
+			composite_setup_complete(cdev->gadget->ep0, req);
+		}
+	}
+
+	spin_unlock_irqrestore(&cdev->lock, flags);
+}
+EXPORT_SYMBOL_GPL(usb_composite_setup_continue);
+
+static char *composite_default_mfr(struct usb_gadget *gadget)
+{
+	return kasprintf(GFP_KERNEL, "%s %s with %s", init_utsname()->sysname,
+			 init_utsname()->release, gadget->name);
+}
+
+void usb_composite_overwrite_options(struct usb_composite_dev *cdev,
+		struct usb_composite_overwrite *covr)
+{
+	struct usb_device_descriptor	*desc = &cdev->desc;
+	struct usb_gadget_strings	*gstr = cdev->driver->strings[0];
+	struct usb_string		*dev_str = gstr->strings;
+
+	if (covr->idVendor)
+		desc->idVendor = cpu_to_le16(covr->idVendor);
+
+	if (covr->idProduct)
+		desc->idProduct = cpu_to_le16(covr->idProduct);
+
+	if (covr->bcdDevice)
+		desc->bcdDevice = cpu_to_le16(covr->bcdDevice);
+
+	if (covr->serial_number) {
+		desc->iSerialNumber = dev_str[USB_GADGET_SERIAL_IDX].id;
+		dev_str[USB_GADGET_SERIAL_IDX].s = covr->serial_number;
+	}
+	if (covr->manufacturer) {
+		desc->iManufacturer = dev_str[USB_GADGET_MANUFACTURER_IDX].id;
+		dev_str[USB_GADGET_MANUFACTURER_IDX].s = covr->manufacturer;
+
+	} else if (!strlen(dev_str[USB_GADGET_MANUFACTURER_IDX].s)) {
+		desc->iManufacturer = dev_str[USB_GADGET_MANUFACTURER_IDX].id;
+		cdev->def_manufacturer = composite_default_mfr(cdev->gadget);
+		dev_str[USB_GADGET_MANUFACTURER_IDX].s = cdev->def_manufacturer;
+	}
+
+	if (covr->product) {
+		desc->iProduct = dev_str[USB_GADGET_PRODUCT_IDX].id;
+		dev_str[USB_GADGET_PRODUCT_IDX].s = covr->product;
+	}
+}
+EXPORT_SYMBOL_GPL(usb_composite_overwrite_options);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("David Brownell");
