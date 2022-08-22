@@ -1,4 +1,6 @@
-# Copyright (C) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
+#!/bin/bash
+
+# Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,15 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//build/ohos.gni")
-print("products_group in")
-group("products_group") {
-    if (device_name == "khdvk_3566b" ) {
-      deps = [
-        "//device/board/kaihong/khdvk_3566b:khdvk_3566b_group",
-    ]
-  }
-    deps += [
-    "//device/soc/rockchip/rk3566/hardware:hardware_group",
-  ]
-}
+set -e
+CMD=`realpath $BASH_SOURCE`
+CUR_DIR=`dirname $CMD`
+echo "CMD=$CMD CUR_DIR=$CUR_DIR"
+export IMAGES_OUT_PATH=`realpath ${CUR_DIR}/../../khdvk_3566b/packages/phone/images`
+# packet rk-rom
+./build.sh updateimg
+
