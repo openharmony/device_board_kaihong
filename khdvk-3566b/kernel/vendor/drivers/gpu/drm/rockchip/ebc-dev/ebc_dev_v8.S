@@ -6840,3 +6840,1866 @@ ebc_thread:
 	bl	schedule
 .LVL638:
 .L605:
+	.loc 1 1051 0 discriminator 9
+	add	x1, x29, 112
+	mov	w2, 1
+	mov	x0, x19
+	bl	prepare_to_wait_event
+.LVL639:
+	ldr	w1, [x27, 80]
+	cbz	w1, .L661
+.LBE1548:
+	.loc 1 1051 0 discriminator 4
+	add	x1, x29, 112
+	mov	x0, x19
+	bl	finish_wait
+.LVL640:
+.LBE1551:
+.LBE1554:
+	.loc 1 1052 0 is_stmt 1 discriminator 4
+	str	wzr, [x27, 80]
+	b	.L523
+.LVL641:
+	.p2align 3
+.L529:
+	.loc 1 816 0
+	cmp	w1, 15
+	beq	.L662
+	.loc 1 819 0
+	ldr	w0, [x27, 608]
+.LVL642:
+	cmp	w0, 0
+	ccmp	w1, 1, 4, ne
+	beq	.L528
+	.loc 1 820 0
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x28, 16]
+	ldr	x0, [x27, 144]
+	bl	memcpy
+.LVL643:
+	.loc 1 821 0
+	mov	x0, x28
+	bl	ebc_remove_from_dsp_buf_list
+.LVL644:
+	.loc 1 822 0
+	mov	x0, x28
+	bl	ebc_buf_release
+.LVL645:
+	.loc 1 824 0
+	adrp	x0, .LANCHOR0
+	add	x0, x0, :lo12:.LANCHOR0
+	ldr	x0, [x0, 16]
+	bl	wake_up_process
+.LVL646:
+.LBB1555:
+	.loc 1 825 0
+	ldr	w0, [x27, 32]
+	cbz	w0, .L663
+.L535:
+.LVL647:
+.L533:
+.LBE1555:
+	.loc 1 827 0 discriminator 11
+	ldr	w0, [x27, 28]
+.LVL648:
+	.loc 1 826 0 discriminator 11
+	str	wzr, [x27, 32]
+	.loc 1 827 0 discriminator 11
+	cbnz	w0, .L523
+	.loc 1 830 0
+	ldr	w0, [x27, 184]
+	.loc 1 828 0
+	str	w25, [x27, 28]
+	.loc 1 829 0
+	str	wzr, [x27, 76]
+	.loc 1 830 0
+	cbz	w0, .L664
+.L537:
+	.loc 1 832 0
+	mov	x0, x20
+	bl	ebc_frame_start
+.LVL649:
+	b	.L523
+.LVL650:
+.L655:
+	.loc 1 805 0
+	str	wzr, [x27, 592]
+	.loc 1 806 0
+	mov	x0, 3
+.LVL651:
+	bl	ebc_notify
+.LVL652:
+	.loc 1 807 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC76
+	add	x1, x1, :lo12:.LC76
+	bl	_dev_info
+.LVL653:
+	.p2align 2
+.L528:
+	.loc 1 838 0
+	adrp	x21, jiffies
+	mov	x1, 402653184
+	add	x0, x20, 616
+	ldr	x2, [x21, #:lo12:jiffies]
+	add	x1, x2, x1
+	bl	mod_timer
+.LVL654:
+	.loc 1 840 0
+	ldr	w0, [x27, 428]
+	cbz	w0, .L538
+	ldr	x0, [x27, 200]
+.L539:
+	.loc 1 843 0
+	ldr	w2, [x0, 40]
+	ldr	w3, [x28, 40]
+	cmp	w3, w2
+	beq	.L540
+	.loc 1 844 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC77
+	add	x1, x1, :lo12:.LC77
+	bl	_dev_info
+.LVL655:
+	ldr	w2, [x28, 40]
+.L540:
+	.loc 1 846 0
+	cmp	w2, 6
+	bgt	.L542
+	cmp	w2, 2
+	bge	.L609
+	cbz	w2, .L544
+	cmp	w2, 1
+	bne	.L541
+	.loc 1 848 0
+	ldr	w0, [x27, 604]
+	cbz	w0, .L547
+	.loc 1 849 0
+	str	w2, [x27, 608]
+.L547:
+	.loc 1 851 0
+	ldr	x1, [x27, 200]
+	.loc 1 850 0
+	str	x28, [x27, 208]
+	.loc 1 851 0
+	ldr	w0, [x1, 40]
+	cmp	w0, 1
+	bls	.L548
+	.loc 1 853 0
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x1, 16]
+	ldr	x0, [x27, 128]
+	bl	memcpy
+.LVL656:
+	.loc 1 854 0
+	ldr	x0, [x27, 200]
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x0, 16]
+	ldr	x0, [x27, 136]
+	bl	memcpy
+.LVL657:
+	.loc 1 855 0
+	ldr	x0, [x27, 200]
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x0, 16]
+	ldr	x0, [x27, 144]
+	bl	memcpy
+.LVL658:
+	ldr	x1, [x27, 208]
+.L549:
+.LBB1559:
+.LBB1560:
+	.loc 1 314 0
+	ldp	w2, w14, [x1, 48]
+	.loc 1 315 0
+	ldp	w0, w17, [x1, 56]
+	.loc 1 312 0
+	cmp	w2, 0
+	.loc 1 317 0
+	ldr	w5, [x27, 60]
+	.loc 1 312 0
+	add	w16, w2, 15
+	csel	w16, w16, w2, lt
+	.loc 1 313 0
+	add	w10, w0, 15
+	cmp	w0, 0
+.LBE1560:
+.LBE1559:
+	.loc 1 860 0
+	ldr	w12, [x1, 40]
+.LBB1565:
+.LBB1561:
+	.loc 1 313 0
+	csel	w10, w10, w0, lt
+	.loc 1 317 0
+	cmp	w5, 0
+	add	w0, w5, 15
+	.loc 1 313 0
+	asr	w10, w10, 4
+	.loc 1 317 0
+	csel	w0, w0, w5, lt
+	.loc 1 313 0
+	add	w10, w10, 1
+.LVL659:
+	.loc 1 317 0
+	asr	w0, w0, 4
+	.loc 1 312 0
+	asr	w16, w16, 4
+.LVL660:
+	.loc 1 320 0
+	cmp	w10, w0
+	sub	w0, w0, #1
+	csel	w10, w0, w10, ge
+	.loc 1 318 0
+	ldr	w0, [x27, 56]
+.LBE1561:
+.LBE1565:
+	.loc 1 860 0
+	ldr	x11, [x1, 16]
+.LVL661:
+.LBB1566:
+.LBB1562:
+	.loc 1 322 0
+	cmp	w17, w0
+	sub	w0, w0, #1
+.LVL662:
+	csel	w17, w0, w17, ge
+.LBE1562:
+.LBE1566:
+	.loc 1 860 0
+	ldr	x8, [x27, 128]
+.LVL663:
+.LBB1567:
+.LBB1563:
+	.loc 1 324 0
+	cmp	w14, w17
+.LBE1563:
+.LBE1567:
+	.loc 1 861 0
+	ldp	x13, x9, [x27, 144]
+.LBB1568:
+.LBB1564:
+	.loc 1 324 0
+	bgt	.L552
+	.loc 1 348 0
+	mov	x15, 72340172838076673
+.LVL664:
+	.p2align 2
+.L553:
+	.loc 1 325 0
+	mul	w5, w14, w5
+	.loc 1 329 0
+	mov	w2, w16
+	cmp	w16, w10
+	.loc 1 325 0
+	add	w5, w5, w5, lsr 31
+	asr	w5, w5, 1
+	sxtw	x5, w5
+	.loc 1 329 0
+	ble	.L632
+	b	.L562
+.LVL665:
+	.p2align 3
+.L665:
+	.loc 1 344 0
+	and	x1, x1, x3
+.LVL666:
+	str	x1, [x8, x0]
+.L560:
+	.loc 1 329 0
+	add	w2, w2, 1
+	cmp	w2, w10
+	bgt	.L562
+.L632:
+	add	x0, x5, x2, sxtw 3
+	.loc 1 333 0
+	mov	x3, -1
+	.loc 1 331 0
+	ldr	x1, [x11, x0]
+.LVL667:
+	.loc 1 332 0
+	cbz	w12, .L558
+	.loc 1 335 0
+	ldr	x3, [x13, x0]
+.L558:
+	.loc 1 343 0
+	ldr	x4, [x9, x0]
+	cbz	x4, .L665
+	.loc 1 346 0
+	ldr	x4, [x8, x0]
+	and	x1, x1, x3
+.LVL668:
+	cmp	x4, x1
+	beq	.L560
+	.loc 1 347 0
+	str	x1, [x8, x0]
+	.loc 1 329 0
+	add	w2, w2, 1
+	.loc 1 348 0
+	str	x15, [x9, x0]
+	.loc 1 329 0
+	cmp	w2, w10
+	ble	.L632
+.L562:
+	.loc 1 324 0
+	add	w14, w14, 1
+	cmp	w14, w17
+	bgt	.L552
+	ldr	w5, [x27, 60]
+	b	.L553
+.LVL669:
+	.p2align 3
+.L538:
+.LBE1564:
+.LBE1568:
+	.loc 1 841 0
+	mov	x0, x28
+	str	x28, [x27, 200]
+	b	.L539
+.LVL670:
+	.p2align 3
+.L654:
+	.loc 1 801 0
+	str	wzr, [x27, 604]
+	.loc 1 800 0
+	str	wzr, [x27, 608]
+	b	.L528
+.LVL671:
+	.p2align 3
+.L542:
+	.loc 1 846 0
+	cmp	w2, 13
+	ble	.L543
+	cmp	w2, 17
+	ble	.L609
+.L541:
+	.loc 1 1004 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC84
+	add	x1, x1, :lo12:.LC84
+	bl	_dev_err
+.LVL672:
+.L555:
+	.loc 1 1012 0
+	ldr	x0, [x27, 208]
+	ldr	w0, [x0, 40]
+	cmp	w0, 17
+	beq	.L666
+.L590:
+	.loc 1 1018 0
+	cmp	w0, 15
+	beq	.L667
+.L591:
+	.loc 1 1027 0
+	mov	x0, x28
+	bl	ebc_remove_from_dsp_buf_list
+.LVL673:
+	.loc 1 1029 0
+	ldr	w0, [x27, 428]
+	cbnz	w0, .L668
+.L592:
+	.loc 1 1032 0
+	str	w25, [x27, 428]
+.L593:
+	.loc 1 1034 0
+	ldr	x0, [x27, 208]
+	str	x0, [x27, 200]
+	.loc 1 1035 0
+	b	.L523
+.L609:
+	.loc 1 925 0
+	mov	w23, 1
+.L543:
+	.loc 1 933 0
+	ldr	w0, [x27, 28]
+	cmp	w0, 1
+	beq	.L669
+	.loc 1 939 0
+	ldr	x0, [x27, 200]
+	ldr	w1, [x0, 40]
+	cmp	w1, 1
+	bls	.L670
+.L574:
+	.loc 1 943 0
+	str	wzr, [x27, 76]
+	.loc 1 944 0
+	str	x28, [x27, 208]
+	.loc 1 946 0
+	ldr	w9, [x28, 40]
+	.loc 1 949 0
+	sub	w0, w9, #7
+	.loc 1 946 0
+	cmp	w0, 4
+	bls	.L671
+.LVL674:
+.L575:
+	.loc 1 959 0
+	cbnz	w23, .L613
+	.loc 1 963 0
+	ldr	w1, [x27, 52]
+	mov	x0, x28
+	cmp	w1, 0
+	ble	.L582
+	.loc 1 964 0
+	add	w26, w26, 1
+	.loc 1 965 0
+	cmp	w1, w26
+	bgt	.L582
+	.loc 1 966 0
+	mov	w0, 2
+	str	w0, [x28, 40]
+	.loc 1 967 0
+	mov	w26, 0
+	ldr	x0, [x27, 208]
+	ldr	w9, [x0, 40]
+.L582:
+	.loc 1 972 0
+	cmp	w9, 12
+	beq	.L672
+.L583:
+	.loc 1 978 0
+	ldr	w0, [x27, 184]
+	cbz	w0, .L673
+.L584:
+	.loc 1 981 0
+	mov	x0, x20
+	bl	ebc_lut_update
+.LVL675:
+	mov	w23, w0
+	cbz	w0, .L585
+.L678:
+	.loc 1 982 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC79
+	add	x1, x1, :lo12:.LC79
+	.loc 1 983 0
+	mov	w23, 0
+	.loc 1 982 0
+	bl	_dev_err
+.LVL676:
+	.loc 1 1012 0
+	ldr	x0, [x27, 208]
+	ldr	w0, [x0, 40]
+	cmp	w0, 17
+	bne	.L590
+.LVL677:
+.L666:
+	.loc 1 1015 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC85
+	.loc 1 1014 0
+	str	wzr, [x27, 188]
+	.loc 1 1015 0
+	add	x1, x1, :lo12:.LC85
+	.loc 1 1013 0
+	str	w25, [x27, 600]
+	.loc 1 1015 0
+	bl	_dev_info
+.LVL678:
+	.loc 1 1016 0
+	mov	w2, 1
+	mov	w1, w2
+	add	x0, x22, 328
+	bl	__wake_up_sync
+.LVL679:
+	.loc 1 1027 0
+	mov	x0, x28
+	bl	ebc_remove_from_dsp_buf_list
+.LVL680:
+	.loc 1 1029 0
+	ldr	w0, [x27, 428]
+	cbz	w0, .L592
+	.p2align 2
+.L668:
+	.loc 1 1030 0
+	ldr	x0, [x27, 200]
+	bl	ebc_buf_release
+.LVL681:
+	b	.L593
+	.p2align 3
+.L658:
+.LBB1569:
+	.loc 1 1039 0 discriminator 1
+	ldr	w0, [x27, 80]
+	cbnz	w0, .L594
+.LBB1570:
+	.loc 1 1039 0 is_stmt 0 discriminator 3
+	mov	w1, 0
+	add	x0, x29, 112
+	bl	init_wait_entry
+.LVL682:
+	b	.L598
+	.p2align 3
+.L674:
+.LBB1571:
+	.loc 1 1039 0 discriminator 7
+	ldr	w1, [x27, 80]
+	cbnz	w1, .L595
+.LVL683:
+	.loc 1 1039 0 discriminator 9
+	cbnz	x0, .L650
+	.loc 1 1039 0 discriminator 11
+	bl	schedule
+.LVL684:
+.L598:
+	.loc 1 1039 0 discriminator 13
+	add	x1, x29, 112
+	mov	w2, 1
+	mov	x0, x19
+	bl	prepare_to_wait_event
+.LVL685:
+	ldr	w1, [x27, 28]
+	cbnz	w1, .L674
+.L595:
+.LBE1571:
+	.loc 1 1039 0 discriminator 8
+	mov	x0, x19
+	add	x1, x29, 112
+	bl	finish_wait
+.LVL686:
+	ldr	w0, [x27, 28]
+.LBE1570:
+.LBE1569:
+	.loc 1 1042 0 is_stmt 1 discriminator 8
+	cbnz	w0, .L650
+	.loc 1 1047 0
+	ldr	w0, [x27, 184]
+	cmp	w0, 1
+	bne	.L650
+	.p2align 2
+.L659:
+	.loc 1 1048 0
+	mov	x0, x20
+	bl	ebc_power_set.constprop.7
+.LVL687:
+	b	.L650
+	.p2align 3
+.L544:
+	.loc 1 881 0
+	add	x0, x22, 592
+	bl	down
+.LVL688:
+	.loc 1 884 0
+	ldr	x0, [x27, 200]
+	mov	x1, x28
+	.loc 1 882 0
+	str	x28, [x27, 208]
+	.loc 1 884 0
+	ldr	w0, [x0, 40]
+	cbnz	w0, .L675
+.L564:
+	.loc 1 893 0
+	ldr	w5, [x1, 40]
+	mov	x4, x27
+	ldr	x1, [x1, 16]
+	ldr	x0, [x27, 128]
+	ldp	x2, x3, [x27, 144]
+	bl	refresh_new_image2
+.LVL689:
+.L566:
+	.loc 1 897 0
+	add	x0, x22, 592
+	bl	up
+.LVL690:
+	.loc 1 899 0
+	ldr	w0, [x27, 28]
+	cbnz	w0, .L555
+	.loc 1 902 0
+	ldr	w0, [x27, 184]
+	.loc 1 900 0
+	str	w25, [x27, 28]
+	.loc 1 901 0
+	str	wzr, [x27, 76]
+	.loc 1 902 0
+	cbz	w0, .L676
+.L567:
+	.loc 1 904 0
+	mov	x0, x20
+	bl	ebc_lut_update
+.LVL691:
+	cmn	w0, #1
+	beq	.L677
+	.loc 1 912 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC80
+	.loc 1 909 0
+	ldr	w3, [x27, 96]
+	.loc 1 912 0
+	add	x1, x1, :lo12:.LC80
+	.loc 1 909 0
+	strb	w3, [x27, 36]
+.L649:
+	.loc 1 912 0
+	and	w2, w3, 255
+	.loc 1 910 0
+	lsr	w3, w3, 8
+	strb	w3, [x27, 37]
+	.loc 1 912 0
+	bl	_dev_info
+.LVL692:
+	.loc 1 913 0
+	mov	x0, x20
+	bl	ebc_frame_start
+.LVL693:
+	b	.L555
+.LVL694:
+.L613:
+	mov	x0, x28
+	.loc 1 960 0
+	mov	w26, 0
+	.loc 1 972 0
+	cmp	w9, 12
+	bne	.L583
+.L672:
+	.loc 1 973 0
+	ldr	x1, [x27, 200]
+	.loc 1 974 0
+	ldr	w1, [x1, 40]
+	sub	w1, w1, #12
+	cmp	w1, 1
+	bls	.L583
+	.loc 1 975 0
+	mov	w1, 13
+	str	w1, [x0, 40]
+	.loc 1 978 0
+	ldr	w0, [x27, 184]
+	cbnz	w0, .L584
+.L673:
+.LBB1572:
+.LBB1573:
+	mov	w1, 1
+	mov	x0, x20
+	bl	ebc_power_set.part.3
+.LVL695:
+.LBE1573:
+.LBE1572:
+	.loc 1 981 0
+	mov	x0, x20
+	bl	ebc_lut_update
+.LVL696:
+	mov	w23, w0
+	cbnz	w0, .L678
+.L585:
+	.loc 1 991 0
+	ldr	x0, [x27, 208]
+	adrp	x1, .LC83
+	.loc 1 988 0
+	ldr	w3, [x27, 96]
+	.loc 1 991 0
+	add	x1, x1, :lo12:.LC83
+	.loc 1 988 0
+	strb	w3, [x27, 36]
+	.loc 1 991 0
+	and	w3, w3, 255
+	ldr	w2, [x0, 40]
+	ldr	x0, [x27, 88]
+	bl	_dev_info
+.LVL697:
+	.loc 1 992 0
+	str	w25, [x27, 28]
+	.loc 1 993 0
+	mov	x0, x20
+	bl	ebc_frame_start
+.LVL698:
+	.loc 1 995 0
+	ldr	x1, [x21, #:lo12:jiffies]
+	add	x0, x20, 672
+	str	x0, [x29, 96]
+	add	x1, x1, 900
+	bl	mod_timer
+.LVL699:
+.LBB1574:
+	.loc 1 996 0
+	ldr	w0, [x27, 76]
+	cbz	w0, .L679
+.L588:
+.LVL700:
+.L586:
+.LBE1574:
+	.loc 1 998 0 discriminator 11
+	ldr	x2, [x21, #:lo12:jiffies]
+	mov	x1, 402653184
+	ldr	x0, [x29, 96]
+.LVL701:
+	add	x1, x2, x1
+	bl	mod_timer
+.LVL702:
+	.loc 1 999 0 discriminator 11
+	str	wzr, [x27, 76]
+	.loc 1 1001 0 discriminator 11
+	b	.L555
+.L671:
+	.loc 1 953 0
+	ldp	w8, w0, [x20, 108]
+	.loc 1 951 0
+	ldr	x4, [x28, 16]
+	.loc 1 953 0
+	mul	w8, w8, w0
+	.loc 1 952 0
+	ldr	x0, [x27, 200]
+	.loc 1 953 0
+	lsr	w8, w8, 1
+	.loc 1 952 0
+	ldr	x5, [x0, 16]
+.LBB1579:
+.LBB1580:
+	.loc 1 756 0
+	asr	w0, w8, 3
+	cbz	w0, .L576
+	.loc 1 760 0
+	ldr	x1, [x4]
+	ldr	x2, [x5]
+	cmp	x2, x1
+	bne	.L575
+	sub	w3, w0, #1
+	mov	x0, 8
+	add	x3, x3, 1
+	lsl	x3, x3, 3
+	b	.L578
+	.p2align 3
+.L579:
+	.loc 1 757 0
+	ldr	x2, [x4, x0]
+	add	x0, x0, 8
+	.loc 1 758 0
+	add	x1, x5, x0
+	.loc 1 760 0
+	ldr	x1, [x1, -8]
+	cmp	x2, x1
+	bne	.L575
+.L578:
+	.loc 1 756 0
+	cmp	x3, x0
+	bne	.L579
+.L576:
+	.loc 1 766 0
+	ands	w8, w8, 7
+.LVL703:
+	beq	.L580
+	sub	w1, w8, #1
+	mov	x0, 0
+	add	x1, x1, 1
+	lsl	x1, x1, 2
+	b	.L581
+	.p2align 3
+.L680:
+	add	x0, x0, 4
+	.loc 1 767 0
+	cmp	x0, x1
+	beq	.L580
+.L581:
+.LBB1581:
+	.loc 1 771 0
+	ldrb	w3, [x4, x0]
+	ldrb	w2, [x5, x0]
+	cmp	w3, w2
+	beq	.L680
+	b	.L575
+.LVL704:
+.L548:
+.LBE1581:
+.LBE1580:
+.LBE1579:
+	mov	x1, x28
+	.loc 1 856 0
+	cbnz	w0, .L549
+	.loc 1 857 0
+	ldp	x1, x0, [x27, 136]
+	ldrsw	x2, [x27, 20]
+	bl	memcpy
+.LVL705:
+	ldr	x1, [x27, 208]
+	b	.L549
+.LVL706:
+.L552:
+	.loc 1 864 0
+	ldr	w0, [x27, 28]
+	cbnz	w0, .L555
+	.loc 1 867 0
+	ldr	w0, [x27, 184]
+	.loc 1 865 0
+	str	w25, [x27, 28]
+	.loc 1 866 0
+	str	wzr, [x27, 76]
+	.loc 1 867 0
+	cbz	w0, .L681
+.L563:
+	.loc 1 869 0
+	mov	x0, x20
+	bl	ebc_lut_update
+.LVL707:
+	cmn	w0, #1
+	beq	.L555
+	.loc 1 873 0
+	ldr	w3, [x27, 96]
+	.loc 1 876 0
+	adrp	x1, .LC78
+	.loc 1 873 0
+	strb	w3, [x27, 36]
+	.loc 1 876 0
+	add	x1, x1, :lo12:.LC78
+	ldr	x0, [x27, 88]
+	b	.L649
+.LVL708:
+.L662:
+	.loc 1 817 0
+	str	wzr, [x27, 608]
+	b	.L528
+.LVL709:
+.L667:
+	.loc 1 1022 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC86
+	.loc 1 1019 0
+	str	wzr, [x27, 188]
+	.loc 1 1022 0
+	add	x1, x1, :lo12:.LC86
+	.loc 1 1020 0
+	str	w25, [x27, 592]
+	.loc 1 1021 0
+	str	wzr, [x27, 608]
+	.loc 1 1022 0
+	bl	_dev_info
+.LVL710:
+	.loc 1 1023 0
+	mov	x0, 2
+	bl	ebc_notify
+.LVL711:
+	.loc 1 1024 0
+	mov	w2, 1
+	add	x0, x22, 328
+	mov	w1, w2
+	bl	__wake_up_sync
+.LVL712:
+	b	.L591
+.L675:
+	.loc 1 885 0
+	ldrsw	x2, [x27, 20]
+	mov	w1, 255
+	ldr	x0, [x27, 144]
+	bl	memset
+.LVL713:
+	.loc 1 887 0
+	ldr	x0, [x27, 200]
+	ldr	w0, [x0, 40]
+	cmp	w0, 1
+	bls	.L682
+	.loc 1 889 0
+	ldr	x0, [x27, 208]
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x0, 16]
+	ldr	x0, [x27, 128]
+	bl	memcpy
+.LVL714:
+	.loc 1 890 0
+	ldr	x0, [x27, 200]
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x0, 16]
+	ldr	x0, [x27, 136]
+	bl	memcpy
+.LVL715:
+	b	.L566
+.L679:
+.LBB1582:
+.LBB1575:
+.LBB1576:
+	.loc 1 996 0 discriminator 1
+	add	x0, x22, 352
+.LBE1576:
+	mov	w1, 0
+.LBB1577:
+	str	x0, [x29, 104]
+.LBE1577:
+	add	x0, x29, 112
+	bl	init_wait_entry
+.LVL716:
+	b	.L589
+	.p2align 3
+.L683:
+.LVL717:
+.LBB1578:
+	.loc 1 996 0 is_stmt 0 discriminator 5
+	cbnz	x0, .L586
+	.loc 1 996 0 discriminator 7
+	bl	schedule
+.LVL718:
+.L589:
+	.loc 1 996 0 discriminator 9
+	ldr	x0, [x29, 104]
+	add	x1, x29, 112
+	mov	w2, 1
+	bl	prepare_to_wait_event
+.LVL719:
+	ldr	w1, [x27, 76]
+	cbz	w1, .L683
+.LBE1578:
+	.loc 1 996 0 discriminator 4
+	ldr	x0, [x29, 104]
+	add	x1, x29, 112
+	bl	finish_wait
+.LVL720:
+	b	.L586
+.L663:
+.LBE1575:
+.LBE1582:
+.LBB1583:
+.LBB1556:
+.LBB1557:
+	.loc 1 825 0 is_stmt 1 discriminator 1
+	add	x21, x22, 352
+.LBE1557:
+	mov	w1, 0
+	add	x0, x29, 112
+	bl	init_wait_entry
+.LVL721:
+	b	.L536
+	.p2align 3
+.L684:
+.LVL722:
+.LBB1558:
+	.loc 1 825 0 is_stmt 0 discriminator 5
+	cbnz	x0, .L533
+	.loc 1 825 0 discriminator 7
+	bl	schedule
+.LVL723:
+.L536:
+	.loc 1 825 0 discriminator 9
+	add	x1, x29, 112
+	mov	w2, 1
+	mov	x0, x21
+	bl	prepare_to_wait_event
+.LVL724:
+	ldr	w1, [x27, 32]
+	cbz	w1, .L684
+.LBE1558:
+	.loc 1 825 0 discriminator 4
+	mov	x0, x21
+	add	x1, x29, 112
+	bl	finish_wait
+.LVL725:
+	b	.L533
+.L669:
+.LBE1556:
+.LBE1583:
+	.loc 1 934 0 is_stmt 1
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC81
+	add	x1, x1, :lo12:.LC81
+	bl	_dev_info
+.LVL726:
+.LBB1584:
+	.loc 1 935 0
+	ldr	w0, [x27, 76]
+	cbz	w0, .L685
+.L572:
+.LVL727:
+.L570:
+.LBE1584:
+	.loc 1 936 0 discriminator 11
+	ldr	x0, [x27, 88]
+.LVL728:
+	adrp	x1, .LC82
+	add	x1, x1, :lo12:.LC82
+	bl	_dev_info
+.LVL729:
+	.loc 1 939 0 discriminator 11
+	ldr	x0, [x27, 200]
+	ldr	w1, [x0, 40]
+	cmp	w1, 1
+	bhi	.L574
+.L670:
+	.loc 1 941 0
+	ldrsw	x2, [x27, 20]
+	ldr	x1, [x27, 136]
+	ldr	x0, [x0, 16]
+	bl	memcpy
+.LVL730:
+	b	.L574
+.L656:
+	.loc 1 792 0
+	mov	x0, x20
+	bl	ebc_power_set.constprop.7
+.LVL731:
+	b	.L525
+.LVL732:
+.L580:
+	.loc 1 954 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC87
+	add	x1, x1, :lo12:.LC87
+	bl	_dev_info
+.LVL733:
+	.loc 1 955 0
+	b	.L555
+.LVL734:
+.L681:
+.LBB1589:
+.LBB1590:
+	mov	w1, 1
+	mov	x0, x20
+	bl	ebc_power_set.part.3
+.LVL735:
+	b	.L563
+.L676:
+.LBE1590:
+.LBE1589:
+.LBB1591:
+.LBB1592:
+	mov	w1, 1
+	mov	x0, x20
+	bl	ebc_power_set.part.3
+.LVL736:
+	b	.L567
+.L677:
+.LBE1592:
+.LBE1591:
+	.loc 1 905 0
+	ldr	x0, [x27, 88]
+	adrp	x1, .LC79
+	add	x1, x1, :lo12:.LC79
+	bl	_dev_err
+.LVL737:
+	.loc 1 906 0
+	b	.L555
+.L685:
+.LBB1593:
+.LBB1585:
+.LBB1586:
+	.loc 1 935 0 discriminator 1
+	add	x0, x22, 352
+.LBE1586:
+	mov	w1, 0
+.LBB1587:
+	str	x0, [x29, 104]
+.LBE1587:
+	add	x0, x29, 112
+	bl	init_wait_entry
+.LVL738:
+	b	.L573
+	.p2align 3
+.L686:
+.LVL739:
+.LBB1588:
+	.loc 1 935 0 is_stmt 0 discriminator 5
+	cbnz	x0, .L570
+	.loc 1 935 0 discriminator 7
+	bl	schedule
+.LVL740:
+.L573:
+	.loc 1 935 0 discriminator 9
+	ldr	x0, [x29, 104]
+	add	x1, x29, 112
+	mov	w2, 1
+	bl	prepare_to_wait_event
+.LVL741:
+	ldr	w1, [x27, 76]
+	cbz	w1, .L686
+.LBE1588:
+	.loc 1 935 0 discriminator 4
+	ldr	x0, [x29, 104]
+	add	x1, x29, 112
+	bl	finish_wait
+.LVL742:
+	b	.L570
+.L664:
+.LBE1585:
+.LBE1593:
+.LBB1594:
+.LBB1595:
+	mov	w1, 1
+	mov	x0, x20
+	bl	ebc_power_set.part.3
+.LVL743:
+	b	.L537
+.L657:
+.LBE1595:
+.LBE1594:
+	.loc 1 1057 0 is_stmt 1
+	bl	__stack_chk_fail
+.LVL744:
+.L682:
+	ldr	x1, [x27, 208]
+	b	.L564
+	.cfi_endproc
+.LFE2820:
+	.size	ebc_thread, .-ebc_thread
+	.align	2
+	.p2align 3,,7
+	.type	ebc_refresh_tast_function, %function
+ebc_refresh_tast_function:
+.LFB2807:
+	.loc 1 261 0
+	.cfi_startproc
+.LVL745:
+	stp	x29, x30, [sp, -80]!
+	.cfi_def_cfa_offset 80
+	.cfi_offset 29, -80
+	.cfi_offset 30, -72
+	.loc 1 262 0
+	adrp	x1, .LANCHOR0
+	.loc 1 261 0
+	adrp	x0, __stack_chk_guard
+.LVL746:
+	add	x0, x0, :lo12:__stack_chk_guard
+	add	x29, sp, 0
+	.cfi_def_cfa_register 29
+	stp	x19, x20, [sp, 16]
+	stp	x21, x22, [sp, 32]
+	.cfi_offset 19, -64
+	.cfi_offset 20, -56
+	.cfi_offset 21, -48
+	.cfi_offset 22, -40
+	adrp	x21, .LANCHOR1
+	stp	x23, x24, [sp, 48]
+	.cfi_offset 23, -32
+	.cfi_offset 24, -24
+	.loc 1 266 0
+	add	x21, x21, :lo12:.LANCHOR1
+	.loc 1 262 0
+	ldr	x19, [x1, #:lo12:.LANCHOR0]
+.LVL747:
+	.loc 1 266 0
+	add	x20, x21, 616
+	.loc 1 261 0
+	ldr	x1, [x0]
+	str	x1, [x29, 72]
+	mov	x1,0
+.LBB1596:
+.LBB1597:
+.LBB1598:
+	.loc 12 234 0
+	mov	x24, 2
+.LBE1598:
+.LBE1597:
+.LBE1596:
+	.loc 1 263 0
+	add	x19, x19, 184
+.LVL748:
+	.loc 1 274 0
+	mov	w23, 1
+.LBB1603:
+.LBB1600:
+.LBB1601:
+	.loc 5 19 0
+#APP
+// 19 "./arch/arm64/include/asm/current.h" 1
+	mrs x22, sp_el0
+// 0 "" 2
+.LVL749:
+	.p2align 2
+#NO_APP
+.L688:
+.LBE1601:
+.LBE1600:
+.LBE1603:
+	.loc 1 266 0 discriminator 1
+	mov	x0, x20
+	bl	down
+.LVL750:
+.LBB1604:
+.LBB1602:
+.LBB1599:
+	.loc 12 234 0 discriminator 1
+	str	x24, [x22, 32]
+.LBE1599:
+.LBE1602:
+.LBE1604:
+	.loc 1 267 0 discriminator 1
+#APP
+// 267 "drivers/gpu/drm/rockchip/ebc-dev/ebc_dev.c" 1
+	dmb ish
+// 0 "" 2
+	.loc 1 270 0 discriminator 1
+#NO_APP
+	ldr	x1, [x19, 208]
+	.loc 1 269 0 discriminator 1
+	mov	x4, x19
+	ldp	x2, x3, [x19, 144]
+	ldr	x0, [x19, 128]
+	ldr	w5, [x1, 40]
+	ldr	x1, [x1, 16]
+	bl	refresh_new_image2
+.LVL751:
+	.loc 1 274 0 discriminator 1
+	str	w23, [x19, 32]
+	.loc 1 275 0 discriminator 1
+	mov	w2, 1
+	add	x0, x21, 352
+	mov	w1, w2
+	bl	__wake_up_sync
+.LVL752:
+	.loc 1 276 0 discriminator 1
+	mov	x0, x20
+	bl	up
+.LVL753:
+	.loc 1 277 0 discriminator 1
+	bl	schedule
+.LVL754:
+	b	.L688
+	.cfi_endproc
+.LFE2807:
+	.size	ebc_refresh_tast_function, .-ebc_refresh_tast_function
+	.data
+	.align	3
+	.set	.LANCHOR1,. + 0
+	.type	ebc_driver, %object
+	.size	ebc_driver, 224
+ebc_driver:
+	.xword	ebc_probe
+	.xword	ebc_remove
+	.zero	24
+	.xword	.LC88
+	.zero	32
+	.xword	ebc_match
+	.zero	64
+	.xword	ebc_pm
+	.zero	48
+	.zero	16
+	.type	ebc_misc, %object
+	.size	ebc_misc, 80
+ebc_misc:
+	.word	243
+	.zero	4
+	.xword	.LC41
+	.xword	ebc_ops
+	.zero	56
+	.type	ebc_thread_wq, %object
+	.size	ebc_thread_wq, 24
+ebc_thread_wq:
+	.word	0
+	.zero	4
+	.xword	ebc_thread_wq+8
+	.xword	ebc_thread_wq+8
+	.type	ebc_poweroff_wq, %object
+	.size	ebc_poweroff_wq, 24
+ebc_poweroff_wq:
+	.word	0
+	.zero	4
+	.xword	ebc_poweroff_wq+8
+	.xword	ebc_poweroff_wq+8
+	.type	ebc_wq, %object
+	.size	ebc_wq, 24
+ebc_wq:
+	.word	0
+	.zero	4
+	.xword	ebc_wq+8
+	.xword	ebc_wq+8
+	.type	ebc_auto_thread_sem, %object
+	.size	ebc_auto_thread_sem, 24
+ebc_auto_thread_sem:
+	.word	0
+	.word	1
+	.xword	ebc_auto_thread_sem+8
+	.xword	ebc_auto_thread_sem+8
+	.type	dev_attr_waveform_version, %object
+	.size	dev_attr_waveform_version, 32
+dev_attr_waveform_version:
+	.xword	.LC94
+	.hword	292
+	.zero	6
+	.xword	waveform_version_read
+	.xword	0
+	.type	dev_attr_pmic_name, %object
+	.size	dev_attr_pmic_name, 32
+dev_attr_pmic_name:
+	.xword	.LC93
+	.hword	292
+	.zero	6
+	.xword	pmic_name_read
+	.xword	0
+	.type	dev_attr_pmic_temp, %object
+	.size	dev_attr_pmic_temp, 32
+dev_attr_pmic_temp:
+	.xword	.LC92
+	.hword	292
+	.zero	6
+	.xword	pmic_temp_read
+	.xword	0
+	.type	dev_attr_pmic_vcom, %object
+	.size	dev_attr_pmic_vcom, 32
+dev_attr_pmic_vcom:
+	.xword	.LC91
+	.hword	420
+	.zero	6
+	.xword	pmic_vcom_read
+	.xword	pmic_vcom_write
+	.type	dev_attr_ebc_version, %object
+	.size	dev_attr_ebc_version, 32
+dev_attr_ebc_version:
+	.xword	.LC90
+	.hword	292
+	.zero	6
+	.xword	ebc_version_read
+	.xword	0
+	.type	dev_attr_ebc_state, %object
+	.size	dev_attr_ebc_state, 32
+dev_attr_ebc_state:
+	.xword	.LC89
+	.hword	292
+	.zero	6
+	.xword	ebc_state_read
+	.xword	0
+	.type	auto_sem, %object
+	.size	auto_sem, 24
+auto_sem:
+	.word	0
+	.word	1
+	.xword	auto_sem+8
+	.xword	auto_sem+8
+	.type	ebc_refresh_thread_sem, %object
+	.size	ebc_refresh_thread_sem, 24
+ebc_refresh_thread_sem:
+	.word	0
+	.word	1
+	.xword	ebc_refresh_thread_sem+8
+	.xword	ebc_refresh_thread_sem+8
+	.bss
+	.align	3
+	.set	.LANCHOR0,. + 0
+	.type	global_ebc, %object
+	.size	global_ebc, 8
+global_ebc:
+	.zero	8
+	.type	ebc_auto_task, %object
+	.size	ebc_auto_task, 8
+ebc_auto_task:
+	.zero	8
+	.type	ebc_refresh_task, %object
+	.size	ebc_refresh_task, 8
+ebc_refresh_task:
+	.zero	8
+	.section	.rodata
+	.align	3
+	.set	.LANCHOR2,. + 0
+	.type	__func__.34859, %object
+	.size	__func__.34859, 11
+__func__.34859:
+	.string	"ebc_io_ctl"
+	.align	3
+	.set	.LANCHOR3,. + 0
+	.type	__func__.34663, %object
+	.size	__func__.34663, 16
+__func__.34663:
+	.string	"ebc_frame_start"
+	.type	__func__.35064, %object
+	.size	__func__.35064, 19
+__func__.35064:
+	.string	"ebc_lut_table_init"
+	.zero	5
+	.type	__func__.35123, %object
+	.size	__func__.35123, 12
+__func__.35123:
+	.string	"ebc_suspend"
+	.zero	4
+	.type	ebc_match, %object
+	.size	ebc_match, 400
+ebc_match:
+	.zero	64
+	.string	"rockchip,ebc-dev"
+	.zero	111
+	.zero	8
+	.zero	200
+	.type	ebc_pm, %object
+	.size	ebc_pm, 184
+ebc_pm:
+	.zero	16
+	.xword	ebc_suspend
+	.xword	ebc_resume
+	.zero	152
+	.type	ebc_ops, %object
+	.size	ebc_ops, 288
+ebc_ops:
+	.xword	0
+	.zero	64
+	.xword	ebc_io_ctl
+	.xword	ebc_io_ctl
+	.xword	ebc_mmap
+	.zero	8
+	.xword	ebc_open
+	.zero	176
+	.section	.discard.addressable,"aw",@progbits
+	.align	3
+	.type	__addressable_ebc_init1878, %object
+	.size	__addressable_ebc_init1878, 8
+__addressable_ebc_init1878:
+	.xword	ebc_init
+	.section	.exitcall.exit,"aw",@progbits
+	.align	3
+	.type	__exitcall_ebc_exit, %object
+	.size	__exitcall_ebc_exit, 8
+__exitcall_ebc_exit:
+	.xword	ebc_exit
+	.section	.rodata.str1.8,"aMS",@progbits,1
+	.align	3
+.LC0:
+	.string	"device resume\n"
+	.zero	1
+.LC1:
+	.string	"%s: argp NULL\n"
+	.zero	1
+.LC2:
+	.string	"enable ebc overlay, you can use auto_overlay mode to show somthing over the system display\n"
+	.zero	4
+.LC3:
+	.string	"disable ebc overlay\n"
+	.zero	3
+.LC4:
+	.string	"EBC_SET_FULL_MODE_NUM failed\n"
+	.zero	2
+.LC5:
+	.string	"EBC_GET_BUFFER_INFO failed\n"
+	.zero	4
+.LC6:
+	.string	"%s: unknow cmd\n"
+.LC7:
+	.string	"full_mode_num = %d\n"
+	.zero	4
+.LC8:
+	.string	"auto frame done\n"
+	.zero	7
+.LC9:
+	.string	"frame done\n"
+	.zero	4
+.LC10:
+	.string	"temperature = %d, out of range0~50 ,use 25 \n"
+	.zero	3
+.LC11:
+	.string	"temperature = %d\n"
+	.zero	6
+.LC12:
+	.string	"get lut data failed\n"
+	.zero	3
+.LC13:
+	.string	"%d\n"
+	.zero	4
+.LC14:
+	.string	"1.05"
+	.zero	3
+.LC15:
+	.string	"%s\n"
+	.zero	4
+.LC16:
+	.string	"invalid value = %s\n"
+	.zero	4
+.LC17:
+	.string	"set vcom value failed\n"
+	.zero	1
+.LC18:
+	.string	"%s: auto mode no need to update\n"
+	.zero	7
+.LC19:
+	.string	"ebc hw power on\n"
+	.zero	7
+.LC20:
+	.string	"ebc_tcon"
+	.zero	7
+.LC21:
+	.string	"not find ebc tcon\n"
+	.zero	5
+.LC22:
+	.string	"pmic"
+	.zero	3
+.LC23:
+	.string	"not find pmic node\n"
+	.zero	4
+.LC24:
+	.string	"not find pmic i2c client\n"
+	.zero	6
+.LC25:
+	.string	"get drvdata from pmic client failed\n"
+	.zero	3
+.LC26:
+	.string	"panel,width"
+	.zero	4
+.LC27:
+	.string	"panel,panel_color"
+	.zero	6
+.LC28:
+	.string	"panel,mirror"
+	.zero	3
+.LC29:
+	.string	"panel,width-mm"
+	.zero	1
+.LC30:
+	.string	"panel,height-mm"
+.LC31:
+	.string	"memory-region"
+	.zero	2
+.LC32:
+	.string	"Couldn't address to resource for reserved memory\n"
+	.zero	6
+.LC33:
+	.string	"waveform-region"
+.LC34:
+	.string	"%s:%d: failed to get mem from reserved\n"
+.LC35:
+	.string	"Failed to read waveform from mem, we use waveform file from kernel file instead\n"
+	.zero	7
+.LC36:
+	.string	"Failed to read waveform file from kernel, no waveform!!!\n"
+	.zero	6
+.LC37:
+	.string	"failed to create ebc_task thread\n"
+	.zero	6
+.LC38:
+	.string	"ebc_refresh_task"
+	.zero	7
+.LC39:
+	.string	"failed to create ebc_refresh_task thread\n"
+	.zero	6
+.LC40:
+	.string	"ebc_thread"
+	.zero	5
+.LC41:
+	.string	"ebc"
+	.zero	4
+.LC42:
+	.string	"ulogo_addr="
+	.zero	4
+.LC43:
+	.string	"klogo_addr="
+	.zero	4
+.LC44:
+	.string	"ulogo_addr=0x%x"
+.LC45:
+	.string	"have ulogo display, ulogo addr = 0x%x\n"
+	.zero	1
+.LC46:
+	.string	"malloc ulogo buffer failed\n"
+	.zero	4
+.LC47:
+	.string	"klogo_addr=0x%x"
+.LC48:
+	.string	"need show klogo, klogo addr = 0x%x\n"
+	.zero	4
+.LC49:
+	.string	"malloc klogo buffer failed\n"
+	.zero	4
+.LC50:
+	.string	"no uboot logo, panel init\n"
+	.zero	5
+.LC51:
+	.string	"rockchip ebc driver %s probe success\n"
+	.zero	2
+.LC52:
+	.string	"panel,height"
+	.zero	3
+.LC53:
+	.string	"panel,vir_width"
+.LC54:
+	.string	"panel,vir_height"
+	.zero	7
+.LC55:
+	.string	"panel,sdck"
+	.zero	5
+.LC56:
+	.string	"panel,lsl"
+	.zero	6
+.LC57:
+	.string	"panel,lbl"
+	.zero	6
+.LC58:
+	.string	"panel,ldl"
+	.zero	6
+.LC59:
+	.string	"panel,lel"
+	.zero	6
+.LC60:
+	.string	"panel,gdck-sta"
+	.zero	1
+.LC61:
+	.string	"panel,lgonl"
+	.zero	4
+.LC62:
+	.string	"panel,fsl"
+	.zero	6
+.LC63:
+	.string	"panel,fbl"
+	.zero	6
+.LC64:
+	.string	"panel,fdl"
+	.zero	6
+.LC65:
+	.string	"panel,fel"
+	.zero	6
+.LC66:
+	.string	"panel,panel_16bit"
+	.zero	6
+.LC67:
+	.string	"buffer manage init failed\n"
+	.zero	5
+.LC68:
+	.string	"lut table init failed\n"
+	.zero	1
+.LC69:
+	.string	"ebc_task"
+	.zero	7
+.LC70:
+	.string	"failed to run ebc thread\n"
+	.zero	6
+.LC71:
+	.string	"task init failed\n"
+	.zero	6
+.LC72:
+	.string	"failed to probe panel: %d\n"
+	.zero	5
+.LC73:
+	.string	"ebc hw power off\n"
+	.zero	6
+.LC74:
+	.string	"%s: device is busy now...\n"
+	.zero	5
+.LC75:
+	.string	"device suspend\n"
+.LC76:
+	.string	"early resume\n"
+	.zero	2
+.LC77:
+	.string	"change display mode from %d to %d\n"
+	.zero	5
+.LC78:
+	.string	"overlay mode start, frame_total=%d\n"
+	.zero	4
+.LC79:
+	.string	"ebc_lut_update err\n"
+	.zero	4
+.LC80:
+	.string	"auto mode start, frame_total=%d\n"
+	.zero	7
+.LC81:
+	.string	"ebc is busy now, waiting prev refresh mode end...\n"
+	.zero	5
+.LC82:
+	.string	"prev refresh mode end\n"
+	.zero	1
+.LC83:
+	.string	"frame start, mode = %d, framecount = %d\n"
+	.zero	7
+.LC84:
+	.string	"ebc buffer mode error!\n"
+.LC85:
+	.string	"power off\n"
+	.zero	5
+.LC86:
+	.string	"early suspend\n"
+	.zero	1
+.LC87:
+	.string	"check_part_mode==0, no need refresh\n"
+	.zero	3
+.LC88:
+	.string	"ebc-dev"
+.LC89:
+	.string	"ebc_state"
+	.zero	6
+.LC90:
+	.string	"ebc_version"
+	.zero	4
+.LC91:
+	.string	"pmic_vcom"
+	.zero	6
+.LC92:
+	.string	"pmic_temp"
+	.zero	6
+.LC93:
+	.string	"pmic_name"
+	.zero	6
+.LC94:
+	.string	"waveform_version"
+	.text
+.Letext0:
+	.file 19 "./include/uapi/asm-generic/int-ll64.h"
+	.file 20 "./include/asm-generic/int-ll64.h"
+	.file 21 "./include/uapi/asm-generic/posix_types.h"
+	.file 22 "./include/uapi/linux/types.h"
+	.file 23 "./include/linux/export.h"
+	.file 24 "./include/linux/types.h"
+	.file 25 "./arch/arm64/include/asm/insn.h"
+	.file 26 "./include/linux/init.h"
+	.file 27 "./arch/arm64/include/asm/alternative.h"
+	.file 28 "./include/asm-generic/atomic-long.h"
+	.file 29 "./arch/arm64/include/asm/cache.h"
+	.file 30 "./include/linux/printk.h"
+	.file 31 "./include/linux/fs.h"
+	.file 32 "./include/linux/kernel.h"
+	.file 33 "./include/linux/notifier.h"
+	.file 34 "./include/asm-generic/bug.h"
+	.file 35 "./include/linux/time64.h"
+	.file 36 "./include/uapi/linux/time.h"
+	.file 37 "./include/linux/restart_block.h"
+	.file 38 "./include/linux/compat_time.h"
+	.file 39 "./arch/arm64/include/asm/memory.h"
+	.file 40 "./arch/arm64/include/asm/thread_info.h"
+	.file 41 "./arch/arm64/include/asm/hwcap.h"
+	.file 42 "./arch/arm64/include/uapi/asm/ptrace.h"
+	.file 43 "./include/asm-generic/qspinlock_types.h"
+	.file 44 "./include/asm-generic/qrwlock_types.h"
+	.file 45 "./include/linux/lockdep.h"
+	.file 46 "./include/linux/spinlock_types.h"
+	.file 47 "./include/linux/rwlock_types.h"
+	.file 48 "./include/linux/jump_label.h"
+	.file 49 "./arch/arm64/include/asm/jump_label.h"
+	.file 50 "./arch/arm64/include/asm/cpufeature.h"
+	.file 51 "./include/asm-generic/sections.h"
+	.file 52 "./arch/arm64/include/asm/stack_pointer.h"
+	.file 53 "./arch/arm64/include/asm/sections.h"
+	.file 54 "./arch/arm64/include/asm/virt.h"
+	.file 55 "./arch/arm64/include/asm/processor.h"
+	.file 56 "./arch/arm64/include/asm/fpsimd.h"
+	.file 57 "./include/linux/sched/debug.h"
+	.file 58 "./include/linux/wait.h"
+	.file 59 "./include/linux/cpumask.h"
+	.file 60 "./include/linux/rcupdate.h"
+	.file 61 "./include/linux/list_bl.h"
+	.file 62 "./include/linux/seqlock.h"
+	.file 63 "./include/linux/lockref.h"
+	.file 64 "./include/linux/dcache.h"
+	.file 65 "./include/linux/path.h"
+	.file 66 "./include/linux/pid.h"
+	.file 67 "./include/linux/highuid.h"
+	.file 68 "./include/linux/uidgid.h"
+	.file 69 "./include/linux/osq_lock.h"
+	.file 70 "./include/linux/debug_locks.h"
+	.file 71 "./include/linux/mutex.h"
+	.file 72 "./include/linux/sched.h"
+	.file 73 "./include/linux/time.h"
+	.file 74 "./include/linux/llist.h"
+	.file 75 "./include/linux/smp.h"
+	.file 76 "./include/asm-generic/percpu.h"
+	.file 77 "./arch/arm64/include/asm/smp.h"
+	.file 78 "./include/clocksource/arm_arch_timer.h"
+	.file 79 "./arch/arm64/include/asm/arch_timer.h"
+	.file 80 "./include/linux/timex.h"
+	.file 81 "./include/linux/jiffies.h"
+	.file 82 "./include/linux/ktime.h"
+	.file 83 "./include/linux/timekeeping.h"
+	.file 84 "./include/linux/timer.h"
+	.file 85 "./include/linux/stddef.h"
+	.file 86 "./include/linux/refcount.h"
+	.file 87 "./arch/arm64/include/asm/pgtable-types.h"
+	.file 88 "./include/asm-generic/pgtable-nop4d-hack.h"
+	.file 89 "./arch/arm64/include/asm/page.h"
+	.file 90 "./include/linux/mm_types.h"
+	.file 91 "./include/linux/plist.h"
+	.file 92 "./include/linux/rbtree.h"
+	.file 93 "./include/linux/percpu.h"
+	.file 94 "./include/linux/timerqueue.h"
+	.file 95 "./include/linux/hrtimer.h"
+	.file 96 "./include/linux/seccomp.h"
+	.file 97 "./include/linux/nodemask.h"
+	.file 98 "./include/uapi/asm-generic/signal.h"
+	.file 99 "./include/uapi/asm-generic/siginfo.h"
+	.file 100 "./include/linux/sched/user.h"
+	.file 101 "./include/linux/signal_types.h"
+	.file 102 "./include/linux/mm_types_task.h"
+	.file 103 "./include/linux/task_io_accounting.h"
+	.file 104 "./include/uapi/linux/rseq.h"
+	.file 105 "./include/linux/completion.h"
+	.file 106 "./include/linux/cred.h"
+	.file 107 "./include/linux/iocontext.h"
+	.file 108 "./include/linux/uprobes.h"
+	.file 109 "./include/linux/vmalloc.h"
+	.file 110 "./include/linux/stat.h"
+	.file 111 "./include/linux/shrinker.h"
+	.file 112 "./include/linux/list_lru.h"
+	.file 113 "./include/linux/radix-tree.h"
+	.file 114 "./include/linux/rwsem.h"
+	.file 115 "./arch/arm64/include/asm/uprobes.h"
+	.file 116 "./arch/arm64/include/asm/mmu.h"
+	.file 117 "./include/linux/memremap.h"
+	.file 118 "./include/linux/mm.h"
+	.file 119 "./include/linux/capability.h"
+	.file 120 "./include/linux/semaphore.h"
+	.file 121 "./include/uapi/linux/fiemap.h"
+	.file 122 "./include/linux/migrate_mode.h"
+	.file 123 "./include/linux/rcuwait.h"
+	.file 124 "./include/linux/rcu_sync.h"
+	.file 125 "./include/linux/percpu-rwsem.h"
+	.file 126 "./include/linux/delayed_call.h"
+	.file 127 "./include/uapi/linux/uuid.h"
+	.file 128 "./include/linux/uuid.h"
+	.file 129 "./include/linux/errseq.h"
+	.file 130 "./include/asm-generic/ioctl.h"
+	.file 131 "./include/uapi/linux/fs.h"
+	.file 132 "./include/linux/mmzone.h"
+	.file 133 "./arch/arm64/include/asm/topology.h"
+	.file 134 "./include/linux/arch_topology.h"
+	.file 135 "./include/linux/gfp.h"
+	.file 136 "./include/linux/percpu_counter.h"
+	.file 137 "./include/linux/quota.h"
+	.file 138 "./include/linux/projid.h"
+	.file 139 "./include/linux/module.h"
+	.file 140 "./include/linux/nfs_fs_i.h"
+	.file 141 "./include/linux/key.h"
+	.file 142 "./include/linux/seq_file.h"
+	.file 143 "./include/linux/kobject.h"
+	.file 144 "./include/linux/sysctl.h"
+	.file 145 "./include/linux/assoc_array.h"
+	.file 146 "./include/linux/ratelimit.h"
+	.file 147 "./include/linux/debugfs.h"
+	.file 148 "./include/linux/delay.h"
+	.file 149 "./include/linux/idr.h"
+	.file 150 "./include/linux/kernfs.h"
+	.file 151 "./include/linux/kobject_ns.h"
+	.file 152 "./include/linux/sysfs.h"
+	.file 153 "./include/linux/kref.h"
+	.file 154 "./include/linux/klist.h"
+	.file 155 "./include/linux/pm.h"
+	.file 156 "./include/linux/pm_wakeup.h"
+	.file 157 "./arch/arm64/include/asm/device.h"
+	.file 158 "./include/linux/mod_devicetable.h"
+	.file 159 "./include/linux/fwnode.h"
+	.file 160 "./include/linux/irqdomain.h"
+	.file 161 "./include/linux/rtmutex.h"
+	.file 162 "./include/uapi/linux/i2c.h"
+	.file 163 "./include/linux/i2c.h"
+	.file 164 "./include/linux/irqnr.h"
+	.file 165 "./arch/arm64/include/asm/hardirq.h"
+	.file 166 "./include/linux/irq_cpustat.h"
+	.file 167 "./include/linux/interrupt.h"
+	.file 168 "./arch/arm64/include/asm/pgtable.h"
+	.file 169 "./include/xen/xen.h"
+	.file 170 "./include/linux/io.h"
+	.file 171 "./include/linux/kthread.h"
+	.file 172 "./include/linux/miscdevice.h"
+	.file 173 "./include/linux/percpu-refcount.h"
+	.file 174 "./include/linux/page_ext.h"
+	.file 175 "./include/linux/tracepoint-defs.h"
+	.file 176 "./include/linux/page_ref.h"
+	.file 177 "./include/linux/huge_mm.h"
+	.file 178 "./include/linux/vm_event_item.h"
+	.file 179 "./include/linux/vmstat.h"
+	.file 180 "./include/linux/umh.h"
+	.file 181 "./include/linux/kmod.h"
+	.file 182 "./include/uapi/linux/elf.h"
+	.file 183 "./include/linux/elf.h"
+	.file 184 "./include/linux/moduleparam.h"
+	.file 185 "./include/linux/rbtree_latch.h"
+	.file 186 "./arch/arm64/include/asm/module.h"
+	.file 187 "./arch/arm64/include/asm/extable.h"
+	.file 188 "./include/linux/node.h"
+	.file 189 "./include/linux/cpu.h"
+	.file 190 "./include/linux/platform_device.h"
+	.file 191 "./include/linux/of_platform.h"
+	.file 192 "./include/linux/sched/task.h"
+	.file 193 "./include/uapi/linux/sched/types.h"
+	.file 194 "drivers/gpu/drm/rockchip/ebc-dev/epdlut/epd_lut.h"
+	.file 195 "drivers/gpu/drm/rockchip/ebc-dev/bufmanage/buf_manage.h"
+	.file 196 "drivers/gpu/drm/rockchip/ebc-dev/pmic/../ebc_dev.h"
+	.file 197 "./include/linux/dma-direction.h"
+	.file 198 "./include/linux/scatterlist.h"
+	.file 199 "./include/xen/arm/hypervisor.h"
+	.file 200 "./arch/arm64/include/asm/dma-mapping.h"
+	.file 201 "drivers/gpu/drm/rockchip/ebc-dev/tcon/../ebc_panel.h"
+	.file 202 "./include/linux/thread_info.h"
+	.file 203 "./include/linux/dma-debug.h"
+	.file 204 "./include/linux/err.h"
+	.file 205 "./include/asm-generic/getorder.h"
+	.file 206 "./include/linux/log2.h"
+	.file 207 "./include/asm-generic/bitops/fls64.h"
+	.file 208 "./include/asm-generic/bitops/builtin-__fls.h"
+	.file 209 "./include/linux/kasan-checks.h"
+	.file 210 "./include/linux/of_address.h"
+	.file 211 "./arch/arm64/include/asm/string.h"
+	.file 212 "./include/linux/string.h"
+	.section	.debug_info,"",@progbits
+.Ldebug_info0:
