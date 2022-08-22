@@ -1,0 +1,7 @@
+
+config VENDOR_RK3566_DRIVER_MMC_HOST
+     bool "MMC HOST Drivers"
+     default y
+
+source "vendor/rk3566/mmc/host/Kconfig"
+
