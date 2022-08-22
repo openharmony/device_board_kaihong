@@ -2487,3 +2487,325 @@ static int __uvcg_fill_strm(void *priv1, void *priv2, void *priv3, int n,
 	}
 
 	return 0;
+}
+
+static int uvcg_streaming_class_allow_link(struct config_item *src,
+					   struct config_item *target)
+{
+	struct config_item *streaming, *header;
+	struct f_uvc_opts *opts;
+	struct mutex *su_mutex = &src->ci_group->cg_subsys->su_mutex;
+	struct uvc_descriptor_header ***class_array, **cl_arr;
+	struct uvcg_streaming_header *target_hdr;
+	void *data, *data_save;
+	size_t size = 0, count = 0;
+	int ret = -EINVAL;
+
+	mutex_lock(su_mutex); /* for navigating configfs hierarchy */
+
+	streaming = src->ci_parent->ci_parent;
+	header = config_group_find_item(to_config_group(streaming), "header");
+	if (!header || target->ci_parent != header)
+		goto out;
+
+	opts = to_f_uvc_opts(streaming->ci_parent);
+
+	mutex_lock(&opts->lock);
+
+	class_array = __uvcg_get_stream_class_arr(src, opts);
+	if (!class_array || *class_array || opts->refcnt) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+
+	target_hdr = to_uvcg_streaming_header(target);
+	ret = __uvcg_iter_strm_cls(target_hdr, &size, &count, __uvcg_cnt_strm);
+	if (ret)
+		goto unlock;
+
+	count += 2; /* color_matching, NULL */
+	*class_array = kcalloc(count, sizeof(void *), GFP_KERNEL);
+	if (!*class_array) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	data = data_save = kzalloc(size, GFP_KERNEL);
+	if (!data) {
+		kfree(*class_array);
+		*class_array = NULL;
+		ret = -ENOMEM;
+		goto unlock;
+	}
+	cl_arr = *class_array;
+	ret = __uvcg_iter_strm_cls(target_hdr, &data, &cl_arr,
+				   __uvcg_fill_strm);
+	if (ret) {
+		kfree(*class_array);
+		*class_array = NULL;
+		/*
+		 * __uvcg_fill_strm() called from __uvcg_iter_stream_cls()
+		 * might have advanced the "data", so use a backup copy
+		 */
+		kfree(data_save);
+		goto unlock;
+	}
+	*cl_arr = (struct uvc_descriptor_header *)&opts->uvc_color_matching;
+
+	++target_hdr->linked;
+	ret = 0;
+
+unlock:
+	mutex_unlock(&opts->lock);
+out:
+	config_item_put(header);
+	mutex_unlock(su_mutex);
+	return ret;
+}
+
+static void uvcg_streaming_class_drop_link(struct config_item *src,
+					  struct config_item *target)
+{
+	struct config_item *streaming, *header;
+	struct f_uvc_opts *opts;
+	struct mutex *su_mutex = &src->ci_group->cg_subsys->su_mutex;
+	struct uvc_descriptor_header ***class_array;
+	struct uvcg_streaming_header *target_hdr;
+
+	mutex_lock(su_mutex); /* for navigating configfs hierarchy */
+
+	streaming = src->ci_parent->ci_parent;
+	header = config_group_find_item(to_config_group(streaming), "header");
+	if (!header || target->ci_parent != header)
+		goto out;
+
+	opts = to_f_uvc_opts(streaming->ci_parent);
+
+	mutex_lock(&opts->lock);
+
+	class_array = __uvcg_get_stream_class_arr(src, opts);
+	if (!class_array || !*class_array)
+		goto unlock;
+
+	if (opts->refcnt)
+		goto unlock;
+
+	target_hdr = to_uvcg_streaming_header(target);
+	--target_hdr->linked;
+	kfree(**class_array);
+	kfree(*class_array);
+	*class_array = NULL;
+
+unlock:
+	mutex_unlock(&opts->lock);
+out:
+	config_item_put(header);
+	mutex_unlock(su_mutex);
+}
+
+static struct configfs_item_operations uvcg_streaming_class_item_ops = {
+	.release	= uvcg_config_item_release,
+	.allow_link	= uvcg_streaming_class_allow_link,
+	.drop_link	= uvcg_streaming_class_drop_link,
+};
+
+static const struct config_item_type uvcg_streaming_class_type = {
+	.ct_item_ops	= &uvcg_streaming_class_item_ops,
+	.ct_owner	= THIS_MODULE,
+};
+
+/* -----------------------------------------------------------------------------
+ * streaming/class
+ */
+
+static int uvcg_streaming_class_create_children(struct config_group *parent)
+{
+	static const char * const names[] = { "fs", "hs", "ss" };
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(names); ++i) {
+		struct uvcg_streaming_class_group *group;
+
+		group = kzalloc(sizeof(*group), GFP_KERNEL);
+		if (!group)
+			return -ENOMEM;
+
+		group->name = names[i];
+
+		config_group_init_type_name(&group->group, group->name,
+					    &uvcg_streaming_class_type);
+		configfs_add_default_group(&group->group, parent);
+	}
+
+	return 0;
+}
+
+static const struct uvcg_config_group_type uvcg_streaming_class_grp_type = {
+	.type = {
+		.ct_item_ops	= &uvcg_config_item_ops,
+		.ct_owner	= THIS_MODULE,
+	},
+	.name = "class",
+	.create_children = uvcg_streaming_class_create_children,
+};
+
+/* -----------------------------------------------------------------------------
+ * streaming
+ */
+
+static ssize_t uvcg_default_streaming_b_interface_number_show(
+	struct config_item *item, char *page)
+{
+	struct config_group *group = to_config_group(item);
+	struct mutex *su_mutex = &group->cg_subsys->su_mutex;
+	struct config_item *opts_item;
+	struct f_uvc_opts *opts;
+	int result = 0;
+
+	mutex_lock(su_mutex); /* for navigating configfs hierarchy */
+
+	opts_item = item->ci_parent;
+	opts = to_f_uvc_opts(opts_item);
+
+	mutex_lock(&opts->lock);
+	result += sprintf(page, "%u\n", opts->streaming_interface);
+	mutex_unlock(&opts->lock);
+
+	mutex_unlock(su_mutex);
+
+	return result;
+}
+
+UVC_ATTR_RO(uvcg_default_streaming_, b_interface_number, bInterfaceNumber);
+
+static struct configfs_attribute *uvcg_default_streaming_attrs[] = {
+	&uvcg_default_streaming_attr_b_interface_number,
+	NULL,
+};
+
+static const struct uvcg_config_group_type uvcg_streaming_grp_type = {
+	.type = {
+		.ct_item_ops	= &uvcg_config_item_ops,
+		.ct_attrs	= uvcg_default_streaming_attrs,
+		.ct_owner	= THIS_MODULE,
+	},
+	.name = "streaming",
+	.children = (const struct uvcg_config_group_type*[]) {
+		&uvcg_streaming_header_grp_type,
+		&uvcg_uncompressed_grp_type,
+		&uvcg_mjpeg_grp_type,
+		&uvcg_framebased_grp_type,
+		&uvcg_color_matching_grp_type,
+		&uvcg_streaming_class_grp_type,
+		NULL,
+	},
+};
+
+/* -----------------------------------------------------------------------------
+ * UVC function
+ */
+
+static void uvc_func_item_release(struct config_item *item)
+{
+	struct f_uvc_opts *opts = to_f_uvc_opts(item);
+
+	uvcg_config_remove_children(to_config_group(item));
+	usb_put_function_instance(&opts->func_inst);
+}
+
+static struct configfs_item_operations uvc_func_item_ops = {
+	.release	= uvc_func_item_release,
+};
+
+#define UVCG_OPTS_ATTR(cname, aname, limit)				\
+static ssize_t f_uvc_opts_##cname##_show(				\
+	struct config_item *item, char *page)				\
+{									\
+	struct f_uvc_opts *opts = to_f_uvc_opts(item);			\
+	int result;							\
+									\
+	mutex_lock(&opts->lock);					\
+	result = sprintf(page, "%u\n", opts->cname);			\
+	mutex_unlock(&opts->lock);					\
+									\
+	return result;							\
+}									\
+									\
+static ssize_t								\
+f_uvc_opts_##cname##_store(struct config_item *item,			\
+			   const char *page, size_t len)		\
+{									\
+	struct f_uvc_opts *opts = to_f_uvc_opts(item);			\
+	unsigned int num;						\
+	int ret;							\
+									\
+	mutex_lock(&opts->lock);					\
+	if (opts->refcnt) {						\
+		ret = -EBUSY;						\
+		goto end;						\
+	}								\
+									\
+	ret = kstrtouint(page, 0, &num);				\
+	if (ret)							\
+		goto end;						\
+									\
+	if (num > limit) {						\
+		ret = -EINVAL;						\
+		goto end;						\
+	}								\
+	opts->cname = num;						\
+	ret = len;							\
+end:									\
+	mutex_unlock(&opts->lock);					\
+	return ret;							\
+}									\
+									\
+UVC_ATTR(f_uvc_opts_, cname, cname)
+
+UVCG_OPTS_ATTR(streaming_bulk, streaming_bulk, 1);
+UVCG_OPTS_ATTR(streaming_interval, streaming_interval, 16);
+UVCG_OPTS_ATTR(streaming_maxpacket, streaming_maxpacket, 3072);
+UVCG_OPTS_ATTR(streaming_maxburst, streaming_maxburst, 15);
+UVCG_OPTS_ATTR(uvc_num_request, uvc_num_request, UVC_MAX_NUM_REQUESTS);
+UVCG_OPTS_ATTR(pm_qos_latency, pm_qos_latency, PM_QOS_LATENCY_ANY);
+
+#undef UVCG_OPTS_ATTR
+
+static struct configfs_attribute *uvc_attrs[] = {
+	&f_uvc_opts_attr_streaming_bulk,
+	&f_uvc_opts_attr_streaming_interval,
+	&f_uvc_opts_attr_streaming_maxpacket,
+	&f_uvc_opts_attr_streaming_maxburst,
+	&f_uvc_opts_attr_uvc_num_request,
+	&f_uvc_opts_attr_pm_qos_latency,
+	NULL,
+};
+
+static const struct uvcg_config_group_type uvc_func_type = {
+	.type = {
+		.ct_item_ops	= &uvc_func_item_ops,
+		.ct_attrs	= uvc_attrs,
+		.ct_owner	= THIS_MODULE,
+	},
+	.name = "",
+	.children = (const struct uvcg_config_group_type*[]) {
+		&uvcg_control_grp_type,
+		&uvcg_streaming_grp_type,
+		NULL,
+	},
+};
+
+int uvcg_attach_configfs(struct f_uvc_opts *opts)
+{
+	int ret;
+
+	config_group_init_type_name(&opts->func_inst.group, uvc_func_type.name,
+				    &uvc_func_type.type);
+
+	ret = uvcg_config_create_children(&opts->func_inst.group,
+					  &uvc_func_type);
+	if (ret < 0)
+		config_group_put(&opts->func_inst.group);
+
+	return ret;
+}
