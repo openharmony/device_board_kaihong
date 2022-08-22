@@ -10429,3 +10429,1764 @@ wl_validate_wpa2ie(struct net_device *dev, const bcm_tlv_t *wpa2ie, s32 bssidx)
 exit:
 	return 0;
 }
+
+static s32
+wl_validate_wpaie(struct net_device *dev, const wpa_ie_fixed_t *wpaie, s32 bssidx)
+{
+	const wpa_suite_mcast_t *mcast;
+	const wpa_suite_ucast_t *ucast;
+	const wpa_suite_auth_key_mgmt_t *mgmt;
+	u16 auth = 0; /* d11 open authentication */
+	u16 count;
+	s32 err = BCME_OK;
+	s32 len = 0;
+	u32 i;
+	u32 wsec;
+	u32 pval = 0;
+	u32 gval = 0;
+	u32 wpa_auth = 0;
+	u32 tmp = 0;
+
+	if (wpaie == NULL)
+		goto exit;
+	WL_DBG(("Enter \n"));
+	len = wpaie->length;    /* value length */
+	len -= WPA_IE_TAG_FIXED_LEN;
+	/* check for multicast cipher suite */
+	if (len < WPA_SUITE_LEN) {
+		WL_INFORM_MEM(("no multicast cipher suite\n"));
+		goto exit;
+	}
+
+	/* pick up multicast cipher */
+	mcast = (const wpa_suite_mcast_t *)&wpaie[1];
+	len -= WPA_SUITE_LEN;
+	if (!bcmp(mcast->oui, WPA_OUI, WPA_OUI_LEN)) {
+		if (IS_WPA_CIPHER(mcast->type)) {
+			tmp = 0;
+			switch (mcast->type) {
+				case WPA_CIPHER_NONE:
+					tmp = 0;
+					break;
+				case WPA_CIPHER_WEP_40:
+				case WPA_CIPHER_WEP_104:
+					tmp = WEP_ENABLED;
+					break;
+				case WPA_CIPHER_TKIP:
+					tmp = TKIP_ENABLED;
+					break;
+				case WPA_CIPHER_AES_CCM:
+					tmp = AES_ENABLED;
+					break;
+				default:
+					WL_ERR(("No Security Info\n"));
+			}
+			gval |= tmp;
+		}
+	}
+	/* Check for unicast suite(s) */
+	if (len < WPA_IE_SUITE_COUNT_LEN) {
+		WL_INFORM_MEM(("no unicast suite\n"));
+		goto exit;
+	}
+	/* walk thru unicast cipher list and pick up what we recognize */
+	ucast = (const wpa_suite_ucast_t *)&mcast[1];
+	count = ltoh16_ua(&ucast->count);
+	len -= WPA_IE_SUITE_COUNT_LEN;
+	for (i = 0; i < count && len >= WPA_SUITE_LEN;
+		i++, len -= WPA_SUITE_LEN) {
+		if (!bcmp(ucast->list[i].oui, WPA_OUI, WPA_OUI_LEN)) {
+			if (IS_WPA_CIPHER(ucast->list[i].type)) {
+				tmp = 0;
+				switch (ucast->list[i].type) {
+					case WPA_CIPHER_NONE:
+						tmp = 0;
+						break;
+					case WPA_CIPHER_WEP_40:
+					case WPA_CIPHER_WEP_104:
+						tmp = WEP_ENABLED;
+						break;
+					case WPA_CIPHER_TKIP:
+						tmp = TKIP_ENABLED;
+						break;
+					case WPA_CIPHER_AES_CCM:
+						tmp = AES_ENABLED;
+						break;
+					default:
+						WL_ERR(("No Security Info\n"));
+				}
+				pval |= tmp;
+			}
+		}
+	}
+	len -= (count - i) * WPA_SUITE_LEN;
+	/* Check for auth key management suite(s) */
+	if (len < WPA_IE_SUITE_COUNT_LEN) {
+		WL_INFORM_MEM((" no auth key mgmt suite\n"));
+		goto exit;
+	}
+	/* walk thru auth management suite list and pick up what we recognize */
+	mgmt = (const wpa_suite_auth_key_mgmt_t *)&ucast->list[count];
+	count = ltoh16_ua(&mgmt->count);
+	len -= WPA_IE_SUITE_COUNT_LEN;
+	for (i = 0; i < count && len >= WPA_SUITE_LEN;
+		i++, len -= WPA_SUITE_LEN) {
+		if (!bcmp(mgmt->list[i].oui, WPA_OUI, WPA_OUI_LEN)) {
+			if (IS_WPA_AKM(mgmt->list[i].type)) {
+				tmp = 0;
+				switch (mgmt->list[i].type) {
+					case RSN_AKM_NONE:
+						tmp = WPA_AUTH_NONE;
+						break;
+					case RSN_AKM_UNSPECIFIED:
+						tmp = WPA_AUTH_UNSPECIFIED;
+						break;
+					case RSN_AKM_PSK:
+						tmp = WPA_AUTH_PSK;
+						break;
+					default:
+						WL_ERR(("No Key Mgmt Info\n"));
+				}
+				wpa_auth |= tmp;
+			}
+		}
+
+	}
+	/* FOR WPS , set SEC_OW_ENABLED */
+	wsec = (pval | gval | SES_OW_ENABLED);
+	/* set auth */
+	err = wldev_iovar_setint_bsscfg(dev, "auth", auth, bssidx);
+	if (err < 0) {
+		WL_ERR(("auth error %d\n", err));
+		return BCME_ERROR;
+	}
+	/* set wsec */
+	err = wldev_iovar_setint_bsscfg(dev, "wsec", wsec, bssidx);
+	if (err < 0) {
+		WL_ERR(("wsec error %d\n", err));
+		return BCME_ERROR;
+	}
+	/* set upper-layer auth */
+	err = wldev_iovar_setint_bsscfg(dev, "wpa_auth", wpa_auth, bssidx);
+	if (err < 0) {
+		WL_ERR(("wpa_auth error %d\n", err));
+		return BCME_ERROR;
+	}
+exit:
+	return 0;
+}
+
+#if defined(SUPPORT_SOFTAP_WPAWPA2_MIXED)
+static u32 wl_get_cipher_type(uint8 type)
+{
+	u32 ret = 0;
+	switch (type) {
+		case WPA_CIPHER_NONE:
+			ret = 0;
+			break;
+		case WPA_CIPHER_WEP_40:
+		case WPA_CIPHER_WEP_104:
+			ret = WEP_ENABLED;
+			break;
+		case WPA_CIPHER_TKIP:
+			ret = TKIP_ENABLED;
+			break;
+		case WPA_CIPHER_AES_CCM:
+			ret = AES_ENABLED;
+			break;
+#ifdef BCMWAPI_WPI
+		case WAPI_CIPHER_SMS4:
+			ret = SMS4_ENABLED;
+			break;
+#endif // endif
+		default:
+			WL_ERR(("No Security Info\n"));
+	}
+	return ret;
+}
+
+static u32 wl_get_suite_auth_key_mgmt_type(uint8 type, const wpa_suite_mcast_t *mcast)
+{
+	u32 ret = 0;
+	u32 is_wpa2 = 0;
+
+	if (!bcmp(mcast->oui, WPA2_OUI, WPA2_OUI_LEN)) {
+		is_wpa2 = 1;
+	}
+
+	WL_INFORM_MEM(("%s, type = %d\n", is_wpa2 ? "WPA2":"WPA", type));
+	switch (type) {
+		case RSN_AKM_NONE:
+			/* For WPA and WPA2, AUTH_NONE is common */
+			ret = WPA_AUTH_NONE;
+			break;
+		case RSN_AKM_UNSPECIFIED:
+			if (is_wpa2) {
+				ret = WPA2_AUTH_UNSPECIFIED;
+			} else {
+				ret = WPA_AUTH_UNSPECIFIED;
+			}
+			break;
+		case RSN_AKM_PSK:
+			if (is_wpa2) {
+				ret = WPA2_AUTH_PSK;
+			} else {
+				ret = WPA_AUTH_PSK;
+			}
+			break;
+#ifdef WL_SAE
+		case RSN_AKM_SAE_PSK:
+			ret = WPA3_AUTH_SAE_PSK;
+			break;
+#endif /* WL_SAE */
+		default:
+			WL_ERR(("No Key Mgmt Info\n"));
+	}
+
+	return ret;
+}
+
+static s32
+wl_validate_wpaie_wpa2ie(struct net_device *dev, const wpa_ie_fixed_t *wpaie,
+	const bcm_tlv_t *wpa2ie, s32 bssidx)
+{
+	const wpa_suite_mcast_t *mcast;
+	const wpa_suite_ucast_t *ucast;
+	const wpa_suite_auth_key_mgmt_t *mgmt;
+	u16 auth = 0; /* d11 open authentication */
+	u16 count;
+	s32 err = BCME_OK;
+	u32 wme_bss_disable;
+	u16 suite_count;
+	u8 rsn_cap[2];
+	s32 len = 0;
+	u32 i;
+	u32 wsec1, wsec2, wsec;
+	u32 pval = 0;
+	u32 gval = 0;
+	u32 wpa_auth = 0;
+	u32 wpa_auth1 = 0;
+	u32 wpa_auth2 = 0;
+
+	if (wpaie == NULL || wpa2ie == NULL)
+		goto exit;
+
+	WL_DBG(("Enter \n"));
+	len = wpaie->length;    /* value length */
+	len -= WPA_IE_TAG_FIXED_LEN;
+	/* check for multicast cipher suite */
+	if (len < WPA_SUITE_LEN) {
+		WL_INFORM_MEM(("no multicast cipher suite\n"));
+		goto exit;
+	}
+
+	/* pick up multicast cipher */
+	mcast = (const wpa_suite_mcast_t *)&wpaie[1];
+	len -= WPA_SUITE_LEN;
+	if (!bcmp(mcast->oui, WPA_OUI, WPA_OUI_LEN)) {
+		if (IS_WPA_CIPHER(mcast->type)) {
+			gval |= wl_get_cipher_type(mcast->type);
+		}
+	}
+	WL_DBG(("\nwpa ie validate\n"));
+	WL_DBG(("wpa ie mcast cipher = 0x%X\n", gval));
+
+	/* Check for unicast suite(s) */
+	if (len < WPA_IE_SUITE_COUNT_LEN) {
+		WL_INFORM_MEM(("no unicast suite\n"));
+		goto exit;
+	}
+
+	/* walk thru unicast cipher list and pick up what we recognize */
+	ucast = (const wpa_suite_ucast_t *)&mcast[1];
+	count = ltoh16_ua(&ucast->count);
+	len -= WPA_IE_SUITE_COUNT_LEN;
+	for (i = 0; i < count && len >= WPA_SUITE_LEN;
+		i++, len -= WPA_SUITE_LEN) {
+		if (!bcmp(ucast->list[i].oui, WPA_OUI, WPA_OUI_LEN)) {
+			if (IS_WPA_CIPHER(ucast->list[i].type)) {
+				pval |= wl_get_cipher_type(ucast->list[i].type);
+			}
+		}
+	}
+	WL_ERR(("wpa ie ucast count =%d, cipher = 0x%X\n", count, pval));
+
+	/* FOR WPS , set SEC_OW_ENABLED */
+	wsec1 = (pval | gval | SES_OW_ENABLED);
+	WL_ERR(("wpa ie wsec = 0x%X\n", wsec1));
+
+	len -= (count - i) * WPA_SUITE_LEN;
+	/* Check for auth key management suite(s) */
+	if (len < WPA_IE_SUITE_COUNT_LEN) {
+		WL_INFORM_MEM((" no auth key mgmt suite\n"));
+		goto exit;
+	}
+	/* walk thru auth management suite list and pick up what we recognize */
+	mgmt = (const wpa_suite_auth_key_mgmt_t *)&ucast->list[count];
+	count = ltoh16_ua(&mgmt->count);
+	len -= WPA_IE_SUITE_COUNT_LEN;
+	for (i = 0; i < count && len >= WPA_SUITE_LEN;
+		i++, len -= WPA_SUITE_LEN) {
+		if (!bcmp(mgmt->list[i].oui, WPA_OUI, WPA_OUI_LEN)) {
+			if (IS_WPA_AKM(mgmt->list[i].type)) {
+				wpa_auth1 |=
+					wl_get_suite_auth_key_mgmt_type(mgmt->list[i].type, mcast);
+			}
+		}
+
+	}
+	WL_ERR(("wpa ie wpa_suite_auth_key_mgmt count=%d, key_mgmt = 0x%X\n", count, wpa_auth1));
+	WL_ERR(("\nwpa2 ie validate\n"));
+
+	pval = 0;
+	gval = 0;
+	len =  wpa2ie->len;
+	/* check the mcast cipher */
+	mcast = (const wpa_suite_mcast_t *)&wpa2ie->data[WPA2_VERSION_LEN];
+	gval = wl_get_cipher_type(mcast->type);
+
+	WL_ERR(("wpa2 ie mcast cipher = 0x%X\n", gval));
+	if ((len -= WPA_SUITE_LEN) <= 0)
+	{
+		WL_ERR(("P:wpa2 ie len[%d]", len));
+		return BCME_BADLEN;
+	}
+
+	/* check the unicast cipher */
+	ucast = (const wpa_suite_ucast_t *)&mcast[1];
+	suite_count = ltoh16_ua(&ucast->count);
+	WL_ERR((" WPA2 ucast cipher count=%d\n", suite_count));
+	pval |= wl_get_cipher_type(ucast->list[0].type);
+
+	if ((len -= (WPA_IE_SUITE_COUNT_LEN + (WPA_SUITE_LEN * suite_count))) <= 0)
+		return BCME_BADLEN;
+
+	WL_ERR(("wpa2 ie ucast cipher = 0x%X\n", pval));
+
+	/* FOR WPS , set SEC_OW_ENABLED */
+	wsec2 = (pval | gval | SES_OW_ENABLED);
+	WL_ERR(("wpa2 ie wsec = 0x%X\n", wsec2));
+
+	/* check the AKM */
+	mgmt = (const wpa_suite_auth_key_mgmt_t *)&ucast->list[suite_count];
+	suite_count = ltoh16_ua(&mgmt->count);
+	wpa_auth2 = wl_get_suite_auth_key_mgmt_type(mgmt->list[0].type, mcast);
+	WL_ERR(("wpa ie wpa_suite_auth_key_mgmt count=%d, key_mgmt = 0x%X\n", count, wpa_auth2));
+
+	if ((len -= (WPA_IE_SUITE_COUNT_LEN + (WPA_SUITE_LEN * suite_count))) >= RSN_CAP_LEN) {
+		rsn_cap[0] = *(const u8 *)&mgmt->list[suite_count];
+		rsn_cap[1] = *((const u8 *)&mgmt->list[suite_count] + 1);
+		if (rsn_cap[0] & (RSN_CAP_16_REPLAY_CNTRS << RSN_CAP_PTK_REPLAY_CNTR_SHIFT)) {
+			wme_bss_disable = 0;
+		} else {
+			wme_bss_disable = 1;
+		}
+		WL_DBG(("P:rsn_cap[0]=[0x%X]:wme_bss_disabled[%d]\n", rsn_cap[0], wme_bss_disable));
+
+		/* set wme_bss_disable to sync RSN Capabilities */
+		err = wldev_iovar_setint_bsscfg(dev, "wme_bss_disable", wme_bss_disable, bssidx);
+		if (err < 0) {
+			WL_ERR(("wme_bss_disable error %d\n", err));
+			return BCME_ERROR;
+		}
+	} else {
+		WL_DBG(("There is no RSN Capabilities. remained len %d\n", len));
+	}
+
+	wsec = (wsec1 | wsec2);
+	wpa_auth = (wpa_auth1 | wpa_auth2);
+	WL_ERR(("wpa_wpa2 wsec=0x%X wpa_auth=0x%X\n", wsec, wpa_auth));
+
+	/* set auth */
+	err = wldev_iovar_setint_bsscfg(dev, "auth", auth, bssidx);
+	if (err < 0) {
+		WL_ERR(("auth error %d\n", err));
+		return BCME_ERROR;
+	}
+	/* set wsec */
+	err = wldev_iovar_setint_bsscfg(dev, "wsec", wsec, bssidx);
+	if (err < 0) {
+		WL_ERR(("wsec error %d\n", err));
+		return BCME_ERROR;
+	}
+	/* set upper-layer auth */
+	err = wldev_iovar_setint_bsscfg(dev, "wpa_auth", wpa_auth, bssidx);
+	if (err < 0) {
+		WL_ERR(("wpa_auth error %d\n", err));
+		return BCME_ERROR;
+	}
+exit:
+	return 0;
+}
+#endif /* SUPPORT_SOFTAP_WPAWPA2_MIXED */
+
+static s32
+wl_cfg80211_bcn_validate_sec(
+	struct net_device *dev,
+	struct parsed_ies *ies,
+	u32 dev_role,
+	s32 bssidx,
+	bool privacy)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	wl_cfgbss_t *bss = wl_get_cfgbss_by_wdev(cfg, dev->ieee80211_ptr);
+
+	if (!bss) {
+		WL_ERR(("cfgbss is NULL \n"));
+		return BCME_ERROR;
+	}
+
+	if (dev_role == NL80211_IFTYPE_P2P_GO && (ies->wpa2_ie)) {
+		/* For P2P GO, the sec type is WPA2-PSK */
+		WL_DBG(("P2P GO: validating wpa2_ie"));
+		if (wl_validate_wpa2ie(dev, ies->wpa2_ie, bssidx)  < 0)
+			return BCME_ERROR;
+
+	} else if (dev_role == NL80211_IFTYPE_AP) {
+
+		WL_DBG(("SoftAP: validating security"));
+		/* If wpa2_ie or wpa_ie is present validate it */
+
+#if defined(SUPPORT_SOFTAP_WPAWPA2_MIXED)
+		if ((ies->wpa_ie != NULL && ies->wpa2_ie != NULL)) {
+			if (wl_validate_wpaie_wpa2ie(dev, ies->wpa_ie, ies->wpa2_ie, bssidx)  < 0) {
+				bss->security_mode = false;
+				return BCME_ERROR;
+			}
+		}
+		else {
+#endif /* SUPPORT_SOFTAP_WPAWPA2_MIXED */
+		if ((ies->wpa2_ie || ies->wpa_ie) &&
+			((wl_validate_wpa2ie(dev, ies->wpa2_ie, bssidx)  < 0 ||
+			wl_validate_wpaie(dev, ies->wpa_ie, bssidx) < 0))) {
+			bss->security_mode = false;
+			return BCME_ERROR;
+		}
+
+		if (ies->fils_ind_ie &&
+			(wl_validate_fils_ind_ie(dev, ies->fils_ind_ie, bssidx)  < 0)) {
+			bss->security_mode = false;
+			return BCME_ERROR;
+		}
+
+		bss->security_mode = true;
+		if (bss->rsn_ie) {
+			MFREE(cfg->osh, bss->rsn_ie, bss->rsn_ie[1]
+				+ WPA_RSN_IE_TAG_FIXED_LEN);
+			bss->rsn_ie = NULL;
+		}
+		if (bss->wpa_ie) {
+			MFREE(cfg->osh, bss->wpa_ie, bss->wpa_ie[1]
+				+ WPA_RSN_IE_TAG_FIXED_LEN);
+			bss->wpa_ie = NULL;
+		}
+		if (bss->wps_ie) {
+			MFREE(cfg->osh, bss->wps_ie, bss->wps_ie[1] + 2);
+			bss->wps_ie = NULL;
+		}
+		if (bss->fils_ind_ie) {
+			MFREE(cfg->osh, bss->fils_ind_ie, bss->fils_ind_ie[1]
+				+ FILS_INDICATION_IE_TAG_FIXED_LEN);
+			bss->fils_ind_ie = NULL;
+		}
+		if (ies->wpa_ie != NULL) {
+			/* WPAIE */
+			bss->rsn_ie = NULL;
+			bss->wpa_ie = MALLOCZ(cfg->osh,
+					ies->wpa_ie->length
+					+ WPA_RSN_IE_TAG_FIXED_LEN);
+			if (bss->wpa_ie) {
+				memcpy(bss->wpa_ie, ies->wpa_ie,
+					ies->wpa_ie->length
+					+ WPA_RSN_IE_TAG_FIXED_LEN);
+			}
+		} else if (ies->wpa2_ie != NULL) {
+			/* RSNIE */
+			bss->wpa_ie = NULL;
+			bss->rsn_ie = MALLOCZ(cfg->osh,
+					ies->wpa2_ie->len
+					+ WPA_RSN_IE_TAG_FIXED_LEN);
+			if (bss->rsn_ie) {
+				memcpy(bss->rsn_ie, ies->wpa2_ie,
+					ies->wpa2_ie->len
+					+ WPA_RSN_IE_TAG_FIXED_LEN);
+			}
+		}
+#ifdef WL_FILS
+		if (ies->fils_ind_ie) {
+			bss->fils_ind_ie = MALLOCZ(cfg->osh,
+					ies->fils_ind_ie->len
+					+ FILS_INDICATION_IE_TAG_FIXED_LEN);
+			if (bss->fils_ind_ie) {
+				memcpy(bss->fils_ind_ie, ies->fils_ind_ie,
+					ies->fils_ind_ie->len
+					+ FILS_INDICATION_IE_TAG_FIXED_LEN);
+			}
+		}
+#endif /* WL_FILS */
+#if defined(SUPPORT_SOFTAP_WPAWPA2_MIXED)
+		}
+#endif /* SUPPORT_SOFTAP_WPAWPA2_MIXED */
+		if (!ies->wpa2_ie && !ies->wpa_ie) {
+			wl_validate_opensecurity(dev, bssidx, privacy);
+			bss->security_mode = false;
+		}
+
+		if (ies->wps_ie) {
+			bss->wps_ie = MALLOCZ(cfg->osh, ies->wps_ie_len);
+			if (bss->wps_ie) {
+				memcpy(bss->wps_ie, ies->wps_ie, ies->wps_ie_len);
+			}
+		}
+	}
+
+	return 0;
+
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) || defined(WL_COMPAT_WIRELESS)
+static s32 wl_cfg80211_bcn_set_params(
+	struct cfg80211_ap_settings *info,
+	struct net_device *dev,
+	u32 dev_role, s32 bssidx)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	s32 err = BCME_OK;
+
+	WL_DBG(("interval (%d) dtim_period (%d) \n",
+		info->beacon_interval, info->dtim_period));
+
+	if (info->beacon_interval) {
+		if ((err = wldev_ioctl_set(dev, WLC_SET_BCNPRD,
+			&info->beacon_interval, sizeof(s32))) < 0) {
+			WL_ERR(("Beacon Interval Set Error, %d\n", err));
+			return err;
+		}
+	}
+
+	if (info->dtim_period) {
+		if ((err = wldev_ioctl_set(dev, WLC_SET_DTIMPRD,
+			&info->dtim_period, sizeof(s32))) < 0) {
+			WL_ERR(("DTIM Interval Set Error, %d\n", err));
+			return err;
+		}
+	}
+
+	if ((info->ssid) && (info->ssid_len > 0) &&
+		(info->ssid_len <= DOT11_MAX_SSID_LEN)) {
+		WL_DBG(("SSID (%s) len:%zd \n", info->ssid, info->ssid_len));
+		if (dev_role == NL80211_IFTYPE_AP) {
+			/* Store the hostapd SSID */
+			bzero(cfg->hostapd_ssid.SSID, DOT11_MAX_SSID_LEN);
+			memcpy(cfg->hostapd_ssid.SSID, info->ssid, info->ssid_len);
+			cfg->hostapd_ssid.SSID_len = (uint32)info->ssid_len;
+		} else {
+				/* P2P GO */
+			bzero(cfg->p2p->ssid.SSID, DOT11_MAX_SSID_LEN);
+			memcpy(cfg->p2p->ssid.SSID, info->ssid, info->ssid_len);
+			cfg->p2p->ssid.SSID_len = (uint32)info->ssid_len;
+		}
+	}
+
+	return err;
+}
+#endif /* LINUX_VERSION >= VERSION(3,4,0) || WL_COMPAT_WIRELESS */
+
+static s32
+wl_cfg80211_parse_ies(const u8 *ptr, u32 len, struct parsed_ies *ies)
+{
+	s32 err = BCME_OK;
+
+	bzero(ies, sizeof(struct parsed_ies));
+
+	/* find the WPSIE */
+	if ((ies->wps_ie = wl_cfgp2p_find_wpsie(ptr, len)) != NULL) {
+		WL_DBG(("WPSIE in beacon \n"));
+		ies->wps_ie_len = ies->wps_ie->length + WPA_RSN_IE_TAG_FIXED_LEN;
+	} else {
+		WL_DBG(("No WPSIE in beacon \n"));
+	}
+
+	/* find the RSN_IE */
+	if ((ies->wpa2_ie = bcm_parse_tlvs(ptr, len,
+		DOT11_MNG_RSN_ID)) != NULL) {
+		WL_DBG((" WPA2 IE found\n"));
+		ies->wpa2_ie_len = ies->wpa2_ie->len;
+	}
+
+	/* find the FILS_IND_IE */
+	if ((ies->fils_ind_ie = bcm_parse_tlvs(ptr, len,
+		DOT11_MNG_FILS_IND_ID)) != NULL) {
+		WL_DBG((" FILS IND IE found\n"));
+		ies->fils_ind_ie_len = ies->fils_ind_ie->len;
+	}
+
+	/* find the WPA_IE */
+	if ((ies->wpa_ie = wl_cfgp2p_find_wpaie(ptr, len)) != NULL) {
+		WL_DBG((" WPA found\n"));
+		ies->wpa_ie_len = ies->wpa_ie->length;
+	}
+
+	return err;
+
+}
+
+static s32
+wl_cfg80211_set_ap_role(
+	struct bcm_cfg80211 *cfg,
+	struct net_device *dev)
+{
+	s32 err = BCME_OK;
+	s32 infra = 1;
+	s32 ap = 0;
+	s32 pm;
+	s32 bssidx;
+	s32 apsta = 0;
+	bool new_chip;
+#ifdef WLEASYMESH
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+#endif /* WLEASYMESH */
+
+	new_chip = wl_new_chip_check(dev);
+
+	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+		WL_ERR(("Find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
+		return -EINVAL;
+	}
+
+	WL_INFORM_MEM(("[%s] Bringup SoftAP on bssidx:%d \n", dev->name, bssidx));
+
+	if (bssidx != 0 || new_chip) {
+		if ((err = wl_cfg80211_add_del_bss(cfg, dev, bssidx,
+				WL_IF_TYPE_AP, 0, NULL)) < 0) {
+			WL_ERR(("wl add_del_bss returned error:%d\n", err));
+			return err;
+		}
+	}
+
+	/*
+	 * For older chips, "bss" iovar does not support
+	 * bsscfg role change/upgradation, and still
+	 * return BCME_OK on attempt
+	 * Hence, below traditional way to handle the same
+	 */
+
+	if ((err = wldev_ioctl_get(dev,
+			WLC_GET_AP, &ap, sizeof(s32))) < 0) {
+		WL_ERR(("Getting AP mode failed %d \n", err));
+		return err;
+	}
+#ifdef WLEASYMESH
+	else if (dhd->conf->fw_type == FW_TYPE_EZMESH) {
+		WL_MSG(dev->name, "Getting AP mode ok, set map and dwds");
+		err = wldev_ioctl_set(dev, WLC_DOWN, &ap, sizeof(s32));
+		if (err < 0) {
+			WL_ERR(("WLC_DOWN error %d\n", err));
+			return err;
+		}
+		//For FrontHaulAP
+		err = wldev_iovar_setint(dev, "map", 2);
+		if (err < 0) {
+			WL_ERR(("wl map 2 error %d\n", err));
+			return err;
+		}
+		err = wldev_iovar_setint(dev, "dwds", 1);
+		if (err < 0) {
+			WL_ERR(("wl dwds 1 error %d\n", err));
+			return err;
+		}
+		WL_MSG(dev->name, "Get AP %d", (int)ap);
+	}
+#endif /* WLEASYMESH*/
+
+	if (!ap) {
+		/* AP mode switch not supported. Try setting up AP explicitly */
+		err = wldev_iovar_getint(dev, "apsta", (s32 *)&apsta);
+		if (unlikely(err)) {
+			WL_ERR(("Could not get apsta %d\n", err));
+			return err;
+		}
+		if (apsta == 0) {
+			/* If apsta is not set, set it */
+
+			/* Check for any connected interfaces before wl down */
+			if (wl_get_drv_status_all(cfg, CONNECTED) > 0) {
+#ifdef WLEASYMESH
+				if (dhd->conf->fw_type == FW_TYPE_EZMESH) {
+					WL_MSG(dev->name, "do wl down");
+				} else {
+#endif /* WLEASYMESH */
+					WL_ERR(("Concurrent i/f operational. can't do wl down"));
+					return BCME_ERROR;
+#ifdef WLEASYMESH
+				}
+#endif /* WLEASYMESH */
+			}
+			err = wldev_ioctl_set(dev, WLC_DOWN, &ap, sizeof(s32));
+			if (err < 0) {
+				WL_ERR(("WLC_DOWN error %d\n", err));
+				return err;
+			}
+#ifdef WLEASYMESH
+			if (dhd->conf->fw_type == FW_TYPE_EZMESH)
+				err = wldev_iovar_setint(dev, "apsta", 1);
+			else
+#endif /* WLEASYMESH */
+				err = wldev_iovar_setint(dev, "apsta", 0);
+			if (err < 0) {
+				WL_ERR(("wl apsta 0 error %d\n", err));
+				return err;
+			}
+			ap = 1;
+			if ((err = wldev_ioctl_set(dev,
+					WLC_SET_AP, &ap, sizeof(s32))) < 0) {
+				WL_ERR(("setting AP mode failed %d \n", err));
+				return err;
+			}
+#ifdef WLEASYMESH
+			//For FrontHaulAP
+			if (dhd->conf->fw_type == FW_TYPE_EZMESH) {
+				WL_MSG(dev->name, "wl map 2");
+				err = wldev_iovar_setint(dev, "map", 2);
+				if (err < 0) {
+					WL_ERR(("wl map 2 error %d\n", err));
+					return err;
+				}
+				err = wldev_iovar_setint(dev, "dwds", 1);
+				if (err < 0) {
+					WL_ERR(("wl dwds 1 error %d\n", err));
+					return err;
+				}
+			}
+#endif /* WLEASYMESH */
+		}
+	}
+	else if (bssidx == 0 && !new_chip
+#ifdef WL_EXT_IAPSTA
+			&& !wl_ext_iapsta_other_if_enabled(dev)
+#endif
+			) {
+		err = wldev_ioctl_set(dev, WLC_DOWN, &ap, sizeof(s32));
+		if (err < 0) {
+			WL_ERR(("WLC_DOWN error %d\n", err));
+			return err;
+		}
+		err = wldev_iovar_setint(dev, "apsta", 0);
+		if (err < 0) {
+			WL_ERR(("wl apsta 0 error %d\n", err));
+			return err;
+		}
+		ap = 1;
+		if ((err = wldev_ioctl_set(dev, WLC_SET_AP, &ap, sizeof(s32))) < 0) {
+			WL_ERR(("setting AP mode failed %d \n", err));
+			return err;
+		}
+	}
+
+	if (bssidx == 0) {
+		pm = 0;
+		if ((err = wldev_ioctl_set(dev, WLC_SET_PM, &pm, sizeof(pm))) != 0) {
+			WL_ERR(("wl PM 0 returned error:%d\n", err));
+			/* Ignore error, if any */
+			err = BCME_OK;
+		}
+		err = wldev_ioctl_set(dev, WLC_SET_INFRA, &infra, sizeof(s32));
+		if (err < 0) {
+			WL_ERR(("SET INFRA error %d\n", err));
+			return err;
+		}
+	}
+
+	/* On success, mark AP creation in progress. */
+	wl_set_drv_status(cfg, AP_CREATING, dev);
+	return 0;
+}
+
+/* In RSDB downgrade cases, the link up event can get delayed upto 7-8 secs */
+#define MAX_AP_LINK_WAIT_TIME   10000
+static s32
+wl_cfg80211_bcn_bringup_ap(
+	struct net_device *dev,
+	struct parsed_ies *ies,
+	u32 dev_role, s32 bssidx)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	struct wl_join_params join_params;
+	bool is_bssup = false;
+	s32 infra = 1;
+	s32 join_params_size = 0;
+	s32 ap = 1;
+	s32 wsec;
+#ifdef DISABLE_11H_SOFTAP
+	s32 spect = 0;
+#endif /* DISABLE_11H_SOFTAP */
+#ifdef SOFTAP_UAPSD_OFF
+	uint32 wme_apsd = 0;
+#endif /* SOFTAP_UAPSD_OFF */
+	s32 err = BCME_OK;
+	s32 is_rsdb_supported = BCME_ERROR;
+	long timeout;
+	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
+	char sec[32];
+
+	is_rsdb_supported = DHD_OPMODE_SUPPORTED(cfg->pub, DHD_FLAG_RSDB_MODE);
+	if (is_rsdb_supported < 0)
+		return (-ENODEV);
+
+	WL_DBG(("Enter dev_role:%d bssidx:%d ifname:%s\n", dev_role, bssidx, dev->name));
+
+	/* Common code for SoftAP and P2P GO */
+	wl_clr_drv_status(cfg, AP_CREATED, dev);
+
+	/* Make sure INFRA is set for AP/GO */
+	err = wldev_ioctl_set(dev, WLC_SET_INFRA, &infra, sizeof(s32));
+	if (err < 0) {
+		WL_ERR(("SET INFRA error %d\n", err));
+		goto exit;
+	}
+
+	/* Do abort scan before creating GO */
+	wl_cfg80211_scan_abort(cfg);
+
+	if (dev_role == NL80211_IFTYPE_P2P_GO) {
+		wl_ext_get_sec(dev, 0, sec, sizeof(sec), TRUE);
+		WL_MSG(dev->name, "Creating GO with sec=%s\n", sec);
+		is_bssup = wl_cfg80211_bss_isup(dev, bssidx);
+		if (!is_bssup && (ies->wpa2_ie != NULL)) {
+
+			err = wldev_iovar_setbuf_bsscfg(dev, "ssid", &cfg->p2p->ssid,
+				sizeof(cfg->p2p->ssid), cfg->ioctl_buf, WLC_IOCTL_MAXLEN,
+				bssidx, &cfg->ioctl_buf_sync);
+			if (err < 0) {
+				WL_ERR(("GO SSID setting error %d\n", err));
+				goto exit;
+			}
+
+			if ((err = wl_cfg80211_bss_up(cfg, dev, bssidx, 1)) < 0) {
+				WL_ERR(("GO Bring up error %d\n", err));
+				goto exit;
+			}
+		} else
+			WL_DBG(("Bss is already up\n"));
+	} else if (dev_role == NL80211_IFTYPE_AP) {
+
+//		if (!wl_get_drv_status(cfg, AP_CREATING, dev)) {
+			/* Make sure fw is in proper state */
+			err = wl_cfg80211_set_ap_role(cfg, dev);
+			if (unlikely(err)) {
+				WL_ERR(("set ap role failed!\n"));
+				goto exit;
+			}
+//		}
+
+		/* Device role SoftAP */
+		WL_DBG(("Creating AP bssidx:%d dev_role:%d\n", bssidx, dev_role));
+		/* Clear the status bit after use */
+		wl_clr_drv_status(cfg, AP_CREATING, dev);
+
+#ifdef DISABLE_11H_SOFTAP
+		if (is_rsdb_supported == 0) {
+			err = wldev_ioctl_set(dev, WLC_DOWN, &ap, sizeof(s32));
+			if (err < 0) {
+				WL_ERR(("WLC_DOWN error %d\n", err));
+				goto exit;
+			}
+		}
+		err = wldev_ioctl_set(dev, WLC_SET_SPECT_MANAGMENT,
+			&spect, sizeof(s32));
+		if (err < 0) {
+			WL_ERR(("SET SPECT_MANAGMENT error %d\n", err));
+			goto exit;
+		}
+#endif /* DISABLE_11H_SOFTAP */
+
+#ifdef WL_DISABLE_HE_SOFTAP
+		err = wl_cfg80211_set_he_mode(dev, cfg, bssidx, WL_IF_TYPE_AP, FALSE);
+		if (err < 0) {
+			WL_ERR(("failed to set he features, error=%d\n", err));
+		}
+#endif /* WL_DISABLE_HE_SOFTAP */
+
+#ifdef SOFTAP_UAPSD_OFF
+		err = wldev_iovar_setbuf_bsscfg(dev, "wme_apsd", &wme_apsd, sizeof(wme_apsd),
+			cfg->ioctl_buf, WLC_IOCTL_SMLEN, bssidx, &cfg->ioctl_buf_sync);
+		if (err < 0) {
+			WL_ERR(("failed to disable uapsd, error=%d\n", err));
+		}
+#endif /* SOFTAP_UAPSD_OFF */
+
+		err = wldev_ioctl_set(dev, WLC_UP, &ap, sizeof(s32));
+		if (unlikely(err)) {
+			WL_ERR(("WLC_UP error (%d)\n", err));
+			goto exit;
+		}
+
+#ifdef MFP
+		if (cfg->bip_pos) {
+			err = wldev_iovar_setbuf_bsscfg(dev, "bip",
+				(const void *)(cfg->bip_pos), WPA_SUITE_LEN, cfg->ioctl_buf,
+				WLC_IOCTL_SMLEN, bssidx, &cfg->ioctl_buf_sync);
+			if (err < 0) {
+				WL_ERR(("bip set error %d\n", err));
+				{
+					goto exit;
+				}
+			}
+		}
+#endif /* MFP */
+
+		err = wldev_iovar_getint(dev, "wsec", (s32 *)&wsec);
+		if (unlikely(err)) {
+			WL_ERR(("Could not get wsec %d\n", err));
+			goto exit;
+		}
+		if (dhdp->conf->chip == BCM43430_CHIP_ID && bssidx > 0 &&
+				(wsec & (TKIP_ENABLED|AES_ENABLED))) {
+			wsec |= WSEC_SWFLAG; // terence 20180628: fix me, this is a workaround
+			err = wldev_iovar_setint_bsscfg(dev, "wsec", wsec, bssidx);
+			if (err < 0) {
+				WL_ERR(("wsec error %d\n", err));
+				goto exit;
+			}
+		}
+		if ((wsec == WEP_ENABLED) && cfg->wep_key.len) {
+			WL_DBG(("Applying buffered WEP KEY \n"));
+			err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &cfg->wep_key,
+				sizeof(struct wl_wsec_key), cfg->ioctl_buf,
+				WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
+			/* clear the key after use */
+			bzero(&cfg->wep_key, sizeof(struct wl_wsec_key));
+			if (unlikely(err)) {
+				WL_ERR(("WLC_SET_KEY error (%d)\n", err));
+				goto exit;
+			}
+		}
+
+#ifdef MFP
+		if (cfg->mfp_mode) {
+			/* This needs to go after wsec otherwise the wsec command will
+			 * overwrite the values set by MFP
+			 */
+			err = wldev_iovar_setint_bsscfg(dev, "mfp", cfg->mfp_mode, bssidx);
+			if (err < 0) {
+				WL_ERR(("MFP Setting failed. ret = %d \n", err));
+				/* If fw doesn't support mfp, Ignore the error */
+				if (err != BCME_UNSUPPORTED) {
+					goto exit;
+				}
+			}
+		}
+#endif /* MFP */
+
+		bzero(&join_params, sizeof(join_params));
+		/* join parameters starts with ssid */
+		join_params_size = sizeof(join_params.ssid);
+		join_params.ssid.SSID_len = MIN(cfg->hostapd_ssid.SSID_len,
+			(uint32)DOT11_MAX_SSID_LEN);
+		memcpy(join_params.ssid.SSID, cfg->hostapd_ssid.SSID,
+			join_params.ssid.SSID_len);
+		join_params.ssid.SSID_len = htod32(join_params.ssid.SSID_len);
+
+		wl_ext_get_sec(dev, 0, sec, sizeof(sec), TRUE);
+		WL_MSG(dev->name, "Creating AP with sec=%s\n", sec);
+		/* create softap */
+		if ((err = wldev_ioctl_set(dev, WLC_SET_SSID, &join_params,
+			join_params_size)) != 0) {
+			WL_ERR(("SoftAP/GO set ssid failed! \n"));
+			goto exit;
+		} else {
+			WL_DBG((" SoftAP SSID \"%s\" \n", join_params.ssid.SSID));
+		}
+
+		if (bssidx != 0) {
+			/* AP on Virtual Interface */
+			if ((err = wl_cfg80211_bss_up(cfg, dev, bssidx, 1)) < 0) {
+				WL_ERR(("AP Bring up error %d\n", err));
+				goto exit;
+			}
+		}
+
+	} else {
+		WL_ERR(("Wrong interface type %d\n", dev_role));
+		goto exit;
+	}
+
+	/* Wait for Linkup event to mark successful AP/GO bring up */
+	timeout = wait_event_interruptible_timeout(cfg->netif_change_event,
+		wl_get_drv_status(cfg, AP_CREATED, dev), msecs_to_jiffies(MAX_AP_LINK_WAIT_TIME));
+	if (timeout <= 0 || !wl_get_drv_status(cfg, AP_CREATED, dev)) {
+		WL_ERR(("Link up didn't come for AP interface. AP/GO creation failed! \n"));
+		if (timeout == -ERESTARTSYS) {
+			WL_ERR(("waitqueue was interrupted by a signal, returns -ERESTARTSYS\n"));
+			err = -ERESTARTSYS;
+			goto exit;
+		}
+		if (dhd_query_bus_erros(dhdp)) {
+			err = -ENODEV;
+			goto exit;
+		}
+		dhdp->iface_op_failed = TRUE;
+#if defined(DHD_DEBUG) && defined(DHD_FW_COREDUMP)
+		if (dhdp->memdump_enabled) {
+			dhdp->memdump_type = DUMP_TYPE_AP_LINKUP_FAILURE;
+			dhd_bus_mem_dump(dhdp);
+		}
+#endif /* DHD_DEBUG && DHD_FW_COREDUMP */
+		err = -ENODEV;
+		goto exit;
+	}
+	SUPP_LOG(("AP/GO Link up\n"));
+
+exit:
+	if (cfg->wep_key.len) {
+		bzero(&cfg->wep_key, sizeof(struct wl_wsec_key));
+	}
+
+#ifdef MFP
+	if (cfg->mfp_mode) {
+		cfg->mfp_mode = 0;
+	}
+
+	if (cfg->bip_pos) {
+		cfg->bip_pos = NULL;
+	}
+#endif /* MFP */
+
+	if (err) {
+		SUPP_LOG(("AP/GO bring up fail. err:%d\n", err));
+	}
+	return err;
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) || defined(WL_COMPAT_WIRELESS)
+s32
+wl_cfg80211_parse_ap_ies(
+	struct net_device *dev,
+	struct cfg80211_beacon_data *info,
+	struct parsed_ies *ies)
+{
+	struct parsed_ies prb_ies;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+	const u8 *vndr = NULL;
+	u32 vndr_ie_len = 0;
+	s32 err = BCME_OK;
+
+	/* Parse Beacon IEs */
+	if (wl_cfg80211_parse_ies((const u8 *)info->tail,
+		info->tail_len, ies) < 0) {
+		WL_ERR(("Beacon get IEs failed \n"));
+		err = -EINVAL;
+		goto fail;
+	}
+
+	/* Find the RSNXE_IE and plumb */
+	err = wl_cfg80211_config_rsnxe_ie(dev, (const u8*)info->tail, info->tail_len);
+	if (unlikely(err)) {
+		goto fail;
+	}
+
+	vndr = (const u8 *)info->proberesp_ies;
+	vndr_ie_len = (uint32)info->proberesp_ies_len;
+
+	if (dhd->op_mode & DHD_FLAG_HOSTAP_MODE) {
+		/* SoftAP mode */
+		const struct ieee80211_mgmt *mgmt;
+		mgmt = (const struct ieee80211_mgmt *)info->probe_resp;
+		if (mgmt != NULL) {
+			vndr = (const u8 *)&mgmt->u.probe_resp.variable;
+			vndr_ie_len = (uint32)(info->probe_resp_len -
+				offsetof(const struct ieee80211_mgmt, u.probe_resp.variable));
+		}
+	}
+	/* Parse Probe Response IEs */
+	if (wl_cfg80211_parse_ies((const u8 *)vndr, vndr_ie_len, &prb_ies) < 0) {
+		WL_ERR(("PROBE RESP get IEs failed \n"));
+		err = -EINVAL;
+	}
+fail:
+
+	return err;
+}
+
+s32
+wl_cfg80211_set_ies(
+	struct net_device *dev,
+	struct cfg80211_beacon_data *info,
+	s32 bssidx)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+	const u8 *vndr = NULL;
+	u32 vndr_ie_len = 0;
+	s32 err = BCME_OK;
+
+	/* Set Beacon IEs to FW */
+	if ((err = wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev), bssidx,
+		VNDR_IE_BEACON_FLAG, (const u8 *)info->tail,
+		info->tail_len)) < 0) {
+		WL_ERR(("Set Beacon IE Failed \n"));
+	} else {
+		WL_DBG(("Applied Vndr IEs for Beacon \n"));
+	}
+
+	vndr = (const u8 *)info->proberesp_ies;
+	vndr_ie_len = (uint32)info->proberesp_ies_len;
+
+	if (dhd->op_mode & DHD_FLAG_HOSTAP_MODE) {
+		/* SoftAP mode */
+		const struct ieee80211_mgmt *mgmt;
+		mgmt = (const struct ieee80211_mgmt *)info->probe_resp;
+		if (mgmt != NULL) {
+			vndr = (const u8 *)&mgmt->u.probe_resp.variable;
+			vndr_ie_len = (uint32)(info->probe_resp_len -
+				offsetof(struct ieee80211_mgmt, u.probe_resp.variable));
+		}
+	}
+
+	/* Set Probe Response IEs to FW */
+	if ((err = wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev), bssidx,
+		VNDR_IE_PRBRSP_FLAG, vndr, vndr_ie_len)) < 0) {
+		WL_ERR(("Set Probe Resp IE Failed \n"));
+	} else {
+		WL_DBG(("Applied Vndr IEs for Probe Resp \n"));
+	}
+
+	return err;
+}
+#endif /* LINUX_VERSION >= VERSION(3,4,0) || WL_COMPAT_WIRELESS */
+
+static s32 wl_cfg80211_hostapd_sec(
+	struct net_device *dev,
+	struct parsed_ies *ies,
+	s32 bssidx)
+{
+	bool update_bss = 0;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	wl_cfgbss_t *bss = wl_get_cfgbss_by_wdev(cfg, dev->ieee80211_ptr);
+
+	if (!bss) {
+		WL_ERR(("cfgbss is NULL \n"));
+		return -EINVAL;
+	}
+
+	if (ies->wps_ie) {
+		if (bss->wps_ie &&
+			memcmp(bss->wps_ie, ies->wps_ie, ies->wps_ie_len)) {
+			WL_DBG((" WPS IE is changed\n"));
+			MFREE(cfg->osh, bss->wps_ie, bss->wps_ie[1] + 2);
+			bss->wps_ie = MALLOCZ(cfg->osh, ies->wps_ie_len);
+			if (bss->wps_ie) {
+				memcpy(bss->wps_ie, ies->wps_ie, ies->wps_ie_len);
+			}
+		} else if (bss->wps_ie == NULL) {
+			WL_DBG((" WPS IE is added\n"));
+			bss->wps_ie = MALLOCZ(cfg->osh, ies->wps_ie_len);
+			if (bss->wps_ie) {
+				memcpy(bss->wps_ie, ies->wps_ie, ies->wps_ie_len);
+			}
+		}
+
+#if defined(SUPPORT_SOFTAP_WPAWPA2_MIXED)
+		if (ies->wpa_ie != NULL && ies->wpa2_ie != NULL) {
+			WL_ERR(("update bss - wpa_ie and  wpa2_ie is not null\n"));
+			if (!bss->security_mode) {
+				/* change from open mode to security mode */
+				update_bss = true;
+				bss->wpa_ie = MALLOCZ(cfg->osh,
+					ies->wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN);
+				if (bss->wpa_ie) {
+					memcpy(bss->wpa_ie, ies->wpa_ie,
+						ies->wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN);
+				}
+				bss->rsn_ie = MALLOCZ(cfg->osh,
+						ies->wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN);
+				if (bss->rsn_ie) {
+					memcpy(bss->rsn_ie, ies->wpa2_ie,
+						ies->wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN);
+				}
+			} else {
+				/* change from (WPA or WPA2 or WPA/WPA2) to WPA/WPA2 mixed mode */
+				if (bss->wpa_ie) {
+					if (memcmp(bss->wpa_ie,
+					ies->wpa_ie, ies->wpa_ie->length +
+					WPA_RSN_IE_TAG_FIXED_LEN)) {
+						MFREE(cfg->osh, bss->wpa_ie,
+							bss->wpa_ie[1] + WPA_RSN_IE_TAG_FIXED_LEN);
+						update_bss = true;
+						bss->wpa_ie = MALLOCZ(cfg->osh,
+							ies->wpa_ie->length
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+						if (bss->wpa_ie) {
+							memcpy(bss->wpa_ie, ies->wpa_ie,
+								ies->wpa_ie->length
+								+ WPA_RSN_IE_TAG_FIXED_LEN);
+						}
+					}
+				}
+				else {
+					update_bss = true;
+					bss->wpa_ie = MALLOCZ(cfg->osh,
+						ies->wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN);
+					if (bss->wpa_ie) {
+						memcpy(bss->wpa_ie, ies->wpa_ie,
+							ies->wpa_ie->length
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+					}
+				}
+				if (bss->rsn_ie) {
+					if (memcmp(bss->rsn_ie,
+					ies->wpa2_ie,
+					ies->wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN)) {
+						update_bss = true;
+						MFREE(cfg->osh, bss->rsn_ie,
+							bss->rsn_ie[1] + WPA_RSN_IE_TAG_FIXED_LEN);
+						bss->rsn_ie = MALLOCZ(cfg->osh,
+							ies->wpa2_ie->len
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+						if (bss->rsn_ie) {
+							memcpy(bss->rsn_ie, ies->wpa2_ie,
+								ies->wpa2_ie->len
+								+ WPA_RSN_IE_TAG_FIXED_LEN);
+						}
+					}
+				}
+				else {
+					update_bss = true;
+					bss->rsn_ie = MALLOCZ(cfg->osh,
+						ies->wpa2_ie->len
+						+ WPA_RSN_IE_TAG_FIXED_LEN);
+					if (bss->rsn_ie) {
+						memcpy(bss->rsn_ie, ies->wpa2_ie,
+							ies->wpa2_ie->len
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+					}
+				}
+			}
+			WL_ERR(("update_bss=%d\n", update_bss));
+			if (update_bss) {
+				bss->security_mode = true;
+				wl_cfg80211_bss_up(cfg, dev, bssidx, 0);
+				if (wl_validate_wpaie_wpa2ie(dev, ies->wpa_ie,
+					ies->wpa2_ie, bssidx)  < 0) {
+					return BCME_ERROR;
+				}
+				wl_cfg80211_bss_up(cfg, dev, bssidx, 1);
+			}
+
+		}
+		else
+#endif /* SUPPORT_SOFTAP_WPAWPA2_MIXED */
+		if ((ies->wpa_ie != NULL || ies->wpa2_ie != NULL)) {
+			if (!bss->security_mode) {
+				/* change from open mode to security mode */
+				update_bss = true;
+				if (ies->wpa_ie != NULL) {
+					bss->wpa_ie = MALLOCZ(cfg->osh,
+						ies->wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN);
+					if (bss->wpa_ie) {
+						memcpy(bss->wpa_ie,
+							ies->wpa_ie,
+							ies->wpa_ie->length
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+					}
+				} else {
+					bss->rsn_ie = MALLOCZ(cfg->osh,
+						ies->wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN);
+					if (bss->rsn_ie) {
+						memcpy(bss->rsn_ie,
+							ies->wpa2_ie,
+							ies->wpa2_ie->len
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+					}
+				}
+			} else if (bss->wpa_ie) {
+				/* change from WPA2 mode to WPA mode */
+				if (ies->wpa_ie != NULL) {
+					update_bss = true;
+					MFREE(cfg->osh, bss->rsn_ie,
+						bss->rsn_ie[1] + WPA_RSN_IE_TAG_FIXED_LEN);
+					bss->rsn_ie = NULL;
+					bss->wpa_ie = MALLOCZ(cfg->osh,
+						ies->wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN);
+					if (bss->wpa_ie) {
+						memcpy(bss->wpa_ie,
+							ies->wpa_ie,
+							ies->wpa_ie->length
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+					}
+				} else if (memcmp(bss->rsn_ie,
+					ies->wpa2_ie, ies->wpa2_ie->len
+					+ WPA_RSN_IE_TAG_FIXED_LEN)) {
+					update_bss = true;
+					MFREE(cfg->osh, bss->rsn_ie,
+						bss->rsn_ie[1] + WPA_RSN_IE_TAG_FIXED_LEN);
+					bss->rsn_ie = MALLOCZ(cfg->osh,
+						ies->wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN);
+					if (bss->rsn_ie) {
+						memcpy(bss->rsn_ie,
+							ies->wpa2_ie,
+							ies->wpa2_ie->len
+							+ WPA_RSN_IE_TAG_FIXED_LEN);
+					}
+					bss->wpa_ie = NULL;
+				}
+			}
+			if (update_bss) {
+				bss->security_mode = true;
+				wl_cfg80211_bss_up(cfg, dev, bssidx, 0);
+				if (wl_validate_wpa2ie(dev, ies->wpa2_ie, bssidx)  < 0 ||
+					wl_validate_wpaie(dev, ies->wpa_ie, bssidx) < 0) {
+					return BCME_ERROR;
+				}
+				wl_cfg80211_bss_up(cfg, dev, bssidx, 1);
+			}
+		}
+	} else {
+		WL_ERR(("No WPSIE in beacon \n"));
+	}
+	return 0;
+}
+
+static s32
+#if defined(WL_SUPPORT_BACKPORTED_KPATCHES) || (LINUX_VERSION_CODE >= KERNEL_VERSION(3, \
+	2, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
+wl_cfg80211_del_station(
+		struct wiphy *wiphy, struct net_device *ndev,
+		struct station_del_parameters *params)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0))
+wl_cfg80211_del_station(
+	struct wiphy *wiphy,
+	struct net_device *ndev,
+	const u8* mac_addr)
+#else
+wl_cfg80211_del_station(
+	struct wiphy *wiphy,
+	struct net_device *ndev,
+	u8* mac_addr)
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) */
+{
+	struct net_device *dev;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	scb_val_t scb_val;
+	int err;
+	char mac_buf[MAX_NUM_OF_ASSOCIATED_DEV *
+		sizeof(struct ether_addr) + sizeof(uint)] = {0};
+	struct maclist *assoc_maclist = (struct maclist *)mac_buf;
+	int num_associated = 0;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
+	const u8 *mac_addr = params->mac;
+#ifdef CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE
+	u16 rc = params->reason_code;
+#endif /* CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE */
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) */
+
+	WL_DBG(("Entry\n"));
+	if (mac_addr == NULL) {
+		WL_DBG(("mac_addr is NULL ignore it\n"));
+		return 0;
+	}
+
+	dev = ndev_to_wlc_ndev(ndev, cfg);
+
+	if (p2p_is_on(cfg)) {
+		/* Suspend P2P discovery search-listen to prevent it from changing the
+		 * channel.
+		 */
+		if ((wl_cfgp2p_discover_enable_search(cfg, false)) < 0) {
+			WL_ERR(("Can not disable discovery mode\n"));
+			return -EFAULT;
+		}
+	}
+#ifdef WL_EXT_IAPSTA
+	err = wl_ext_in4way_sync(ndev, AP_WAIT_STA_RECONNECT,
+		WL_EXT_STATUS_DELETE_STA, (void *)mac_addr);
+	if (err) {
+		return 0;
+	}
+#endif
+
+	assoc_maclist->count = MAX_NUM_OF_ASSOCIATED_DEV;
+	err = wldev_ioctl_get(ndev, WLC_GET_ASSOCLIST,
+		assoc_maclist, sizeof(mac_buf));
+	if (err < 0)
+		WL_ERR(("WLC_GET_ASSOCLIST error %d\n", err));
+	else
+		num_associated = assoc_maclist->count;
+
+	memcpy(scb_val.ea.octet, mac_addr, ETHER_ADDR_LEN);
+#ifdef CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
+	if (rc == DOT11_RC_8021X_AUTH_FAIL) {
+		WL_ERR(("deauth will be sent at F/W\n"));
+		scb_val.val = DOT11_RC_8021X_AUTH_FAIL;
+	} else {
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) */
+#endif /* CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE */
+
+#ifdef WL_WPS_SYNC
+		if (wl_wps_session_update(ndev,
+			WPS_STATE_DISCONNECT_CLIENT, mac_addr) == BCME_UNSUPPORTED) {
+			/* Ignore disconnect command from upper layer */
+			WL_INFORM_MEM(("[WPS] Ignore client disconnect.\n"));
+		} else
+#endif /* WL_WPS_SYNC */
+		{
+			scb_val.val = DOT11_RC_DEAUTH_LEAVING;
+			WL_MSG(dev->name, "Disconnect STA : %pM scb_val.val %d\n",
+				mac_addr, scb_val.val);
+			/* need to guarantee EAP-Failure send out before deauth */
+			dhd_wait_pend8021x(dev);
+			err = wldev_ioctl_set(dev, WLC_SCB_DEAUTHENTICATE_FOR_REASON, &scb_val,
+				sizeof(scb_val_t));
+			if (err < 0) {
+				WL_ERR(("WLC_SCB_DEAUTHENTICATE_FOR_REASON err %d\n", err));
+			}
+		}
+#ifdef CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
+	}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) */
+#endif /* CUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE */
+
+	if (num_associated > 0 && ETHER_ISBCAST(mac_addr))
+		wl_delay(400);
+
+	return 0;
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0))
+static s32
+wl_cfg80211_change_station(
+	struct wiphy *wiphy,
+	struct net_device *dev,
+	const u8 *mac,
+	struct station_parameters *params)
+#else
+static s32
+wl_cfg80211_change_station(
+	struct wiphy *wiphy,
+	struct net_device *dev,
+	u8 *mac,
+	struct station_parameters *params)
+#endif // endif
+{
+	int err = BCME_OK;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *ndev = ndev_to_wlc_ndev(dev, cfg);
+
+	WL_DBG(("SCB_AUTHORIZE mac_addr:"MACDBG" sta_flags_mask:0x%x "
+				"sta_flags_set:0x%x iface:%s \n", MAC2STRDBG(mac),
+				params->sta_flags_mask, params->sta_flags_set, ndev->name));
+
+	if ((wl_get_mode_by_netdev(cfg, dev) == WL_MODE_BSS) &&
+		!(wl_get_drv_status(cfg, CONNECTED, dev))) {
+		/* Return error indicating not in connected state */
+		WL_ERR(("Ignore SCB_AUTHORIZE/DEAUTHORIZE in non connected state\n"));
+		return -ENOTSUPP;
+	}
+
+	/* Processing only authorize/de-authorize flag for now */
+	if (!(params->sta_flags_mask & BIT(NL80211_STA_FLAG_AUTHORIZED))) {
+		WL_ERR(("WLC_SCB_AUTHORIZE sta_flags_mask not set \n"));
+		return -ENOTSUPP;
+	}
+
+	if (!(params->sta_flags_set & BIT(NL80211_STA_FLAG_AUTHORIZED))) {
+		err = wldev_ioctl_set(ndev, WLC_SCB_DEAUTHORIZE, mac, ETH_ALEN);
+		if (unlikely(err)) {
+			WL_ERR(("WLC_SCB_DEAUTHORIZE error (%d)\n", err));
+		} else {
+			WL_INFORM_MEM(("[%s] WLC_SCB_DEAUTHORIZE " MACDBG "\n",
+				ndev->name, MAC2STRDBG(mac)));
+		}
+		return err;
+	}
+
+	err = wldev_ioctl_set(ndev, WLC_SCB_AUTHORIZE, mac, ETH_ALEN);
+	if (unlikely(err)) {
+		WL_ERR(("WLC_SCB_AUTHORIZE error (%d)\n", err));
+	} else {
+		WL_INFORM_MEM(("[%s] WLC_SCB_AUTHORIZE " MACDBG "\n",
+			ndev->name, MAC2STRDBG(mac)));
+#ifdef WL_WPS_SYNC
+		wl_wps_session_update(ndev, WPS_STATE_AUTHORIZE, mac);
+#endif /* WL_WPS_SYNC */
+	}
+#ifdef DHD_LOSSLESS_ROAMING
+	wl_del_roam_timeout(cfg);
+#endif // endif
+
+	return err;
+}
+#endif /* WL_SUPPORT_BACKPORTED_KPATCHES || KERNEL_VER >= KERNEL_VERSION(3, 2, 0)) */
+
+static s32
+wl_cfg80211_set_scb_timings(
+	struct bcm_cfg80211 *cfg,
+	struct net_device *dev)
+{
+	int err;
+	u32 ps_pretend;
+	wl_scb_probe_t scb_probe;
+	u32 ps_pretend_retries;
+
+	bzero(&scb_probe, sizeof(wl_scb_probe_t));
+	scb_probe.scb_timeout = WL_SCB_TIMEOUT;
+	scb_probe.scb_activity_time = WL_SCB_ACTIVITY_TIME;
+	scb_probe.scb_max_probe = WL_SCB_MAX_PROBE;
+	err = wldev_iovar_setbuf(dev, "scb_probe", (void *)&scb_probe,
+		sizeof(wl_scb_probe_t), cfg->ioctl_buf, WLC_IOCTL_SMLEN,
+		&cfg->ioctl_buf_sync);
+	if (unlikely(err)) {
+		WL_ERR(("set 'scb_probe' failed, error = %d\n", err));
+		return err;
+	}
+
+	ps_pretend_retries = WL_PSPRETEND_RETRY_LIMIT;
+	err = wldev_iovar_setint(dev, "pspretend_retry_limit", ps_pretend_retries);
+	if (unlikely(err)) {
+		if (err == BCME_UNSUPPORTED) {
+			/* Ignore error if fw doesn't support the iovar */
+			WL_DBG(("set 'pspretend_retry_limit %d' failed, error = %d\n",
+				ps_pretend_retries, err));
+		} else {
+			WL_ERR(("set 'pspretend_retry_limit %d' failed, error = %d\n",
+				ps_pretend_retries, err));
+			return err;
+		}
+	}
+
+	ps_pretend = MAX(WL_SCB_MAX_PROBE / 2, WL_MIN_PSPRETEND_THRESHOLD);
+	err = wldev_iovar_setint(dev, "pspretend_threshold", ps_pretend);
+	if (unlikely(err)) {
+		if (err == BCME_UNSUPPORTED) {
+			/* Ignore error if fw doesn't support the iovar */
+			WL_DBG(("wl pspretend_threshold %d set error %d\n",
+				ps_pretend, err));
+		} else {
+			WL_ERR(("wl pspretend_threshold %d set error %d\n",
+				ps_pretend, err));
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) || defined(WL_COMPAT_WIRELESS)
+static s32
+wl_cfg80211_start_ap(
+	struct wiphy *wiphy,
+	struct net_device *dev,
+	struct cfg80211_ap_settings *info)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	s32 err = BCME_OK;
+	struct parsed_ies ies;
+	s32 bssidx = 0;
+	u32 dev_role = 0;
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+
+	WL_DBG(("Enter \n"));
+
+	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+		WL_ERR(("Find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
+		return BCME_ERROR;
+	}
+
+	if (p2p_is_on(cfg) && (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_P2P_GO)) {
+		dev_role = NL80211_IFTYPE_P2P_GO;
+	} else if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_AP) {
+		dev_role = NL80211_IFTYPE_AP;
+		dhd->op_mode |= DHD_FLAG_HOSTAP_MODE;
+		err = dhd_ndo_enable(dhd, FALSE);
+		WL_DBG(("Disabling NDO on Hostapd mode %d\n", err));
+		if (err) {
+			WL_ERR(("Disabling NDO Failed %d\n", err));
+		}
+		wl_wlfc_enable(cfg, TRUE);
+#ifdef WL_EXT_IAPSTA
+		wl_ext_iapsta_update_iftype(dev, dhd_net2idx(dhd->info, dev), WL_IF_TYPE_AP);
+#endif /* WL_EXT_IAPSTA */
+#ifdef PKT_FILTER_SUPPORT
+		/* Disable packet filter */
+		if (dhd->early_suspended) {
+			WL_ERR(("Disable pkt_filter\n"));
+			dhd_enable_packet_filter(0, dhd);
+#ifdef APF
+			dhd_dev_apf_disable_filter(dhd_linux_get_primary_netdev(dhd));
+#endif /* APF */
+		}
+#endif /* PKT_FILTER_SUPPORT */
+#ifdef ARP_OFFLOAD_SUPPORT
+		/* IF SoftAP is enabled, disable arpoe */
+		if (dhd->op_mode & DHD_FLAG_STA_MODE) {
+			dhd_arp_offload_set(dhd, 0);
+			dhd_arp_offload_enable(dhd, FALSE);
+		}
+#endif /* ARP_OFFLOAD_SUPPORT */
+	} else {
+		/* only AP or GO role need to be handled here. */
+		err = -EINVAL;
+		goto fail;
+	}
+
+	/* disable TDLS */
+#ifdef WLTDLS
+	if (bssidx == 0) {
+		/* Disable TDLS for primary Iface. For virtual interface,
+		 * tdls disable will happen from interface create context
+		 */
+		wl_cfg80211_tdls_config(cfg, TDLS_STATE_AP_CREATE, false);
+	}
+#endif /*  WLTDLS */
+
+	if (!check_dev_role_integrity(cfg, dev_role)) {
+		err = -EINVAL;
+		goto fail;
+	}
+
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)) && !defined(WL_COMPAT_WIRELESS))
+	if (!dev->ieee80211_ptr->preset_chandef.chan) {
+		WL_ERR(("chan is NULL\n"));
+		err = -EINVAL;
+		goto fail;
+	}
+	if ((err = wl_cfg80211_set_channel(wiphy, dev,
+		dev->ieee80211_ptr->preset_chandef.chan,
+		NL80211_CHAN_HT20) < 0)) {
+		WL_ERR(("Set channel failed \n"));
+		goto fail;
+	}
+#endif /* ((LINUX_VERSION >= VERSION(3, 6, 0) && !WL_COMPAT_WIRELESS) */
+
+	if ((err = wl_cfg80211_bcn_set_params(info, dev,
+		dev_role, bssidx)) < 0) {
+		WL_ERR(("Beacon params set failed \n"));
+		goto fail;
+	}
+
+	/* Parse IEs */
+	if ((err = wl_cfg80211_parse_ap_ies(dev, &info->beacon, &ies)) < 0) {
+		WL_ERR(("Set IEs failed \n"));
+		goto fail;
+	}
+
+	if ((err = wl_cfg80211_bcn_validate_sec(dev, &ies,
+		dev_role, bssidx, info->privacy)) < 0)
+	{
+		WL_ERR(("Beacon set security failed \n"));
+		goto fail;
+	}
+
+	if ((err = wl_cfg80211_bcn_bringup_ap(dev, &ies,
+		dev_role, bssidx)) < 0) {
+		WL_ERR(("Beacon bring up AP/GO failed \n"));
+		goto fail;
+	}
+
+	/* Set GC/STA SCB expiry timings. */
+	if ((err = wl_cfg80211_set_scb_timings(cfg, dev))) {
+		WL_ERR(("scb setting failed \n"));
+//		goto fail;
+	}
+
+	wl_set_drv_status(cfg, CONNECTED, dev);
+	WL_DBG(("** AP/GO Created **\n"));
+
+#ifdef WL_CFG80211_ACL
+	/* Enfoce Admission Control. */
+	if ((err = wl_cfg80211_set_mac_acl(wiphy, dev, info->acl)) < 0) {
+		WL_ERR(("Set ACL failed\n"));
+	}
+#endif /* WL_CFG80211_ACL */
+
+	/* Set IEs to FW */
+	if ((err = wl_cfg80211_set_ies(dev, &info->beacon, bssidx)) < 0)
+		WL_ERR(("Set IEs failed \n"));
+	
+#ifdef WLDWDS
+	if (dev->ieee80211_ptr->use_4addr) {
+		if ((err = wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev), bssidx,
+				VNDR_IE_ASSOCRSP_FLAG, (const u8 *)info->beacon.assocresp_ies,
+				info->beacon.assocresp_ies_len)) < 0) {
+			WL_ERR(("Set ASSOC RESP IE Failed\n"));
+		}
+	}
+#endif /* WLDWDS */
+
+	/* Enable Probe Req filter, WPS-AP certification 4.2.13 */
+	if ((dev_role == NL80211_IFTYPE_AP) && (ies.wps_ie != NULL)) {
+		bool pbc = 0;
+		wl_validate_wps_ie((const char *) ies.wps_ie, ies.wps_ie_len, &pbc);
+		if (pbc) {
+			WL_DBG(("set WLC_E_PROBREQ_MSG\n"));
+			wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, true);
+		}
+	}
+
+	/* Configure hidden SSID */
+	if (info->hidden_ssid != NL80211_HIDDEN_SSID_NOT_IN_USE) {
+		if ((err = wldev_iovar_setint(dev, "closednet", 1)) < 0)
+			WL_ERR(("failed to set hidden : %d\n", err));
+		WL_DBG(("hidden_ssid_enum_val: %d \n", info->hidden_ssid));
+	}
+
+#ifdef SUPPORT_AP_RADIO_PWRSAVE
+	if (dev_role == NL80211_IFTYPE_AP) {
+		if (!wl_set_ap_rps(dev, FALSE, dev->name)) {
+			wl_cfg80211_init_ap_rps(cfg);
+		} else {
+			WL_ERR(("Set rpsnoa failed \n"));
+		}
+	}
+#endif /* SUPPORT_AP_RADIO_PWRSAVE */
+fail:
+	if (err) {
+		WL_ERR(("ADD/SET beacon failed\n"));
+		wl_flush_fw_log_buffer(dev, FW_LOGSET_MASK_ALL);
+		wl_cfg80211_stop_ap(wiphy, dev);
+		if (dev_role == NL80211_IFTYPE_AP) {
+#ifdef WL_EXT_IAPSTA
+		if (!wl_ext_iapsta_iftype_enabled(dev, WL_IF_TYPE_AP)) {
+#endif /* WL_EXT_IAPSTA */
+			dhd->op_mode &= ~DHD_FLAG_HOSTAP_MODE;
+#ifdef PKT_FILTER_SUPPORT
+			/* Enable packet filter */
+			if (dhd->early_suspended) {
+				WL_ERR(("Enable pkt_filter\n"));
+				dhd_enable_packet_filter(1, dhd);
+#ifdef APF
+				dhd_dev_apf_enable_filter(dhd_linux_get_primary_netdev(dhd));
+#endif /* APF */
+			}
+#endif /* PKT_FILTER_SUPPORT */
+#ifdef ARP_OFFLOAD_SUPPORT
+			/* IF SoftAP is disabled, enable arpoe back for STA mode. */
+			if (dhd->op_mode & DHD_FLAG_STA_MODE) {
+				dhd_arp_offload_set(dhd, dhd_arp_mode);
+				dhd_arp_offload_enable(dhd, TRUE);
+			}
+#endif /* ARP_OFFLOAD_SUPPORT */
+#ifdef DISABLE_WL_FRAMEBURST_SOFTAP
+			wl_cfg80211_set_frameburst(cfg, TRUE);
+#endif /* DISABLE_WL_FRAMEBURST_SOFTAP */
+			wl_wlfc_enable(cfg, FALSE);
+#ifdef WL_EXT_IAPSTA
+		}
+#endif /* WL_EXT_IAPSTA */
+		}
+#ifdef WLTDLS
+		if (bssidx == 0) {
+			/* Since AP creation failed, re-enable TDLS */
+			wl_cfg80211_tdls_config(cfg, TDLS_STATE_AP_DELETE, false);
+		}
+#endif /*  WLTDLS */
+
+	}
+
+	return err;
+}
