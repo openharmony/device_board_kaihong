@@ -1984,3 +1984,1084 @@ static int uvc_scan_device(struct uvc_device *dev)
  */
 static void uvc_delete(struct kref *kref)
 {
+	struct uvc_device *dev = container_of(kref, struct uvc_device, ref);
+	struct list_head *p, *n;
+
+	uvc_status_cleanup(dev);
+	uvc_ctrl_cleanup_device(dev);
+
+	usb_put_intf(dev->intf);
+	usb_put_dev(dev->udev);
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	media_device_cleanup(&dev->mdev);
+#endif
+
+	list_for_each_safe(p, n, &dev->chains) {
+		struct uvc_video_chain *chain;
+		chain = list_entry(p, struct uvc_video_chain, list);
+		kfree(chain);
+	}
+
+	list_for_each_safe(p, n, &dev->entities) {
+		struct uvc_entity *entity;
+		entity = list_entry(p, struct uvc_entity, list);
+#ifdef CONFIG_MEDIA_CONTROLLER
+		uvc_mc_cleanup_entity(entity);
+#endif
+		kfree(entity);
+	}
+
+	list_for_each_safe(p, n, &dev->streams) {
+		struct uvc_streaming *streaming;
+		streaming = list_entry(p, struct uvc_streaming, list);
+		usb_driver_release_interface(&uvc_driver.driver,
+			streaming->intf);
+		uvc_stream_delete(streaming);
+	}
+
+	kfree(dev);
+}
+
+static void uvc_release(struct video_device *vdev)
+{
+	struct uvc_streaming *stream = video_get_drvdata(vdev);
+	struct uvc_device *dev = stream->dev;
+
+	kref_put(&dev->ref, uvc_delete);
+}
+
+/*
+ * Unregister the video devices.
+ */
+static void uvc_unregister_video(struct uvc_device *dev)
+{
+	struct uvc_streaming *stream;
+
+	list_for_each_entry(stream, &dev->streams, list) {
+		if (!video_is_registered(&stream->vdev))
+			continue;
+
+		video_unregister_device(&stream->vdev);
+		video_unregister_device(&stream->meta.vdev);
+
+		uvc_debugfs_cleanup_stream(stream);
+	}
+
+	uvc_status_unregister(dev);
+
+	if (dev->vdev.dev)
+		v4l2_device_unregister(&dev->vdev);
+#ifdef CONFIG_MEDIA_CONTROLLER
+	if (media_devnode_is_registered(dev->mdev.devnode))
+		media_device_unregister(&dev->mdev);
+#endif
+}
+
+int uvc_register_video_device(struct uvc_device *dev,
+			      struct uvc_streaming *stream,
+			      struct video_device *vdev,
+			      struct uvc_video_queue *queue,
+			      enum v4l2_buf_type type,
+			      const struct v4l2_file_operations *fops,
+			      const struct v4l2_ioctl_ops *ioctl_ops)
+{
+	const char *name;
+	int ret;
+
+	/* Initialize the video buffers queue. */
+	ret = uvc_queue_init(queue, type, !uvc_no_drop_param);
+	if (ret)
+		return ret;
+
+	/* Register the device with V4L. */
+
+	/*
+	 * We already hold a reference to dev->udev. The video device will be
+	 * unregistered before the reference is released, so we don't need to
+	 * get another one.
+	 */
+	vdev->v4l2_dev = &dev->vdev;
+	vdev->fops = fops;
+	vdev->ioctl_ops = ioctl_ops;
+	vdev->release = uvc_release;
+	vdev->prio = &stream->chain->prio;
+	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
+		vdev->vfl_dir = VFL_DIR_TX;
+	else
+		vdev->vfl_dir = VFL_DIR_RX;
+
+	switch (type) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+	default:
+		vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+		name = "Video Capture";
+		break;
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+		vdev->device_caps = V4L2_CAP_VIDEO_OUTPUT | V4L2_CAP_STREAMING;
+		name = "Video Output";
+		break;
+	case V4L2_BUF_TYPE_META_CAPTURE:
+		vdev->device_caps = V4L2_CAP_META_CAPTURE | V4L2_CAP_STREAMING;
+		name = "Metadata";
+		break;
+	}
+
+	snprintf(vdev->name, sizeof(vdev->name), "%s %u", name,
+		 stream->header.bTerminalLink);
+
+	/*
+	 * Set the driver data before calling video_register_device, otherwise
+	 * the file open() handler might race us.
+	 */
+	video_set_drvdata(vdev, stream);
+
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+	if (ret < 0) {
+		uvc_printk(KERN_ERR, "Failed to register %s device (%d).\n",
+			   v4l2_type_names[type], ret);
+		return ret;
+	}
+
+	kref_get(&dev->ref);
+	return 0;
+}
+
+static int uvc_register_video(struct uvc_device *dev,
+		struct uvc_streaming *stream)
+{
+	int ret;
+
+	/* Initialize the streaming interface with default parameters. */
+	ret = uvc_video_init(stream);
+	if (ret < 0) {
+		uvc_printk(KERN_ERR, "Failed to initialize the device (%d).\n",
+			   ret);
+		return ret;
+	}
+
+	if (stream->type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		stream->chain->caps |= V4L2_CAP_VIDEO_CAPTURE
+			| V4L2_CAP_META_CAPTURE;
+	else
+		stream->chain->caps |= V4L2_CAP_VIDEO_OUTPUT;
+
+	uvc_debugfs_init_stream(stream);
+
+	/* Register the device with V4L. */
+	return uvc_register_video_device(dev, stream, &stream->vdev,
+					 &stream->queue, stream->type,
+					 &uvc_fops, &uvc_ioctl_ops);
+}
+
+/*
+ * Register all video devices in all chains.
+ */
+static int uvc_register_terms(struct uvc_device *dev,
+	struct uvc_video_chain *chain)
+{
+	struct uvc_streaming *stream;
+	struct uvc_entity *term;
+	int ret;
+
+	list_for_each_entry(term, &chain->entities, chain) {
+		if (UVC_ENTITY_TYPE(term) != UVC_TT_STREAMING)
+			continue;
+
+		stream = uvc_stream_by_id(dev, term->id);
+		if (stream == NULL) {
+			uvc_printk(KERN_INFO, "No streaming interface found "
+				   "for terminal %u.", term->id);
+			continue;
+		}
+
+		stream->chain = chain;
+		ret = uvc_register_video(dev, stream);
+		if (ret < 0)
+			return ret;
+
+		/* Register a metadata node, but ignore a possible failure,
+		 * complete registration of video nodes anyway.
+		 */
+		uvc_meta_register(stream);
+
+		term->vdev = &stream->vdev;
+	}
+
+	return 0;
+}
+
+static int uvc_register_chains(struct uvc_device *dev)
+{
+	struct uvc_video_chain *chain;
+	int ret;
+
+	list_for_each_entry(chain, &dev->chains, list) {
+		ret = uvc_register_terms(dev, chain);
+		if (ret < 0)
+			return ret;
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+		ret = uvc_mc_register_entities(chain);
+		if (ret < 0)
+			uvc_printk(KERN_INFO,
+				   "Failed to register entities (%d).\n", ret);
+#endif
+	}
+
+	return 0;
+}
+
+/* ------------------------------------------------------------------------
+ * USB probe, disconnect, suspend and resume
+ */
+
+static const struct uvc_device_info uvc_quirk_none = { 0 };
+
+static int uvc_probe(struct usb_interface *intf,
+		     const struct usb_device_id *id)
+{
+	struct usb_device *udev = interface_to_usbdev(intf);
+	struct uvc_device *dev;
+	const struct uvc_device_info *info =
+		(const struct uvc_device_info *)id->driver_info;
+	int function;
+	int ret;
+
+	if (id->idVendor && id->idProduct)
+		uvc_trace(UVC_TRACE_PROBE, "Probing known UVC device %s "
+				"(%04x:%04x)\n", udev->devpath, id->idVendor,
+				id->idProduct);
+	else
+		uvc_trace(UVC_TRACE_PROBE, "Probing generic UVC device %s\n",
+				udev->devpath);
+
+	/* Allocate memory for the device and initialize it. */
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (dev == NULL)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&dev->entities);
+	INIT_LIST_HEAD(&dev->chains);
+	INIT_LIST_HEAD(&dev->streams);
+	kref_init(&dev->ref);
+	atomic_set(&dev->nmappings, 0);
+	mutex_init(&dev->lock);
+
+	dev->udev = usb_get_dev(udev);
+	dev->intf = usb_get_intf(intf);
+	dev->intfnum = intf->cur_altsetting->desc.bInterfaceNumber;
+	dev->info = info ? info : &uvc_quirk_none;
+	dev->quirks = uvc_quirks_param == -1
+		    ? dev->info->quirks : uvc_quirks_param;
+
+	if (udev->product != NULL)
+		strscpy(dev->name, udev->product, sizeof(dev->name));
+	else
+		snprintf(dev->name, sizeof(dev->name),
+			 "UVC Camera (%04x:%04x)",
+			 le16_to_cpu(udev->descriptor.idVendor),
+			 le16_to_cpu(udev->descriptor.idProduct));
+
+	/*
+	 * Add iFunction or iInterface to names when available as additional
+	 * distinguishers between interfaces. iFunction is prioritized over
+	 * iInterface which matches Windows behavior at the point of writing.
+	 */
+	if (intf->intf_assoc && intf->intf_assoc->iFunction != 0)
+		function = intf->intf_assoc->iFunction;
+	else
+		function = intf->cur_altsetting->desc.iInterface;
+	if (function != 0) {
+		size_t len;
+
+		strlcat(dev->name, ": ", sizeof(dev->name));
+		len = strlen(dev->name);
+		usb_string(udev, function, dev->name + len,
+			   sizeof(dev->name) - len);
+	}
+
+	/* Initialize the media device. */
+#ifdef CONFIG_MEDIA_CONTROLLER
+	dev->mdev.dev = &intf->dev;
+	strscpy(dev->mdev.model, dev->name, sizeof(dev->mdev.model));
+	if (udev->serial)
+		strscpy(dev->mdev.serial, udev->serial,
+			sizeof(dev->mdev.serial));
+	usb_make_path(udev, dev->mdev.bus_info, sizeof(dev->mdev.bus_info));
+	dev->mdev.hw_revision = le16_to_cpu(udev->descriptor.bcdDevice);
+	media_device_init(&dev->mdev);
+
+	dev->vdev.mdev = &dev->mdev;
+#endif
+
+	/* Parse the Video Class control descriptor. */
+	if (uvc_parse_control(dev) < 0) {
+		uvc_trace(UVC_TRACE_PROBE, "Unable to parse UVC "
+			"descriptors.\n");
+		goto error;
+	}
+
+	uvc_printk(KERN_INFO, "Found UVC %u.%02x device %s (%04x:%04x)\n",
+		dev->uvc_version >> 8, dev->uvc_version & 0xff,
+		udev->product ? udev->product : "<unnamed>",
+		le16_to_cpu(udev->descriptor.idVendor),
+		le16_to_cpu(udev->descriptor.idProduct));
+
+	if (dev->quirks != dev->info->quirks) {
+		uvc_printk(KERN_INFO, "Forcing device quirks to 0x%x by module "
+			"parameter for testing purpose.\n", dev->quirks);
+		uvc_printk(KERN_INFO, "Please report required quirks to the "
+			"linux-uvc-devel mailing list.\n");
+	}
+
+	/* Register the V4L2 device. */
+	if (v4l2_device_register(&intf->dev, &dev->vdev) < 0)
+		goto error;
+
+	/* Initialize controls. */
+	if (uvc_ctrl_init_device(dev) < 0)
+		goto error;
+
+	/* Scan the device for video chains. */
+	if (uvc_scan_device(dev) < 0)
+		goto error;
+
+	/* Register video device nodes. */
+	if (uvc_register_chains(dev) < 0)
+		goto error;
+
+#ifdef CONFIG_MEDIA_CONTROLLER
+	/* Register the media device node */
+	if (media_device_register(&dev->mdev) < 0)
+		goto error;
+#endif
+	/* Save our data pointer in the interface data. */
+	usb_set_intfdata(intf, dev);
+
+	/* Initialize the interrupt URB. */
+	if ((ret = uvc_status_init(dev)) < 0) {
+		uvc_printk(KERN_INFO, "Unable to initialize the status "
+			"endpoint (%d), status interrupt will not be "
+			"supported.\n", ret);
+	}
+
+	uvc_trace(UVC_TRACE_PROBE, "UVC device initialized.\n");
+	if (udev->quirks & USB_QUIRK_AUTO_SUSPEND ||
+	    udev->parent->quirks & USB_QUIRK_AUTO_SUSPEND)
+		uvc_printk(KERN_INFO, "auto-suspend is blacklisted for this device\n");
+	else
+		usb_enable_autosuspend(udev);
+	return 0;
+
+error:
+	uvc_unregister_video(dev);
+	kref_put(&dev->ref, uvc_delete);
+	return -ENODEV;
+}
+
+static void uvc_disconnect(struct usb_interface *intf)
+{
+	struct uvc_device *dev = usb_get_intfdata(intf);
+
+	/* Set the USB interface data to NULL. This can be done outside the
+	 * lock, as there's no other reader.
+	 */
+	usb_set_intfdata(intf, NULL);
+
+	if (intf->cur_altsetting->desc.bInterfaceSubClass ==
+	    UVC_SC_VIDEOSTREAMING)
+		return;
+
+	uvc_unregister_video(dev);
+	kref_put(&dev->ref, uvc_delete);
+}
+
+static int uvc_suspend(struct usb_interface *intf, pm_message_t message)
+{
+	struct uvc_device *dev = usb_get_intfdata(intf);
+	struct uvc_streaming *stream;
+
+	uvc_trace(UVC_TRACE_SUSPEND, "Suspending interface %u\n",
+		intf->cur_altsetting->desc.bInterfaceNumber);
+
+	/* Controls are cached on the fly so they don't need to be saved. */
+	if (intf->cur_altsetting->desc.bInterfaceSubClass ==
+	    UVC_SC_VIDEOCONTROL) {
+		mutex_lock(&dev->lock);
+		if (dev->users)
+			uvc_status_stop(dev);
+		mutex_unlock(&dev->lock);
+		return 0;
+	}
+
+	list_for_each_entry(stream, &dev->streams, list) {
+		if (stream->intf == intf)
+			return uvc_video_suspend(stream);
+	}
+
+	uvc_trace(UVC_TRACE_SUSPEND, "Suspend: video streaming USB interface "
+			"mismatch.\n");
+	return -EINVAL;
+}
+
+static int __uvc_resume(struct usb_interface *intf, int reset)
+{
+	struct uvc_device *dev = usb_get_intfdata(intf);
+	struct uvc_streaming *stream;
+	int ret = 0;
+
+	uvc_trace(UVC_TRACE_SUSPEND, "Resuming interface %u\n",
+		intf->cur_altsetting->desc.bInterfaceNumber);
+
+	if (intf->cur_altsetting->desc.bInterfaceSubClass ==
+	    UVC_SC_VIDEOCONTROL) {
+		if (reset) {
+			ret = uvc_ctrl_restore_values(dev);
+			if (ret < 0)
+				return ret;
+		}
+
+		mutex_lock(&dev->lock);
+		if (dev->users)
+			ret = uvc_status_start(dev, GFP_NOIO);
+		mutex_unlock(&dev->lock);
+
+		return ret;
+	}
+
+	list_for_each_entry(stream, &dev->streams, list) {
+		if (stream->intf == intf) {
+			ret = uvc_video_resume(stream, reset);
+			if (ret < 0)
+				uvc_queue_streamoff(&stream->queue,
+						    stream->queue.queue.type);
+			return ret;
+		}
+	}
+
+	uvc_trace(UVC_TRACE_SUSPEND, "Resume: video streaming USB interface "
+			"mismatch.\n");
+	return -EINVAL;
+}
+
+static int uvc_resume(struct usb_interface *intf)
+{
+	return __uvc_resume(intf, 0);
+}
+
+static int uvc_reset_resume(struct usb_interface *intf)
+{
+	return __uvc_resume(intf, 1);
+}
+
+/* ------------------------------------------------------------------------
+ * Module parameters
+ */
+
+static int uvc_clock_param_get(char *buffer, const struct kernel_param *kp)
+{
+	if (uvc_clock_param == CLOCK_MONOTONIC)
+		return sprintf(buffer, "CLOCK_MONOTONIC");
+	else
+		return sprintf(buffer, "CLOCK_REALTIME");
+}
+
+static int uvc_clock_param_set(const char *val, const struct kernel_param *kp)
+{
+	if (strncasecmp(val, "clock_", strlen("clock_")) == 0)
+		val += strlen("clock_");
+
+	if (strcasecmp(val, "monotonic") == 0)
+		uvc_clock_param = CLOCK_MONOTONIC;
+	else if (strcasecmp(val, "realtime") == 0)
+		uvc_clock_param = CLOCK_REALTIME;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+module_param_call(clock, uvc_clock_param_set, uvc_clock_param_get,
+		  &uvc_clock_param, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(clock, "Video buffers timestamp clock");
+module_param_named(hwtimestamps, uvc_hw_timestamps_param, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(hwtimestamps, "Use hardware timestamps");
+module_param_named(nodrop, uvc_no_drop_param, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(nodrop, "Don't drop incomplete frames");
+module_param_named(quirks, uvc_quirks_param, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(quirks, "Forced device quirks");
+module_param_named(trace, uvc_trace_param, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(trace, "Trace level bitmask");
+module_param_named(timeout, uvc_timeout_param, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(timeout, "Streaming control requests timeout");
+
+/* ------------------------------------------------------------------------
+ * Driver initialization and cleanup
+ */
+
+static const struct uvc_device_info uvc_quirk_probe_minmax = {
+	.quirks = UVC_QUIRK_PROBE_MINMAX,
+};
+
+static const struct uvc_device_info uvc_quirk_fix_bandwidth = {
+	.quirks = UVC_QUIRK_FIX_BANDWIDTH,
+};
+
+static const struct uvc_device_info uvc_quirk_probe_def = {
+	.quirks = UVC_QUIRK_PROBE_DEF,
+};
+
+static const struct uvc_device_info uvc_quirk_stream_no_fid = {
+	.quirks = UVC_QUIRK_STREAM_NO_FID,
+};
+
+static const struct uvc_device_info uvc_quirk_force_y8 = {
+	.quirks = UVC_QUIRK_FORCE_Y8,
+};
+
+#define UVC_INFO_QUIRK(q) (kernel_ulong_t)&(struct uvc_device_info){.quirks = q}
+#define UVC_INFO_META(m) (kernel_ulong_t)&(struct uvc_device_info) \
+	{.meta_format = m}
+
+/*
+ * The Logitech cameras listed below have their interface class set to
+ * VENDOR_SPEC because they don't announce themselves as UVC devices, even
+ * though they are compliant.
+ */
+static const struct usb_device_id uvc_ids[] = {
+	/* LogiLink Wireless Webcam */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0416,
+	  .idProduct		= 0xa91a,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Genius eFace 2025 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0458,
+	  .idProduct		= 0x706e,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Microsoft Lifecam NX-6000 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x045e,
+	  .idProduct		= 0x00f8,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Microsoft Lifecam NX-3000 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x045e,
+	  .idProduct		= 0x0721,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Microsoft Lifecam VX-7000 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x045e,
+	  .idProduct		= 0x0723,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Logitech Quickcam Fusion */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x08c1,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Logitech Quickcam Orbit MP */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x08c2,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Logitech Quickcam Pro for Notebook */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x08c3,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Logitech Quickcam Pro 5000 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x08c5,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Logitech Quickcam OEM Dell Notebook */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x08c6,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Logitech Quickcam OEM Cisco VT Camera II */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x08c7,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Logitech HD Pro Webcam C920 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x046d,
+	  .idProduct		= 0x082d,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_RESTORE_CTRLS_ON_INIT) },
+	/* Chicony CNF7129 (Asus EEE 100HE) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x04f2,
+	  .idProduct		= 0xb071,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_RESTRICT_FRAME_RATE) },
+	/* Alcor Micro AU3820 (Future Boy PC USB Webcam) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x058f,
+	  .idProduct		= 0x3820,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Dell XPS m1530 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05a9,
+	  .idProduct		= 0x2640,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Dell SP2008WFP Monitor */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05a9,
+	  .idProduct		= 0x2641,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Dell Alienware X51 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05a9,
+	  .idProduct		= 0x2643,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Dell Studio Hybrid 140g (OmniVision webcam) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05a9,
+	  .idProduct		= 0x264a,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Dell XPS M1330 (OmniVision OV7670 webcam) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05a9,
+	  .idProduct		= 0x7670,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Apple Built-In iSight */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05ac,
+	  .idProduct		= 0x8501,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
+					| UVC_QUIRK_BUILTIN_ISIGHT) },
+	/* Apple Built-In iSight via iBridge */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05ac,
+	  .idProduct		= 0x8600,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* Foxlink ("HP Webcam" on HP Mini 5103) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05c8,
+	  .idProduct		= 0x0403,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
+	/* Genesys Logic USB 2.0 PC Camera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05e3,
+	  .idProduct		= 0x0505,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Hercules Classic Silver */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x06f8,
+	  .idProduct		= 0x300c,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
+	/* ViMicro Vega */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0ac8,
+	  .idProduct		= 0x332d,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
+	/* ViMicro - Minoru3D */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0ac8,
+	  .idProduct		= 0x3410,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
+	/* ViMicro Venus - Minoru3D */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0ac8,
+	  .idProduct		= 0x3420,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_fix_bandwidth },
+	/* Ophir Optronics - SPCAM 620U */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0bd3,
+	  .idProduct		= 0x0555,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* MT6227 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0e8d,
+	  .idProduct		= 0x0004,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
+					| UVC_QUIRK_PROBE_DEF) },
+	/* IMC Networks (Medion Akoya) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x13d3,
+	  .idProduct		= 0x5103,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* JMicron USB2.0 XGA WebCam */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x152d,
+	  .idProduct		= 0x0310,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Syntek (HP Spartan) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x174f,
+	  .idProduct		= 0x5212,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Syntek (Samsung Q310) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x174f,
+	  .idProduct		= 0x5931,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Syntek (Packard Bell EasyNote MX52 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x174f,
+	  .idProduct		= 0x8a12,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Syntek (Asus F9SG) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x174f,
+	  .idProduct		= 0x8a31,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Syntek (Asus U3S) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x174f,
+	  .idProduct		= 0x8a33,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Syntek (JAOtech Smart Terminal) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x174f,
+	  .idProduct		= 0x8a34,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Miricle 307K */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x17dc,
+	  .idProduct		= 0x0202,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Lenovo Thinkpad SL400/SL500 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x17ef,
+	  .idProduct		= 0x480b,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_stream_no_fid },
+	/* Aveo Technology USB 2.0 Camera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x1871,
+	  .idProduct		= 0x0306,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
+					| UVC_QUIRK_PROBE_EXTRAFIELDS) },
+	/* Aveo Technology USB 2.0 Camera (Tasco USB Microscope) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x1871,
+	  .idProduct		= 0x0516,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Ecamm Pico iMage */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x18cd,
+	  .idProduct		= 0xcafe,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_EXTRAFIELDS) },
+	/* Manta MM-353 Plako */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x18ec,
+	  .idProduct		= 0x3188,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* FSC WebCam V30S */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x18ec,
+	  .idProduct		= 0x3288,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Arkmicro unbranded */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x18ec,
+	  .idProduct		= 0x3290,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
+	/* The Imaging Source USB CCD cameras */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x199e,
+	  .idProduct		= 0x8102,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0 },
+	/* Bodelin ProScopeHR */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_DEV_HI
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x19ab,
+	  .idProduct		= 0x1000,
+	  .bcdDevice_hi		= 0x0126,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_STATUS_INTERVAL) },
+	/* MSI StarCam 370i */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x1b3b,
+	  .idProduct		= 0x2951,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* Generalplus Technology Inc. 808 Camera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x1b3f,
+	  .idProduct		= 0x2002,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_minmax },
+	/* SiGma Micro USB Web Camera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x1c4f,
+	  .idProduct		= 0x3000,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
+					| UVC_QUIRK_IGNORE_SELECTOR_UNIT) },
+	/* Oculus VR Positional Tracker DK2 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x2833,
+	  .idProduct		= 0x0201,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_force_y8 },
+	/* Oculus VR Rift Sensor */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x2833,
+	  .idProduct		= 0x0211,
+	  .bInterfaceClass	= USB_CLASS_VENDOR_SPEC,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_force_y8 },
+	/* GEO Semiconductor GC6500 */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x29fe,
+	  .idProduct		= 0x4d53,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_FORCE_BPP) },
+	/* Intel RealSense D4M */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x8086,
+	  .idProduct		= 0x0b03,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= UVC_INFO_META(V4L2_META_FMT_D4XX) },
+	/* Generic USB Video Class */
+	{ USB_INTERFACE_INFO(USB_CLASS_VIDEO, 1, UVC_PC_PROTOCOL_UNDEFINED) },
+	{ USB_INTERFACE_INFO(USB_CLASS_VIDEO, 1, UVC_PC_PROTOCOL_15) },
+	{}
+};
+
+MODULE_DEVICE_TABLE(usb, uvc_ids);
+
+struct uvc_driver uvc_driver = {
+	.driver = {
+		.name		= "uvcvideo",
+		.probe		= uvc_probe,
+		.disconnect	= uvc_disconnect,
+		.suspend	= uvc_suspend,
+		.resume		= uvc_resume,
+		.reset_resume	= uvc_reset_resume,
+		.id_table	= uvc_ids,
+		.supports_autosuspend = 1,
+	},
+};
+
+static int __init uvc_init(void)
+{
+	int ret;
+
+	uvc_debugfs_init();
+
+	ret = usb_register(&uvc_driver.driver);
+	if (ret < 0) {
+		uvc_debugfs_cleanup();
+		return ret;
+	}
+
+	printk(KERN_INFO DRIVER_DESC " (" DRIVER_VERSION ")\n");
+	return 0;
+}
+
+static void __exit uvc_cleanup(void)
+{
+	usb_deregister(&uvc_driver.driver);
+	uvc_debugfs_cleanup();
+}
+
+module_init(uvc_init);
+module_exit(uvc_cleanup);
+
+MODULE_AUTHOR(DRIVER_AUTHOR);
+MODULE_DESCRIPTION(DRIVER_DESC);
+MODULE_LICENSE("GPL");
+MODULE_VERSION(DRIVER_VERSION);
+
