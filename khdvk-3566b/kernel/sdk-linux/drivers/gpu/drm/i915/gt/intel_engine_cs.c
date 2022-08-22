@@ -1627,3 +1627,179 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 		drm_printf(m, "*** WEDGED ***\n");
 
 	drm_printf(m, "\tAwake? %d\n", atomic_read(&engine->wakeref.count));
+	drm_printf(m, "\tBarriers?: %s\n",
+		   yesno(!llist_empty(&engine->barrier_tasks)));
+	drm_printf(m, "\tLatency: %luus\n",
+		   ewma__engine_latency_read(&engine->latency));
+	if (intel_engine_supports_stats(engine))
+		drm_printf(m, "\tRuntime: %llums\n",
+			   ktime_to_ms(intel_engine_get_busy_time(engine,
+								  &dummy)));
+	drm_printf(m, "\tForcewake: %x domains, %d active\n",
+		   engine->fw_domain, atomic_read(&engine->fw_active));
+
+	rcu_read_lock();
+	rq = READ_ONCE(engine->heartbeat.systole);
+	if (rq)
+		drm_printf(m, "\tHeartbeat: %d ms ago\n",
+			   jiffies_to_msecs(jiffies - rq->emitted_jiffies));
+	rcu_read_unlock();
+	drm_printf(m, "\tReset count: %d (global %d)\n",
+		   i915_reset_engine_count(error, engine),
+		   i915_reset_count(error));
+
+	drm_printf(m, "\tRequests:\n");
+
+	spin_lock_irqsave(&engine->active.lock, flags);
+	rq = intel_engine_find_active_request(engine);
+	if (rq) {
+		struct intel_timeline *tl = get_timeline(rq);
+
+		print_request(m, rq, "\t\tactive ");
+
+		drm_printf(m, "\t\tring->start:  0x%08x\n",
+			   i915_ggtt_offset(rq->ring->vma));
+		drm_printf(m, "\t\tring->head:   0x%08x\n",
+			   rq->ring->head);
+		drm_printf(m, "\t\tring->tail:   0x%08x\n",
+			   rq->ring->tail);
+		drm_printf(m, "\t\tring->emit:   0x%08x\n",
+			   rq->ring->emit);
+		drm_printf(m, "\t\tring->space:  0x%08x\n",
+			   rq->ring->space);
+
+		if (tl) {
+			drm_printf(m, "\t\tring->hwsp:   0x%08x\n",
+				   tl->hwsp_offset);
+			intel_timeline_put(tl);
+		}
+
+		print_request_ring(m, rq);
+
+		if (rq->context->lrc_reg_state) {
+			drm_printf(m, "Logical Ring Context:\n");
+			hexdump(m, rq->context->lrc_reg_state, PAGE_SIZE);
+		}
+	}
+	drm_printf(m, "\tOn hold?: %lu\n", list_count(&engine->active.hold));
+	spin_unlock_irqrestore(&engine->active.lock, flags);
+
+	drm_printf(m, "\tMMIO base:  0x%08x\n", engine->mmio_base);
+	wakeref = intel_runtime_pm_get_if_in_use(engine->uncore->rpm);
+	if (wakeref) {
+		intel_engine_print_registers(engine, m);
+		intel_runtime_pm_put(engine->uncore->rpm, wakeref);
+	} else {
+		drm_printf(m, "\tDevice is asleep; skipping register dump\n");
+	}
+
+	intel_execlists_show_requests(engine, m, print_request, 8);
+
+	drm_printf(m, "HWSP:\n");
+	hexdump(m, engine->status_page.addr, PAGE_SIZE);
+
+	drm_printf(m, "Idle? %s\n", yesno(intel_engine_is_idle(engine)));
+
+	intel_engine_print_breadcrumbs(engine, m);
+}
+
+static ktime_t __intel_engine_get_busy_time(struct intel_engine_cs *engine,
+					    ktime_t *now)
+{
+	ktime_t total = engine->stats.total;
+
+	/*
+	 * If the engine is executing something at the moment
+	 * add it to the total.
+	 */
+	*now = ktime_get();
+	if (atomic_read(&engine->stats.active))
+		total = ktime_add(total, ktime_sub(*now, engine->stats.start));
+
+	return total;
+}
+
+/**
+ * intel_engine_get_busy_time() - Return current accumulated engine busyness
+ * @engine: engine to report on
+ * @now: monotonic timestamp of sampling
+ *
+ * Returns accumulated time @engine was busy since engine stats were enabled.
+ */
+ktime_t intel_engine_get_busy_time(struct intel_engine_cs *engine, ktime_t *now)
+{
+	unsigned int seq;
+	ktime_t total;
+
+	do {
+		seq = read_seqbegin(&engine->stats.lock);
+		total = __intel_engine_get_busy_time(engine, now);
+	} while (read_seqretry(&engine->stats.lock, seq));
+
+	return total;
+}
+
+static bool match_ring(struct i915_request *rq)
+{
+	u32 ring = ENGINE_READ(rq->engine, RING_START);
+
+	return ring == i915_ggtt_offset(rq->ring->vma);
+}
+
+struct i915_request *
+intel_engine_find_active_request(struct intel_engine_cs *engine)
+{
+	struct i915_request *request, *active = NULL;
+
+	/*
+	 * We are called by the error capture, reset and to dump engine
+	 * state at random points in time. In particular, note that neither is
+	 * crucially ordered with an interrupt. After a hang, the GPU is dead
+	 * and we assume that no more writes can happen (we waited long enough
+	 * for all writes that were in transaction to be flushed) - adding an
+	 * extra delay for a recent interrupt is pointless. Hence, we do
+	 * not need an engine->irq_seqno_barrier() before the seqno reads.
+	 * At all other times, we must assume the GPU is still running, but
+	 * we only care about the snapshot of this moment.
+	 */
+	lockdep_assert_held(&engine->active.lock);
+
+	rcu_read_lock();
+	request = execlists_active(&engine->execlists);
+	if (request) {
+		struct intel_timeline *tl = request->context->timeline;
+
+		list_for_each_entry_from_reverse(request, &tl->requests, link) {
+			if (i915_request_completed(request))
+				break;
+
+			active = request;
+		}
+	}
+	rcu_read_unlock();
+	if (active)
+		return active;
+
+	list_for_each_entry(request, &engine->active.requests, sched.link) {
+		if (i915_request_completed(request))
+			continue;
+
+		if (!i915_request_started(request))
+			continue;
+
+		/* More than one preemptible request may match! */
+		if (!match_ring(request))
+			continue;
+
+		active = request;
+		break;
+	}
+
+	return active;
+}
+
+#if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
+#include "mock_engine.c"
+#include "selftest_engine.c"
+#include "selftest_engine_cs.c"
+#endif
