@@ -1062,7 +1062,7 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
  * Implicit syncing is how Linux traditionally worked (e.g. DRI2/3 on X.org),
  * whereas explicit fencing is what Android wants.
  *
- * "IN_FENCE_FDâ€?
+ * "IN_FENCE_FDâ€:
  *	Use this property to pass a fence that DRM should wait on before
  *	proceeding with the Atomic Commit request and show the framebuffer for
  *	the plane on the screen. The fence can be either a normal fence or a
@@ -1079,7 +1079,7 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
  *	to make sure there's consistent behaviour between drivers in precedence
  *	of implicit vs. explicit fencing.
  *
- * "OUT_FENCE_PTRâ€?
+ * "OUT_FENCE_PTRâ€:
  *	Use this property to pass a file descriptor pointer to DRM. Once the
  *	Atomic Commit request call returns OUT_FENCE_PTR will be filled with
  *	the file descriptor number of a Sync File. This Sync File contains the
@@ -1197,3 +1197,255 @@ static int prepare_signaling(struct drm_device *dev,
 		c++;
 	}
 
+	for_each_new_connector_in_state(state, conn, conn_state, i) {
+		struct drm_writeback_connector *wb_conn;
+		struct drm_out_fence_state *f;
+		struct dma_fence *fence;
+		s32 __user *fence_ptr;
+
+		if (!conn_state->writeback_job)
+			continue;
+
+		fence_ptr = get_out_fence_for_connector(state, conn);
+		if (!fence_ptr)
+			continue;
+
+		f = krealloc(*fence_state, sizeof(**fence_state) *
+			     (*num_fences + 1), GFP_KERNEL);
+		if (!f)
+			return -ENOMEM;
+
+		memset(&f[*num_fences], 0, sizeof(*f));
+
+		f[*num_fences].out_fence_ptr = fence_ptr;
+		*fence_state = f;
+
+		wb_conn = drm_connector_to_writeback(conn);
+		fence = drm_writeback_get_out_fence(wb_conn);
+		if (!fence)
+			return -ENOMEM;
+
+		ret = setup_out_fence(&f[(*num_fences)++], fence);
+		if (ret) {
+			dma_fence_put(fence);
+			return ret;
+		}
+
+		conn_state->writeback_job->out_fence = fence;
+	}
+
+	/*
+	 * Having this flag means user mode pends on event which will never
+	 * reach due to lack of at least one CRTC for signaling
+	 */
+	if (c == 0 && (arg->flags & DRM_MODE_PAGE_FLIP_EVENT))
+		return -EINVAL;
+
+	return 0;
+}
+
+static void complete_signaling(struct drm_device *dev,
+			       struct drm_atomic_state *state,
+			       struct drm_out_fence_state *fence_state,
+			       unsigned int num_fences,
+			       bool install_fds)
+{
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *crtc_state;
+	int i;
+
+	if (install_fds) {
+		for (i = 0; i < num_fences; i++)
+			fd_install(fence_state[i].fd,
+				   fence_state[i].sync_file->file);
+
+		kfree(fence_state);
+		return;
+	}
+
+	for_each_new_crtc_in_state(state, crtc, crtc_state, i) {
+		struct drm_pending_vblank_event *event = crtc_state->event;
+		/*
+		 * Free the allocated event. drm_atomic_helper_setup_commit
+		 * can allocate an event too, so only free it if it's ours
+		 * to prevent a double free in drm_atomic_state_clear.
+		 */
+		if (event && (event->base.fence || event->base.file_priv)) {
+			drm_event_cancel_free(dev, &event->base);
+			crtc_state->event = NULL;
+		}
+	}
+
+	if (!fence_state)
+		return;
+
+	for (i = 0; i < num_fences; i++) {
+		if (fence_state[i].sync_file)
+			fput(fence_state[i].sync_file->file);
+		if (fence_state[i].fd >= 0)
+			put_unused_fd(fence_state[i].fd);
+
+		/* If this fails log error to the user */
+		if (fence_state[i].out_fence_ptr &&
+		    put_user(-1, fence_state[i].out_fence_ptr))
+			DRM_DEBUG_ATOMIC("Couldn't clear out_fence_ptr\n");
+	}
+
+	kfree(fence_state);
+}
+
+int drm_mode_atomic_ioctl(struct drm_device *dev,
+			  void *data, struct drm_file *file_priv)
+{
+	struct drm_mode_atomic *arg = data;
+	uint32_t __user *objs_ptr = (uint32_t __user *)(unsigned long)(arg->objs_ptr);
+	uint32_t __user *count_props_ptr = (uint32_t __user *)(unsigned long)(arg->count_props_ptr);
+	uint32_t __user *props_ptr = (uint32_t __user *)(unsigned long)(arg->props_ptr);
+	uint64_t __user *prop_values_ptr = (uint64_t __user *)(unsigned long)(arg->prop_values_ptr);
+	unsigned int copied_objs, copied_props;
+	struct drm_atomic_state *state;
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_out_fence_state *fence_state;
+	int ret = 0;
+	unsigned int i, j, num_fences;
+
+	/* disallow for drivers not supporting atomic: */
+	if (!drm_core_check_feature(dev, DRIVER_ATOMIC))
+		return -EOPNOTSUPP;
+
+	/* disallow for userspace that has not enabled atomic cap (even
+	 * though this may be a bit overkill, since legacy userspace
+	 * wouldn't know how to call this ioctl)
+	 */
+	if (!file_priv->atomic)
+		return -EINVAL;
+
+	if (arg->flags & ~DRM_MODE_ATOMIC_FLAGS)
+		return -EINVAL;
+
+	if (arg->reserved)
+		return -EINVAL;
+
+	if (arg->flags & DRM_MODE_PAGE_FLIP_ASYNC)
+		return -EINVAL;
+
+	/* can't test and expect an event at the same time. */
+	if ((arg->flags & DRM_MODE_ATOMIC_TEST_ONLY) &&
+			(arg->flags & DRM_MODE_PAGE_FLIP_EVENT))
+		return -EINVAL;
+
+	state = drm_atomic_state_alloc(dev);
+	if (!state)
+		return -ENOMEM;
+
+	drm_modeset_acquire_init(&ctx, DRM_MODESET_ACQUIRE_INTERRUPTIBLE);
+	state->acquire_ctx = &ctx;
+	state->allow_modeset = !!(arg->flags & DRM_MODE_ATOMIC_ALLOW_MODESET);
+
+retry:
+	copied_objs = 0;
+	copied_props = 0;
+	fence_state = NULL;
+	num_fences = 0;
+
+	for (i = 0; i < arg->count_objs; i++) {
+		uint32_t obj_id, count_props;
+		struct drm_mode_object *obj;
+
+		if (get_user(obj_id, objs_ptr + copied_objs)) {
+			ret = -EFAULT;
+			goto out;
+		}
+
+		obj = drm_mode_object_find(dev, file_priv, obj_id, DRM_MODE_OBJECT_ANY);
+		if (!obj) {
+			ret = -ENOENT;
+			goto out;
+		}
+
+		if (!obj->properties) {
+			drm_mode_object_put(obj);
+			ret = -ENOENT;
+			goto out;
+		}
+
+		if (get_user(count_props, count_props_ptr + copied_objs)) {
+			drm_mode_object_put(obj);
+			ret = -EFAULT;
+			goto out;
+		}
+
+		copied_objs++;
+
+		for (j = 0; j < count_props; j++) {
+			uint32_t prop_id;
+			uint64_t prop_value;
+			struct drm_property *prop;
+
+			if (get_user(prop_id, props_ptr + copied_props)) {
+				drm_mode_object_put(obj);
+				ret = -EFAULT;
+				goto out;
+			}
+
+			prop = drm_mode_obj_find_prop_id(obj, prop_id);
+			if (!prop) {
+				drm_mode_object_put(obj);
+				ret = -ENOENT;
+				goto out;
+			}
+
+			if (copy_from_user(&prop_value,
+					   prop_values_ptr + copied_props,
+					   sizeof(prop_value))) {
+				drm_mode_object_put(obj);
+				ret = -EFAULT;
+				goto out;
+			}
+
+			ret = drm_atomic_set_property(state, file_priv,
+						      obj, prop, prop_value);
+			if (ret) {
+				drm_mode_object_put(obj);
+				goto out;
+			}
+
+			copied_props++;
+		}
+
+		drm_mode_object_put(obj);
+	}
+
+	ret = prepare_signaling(dev, state, arg, file_priv, &fence_state,
+				&num_fences);
+	if (ret)
+		goto out;
+
+	if (arg->flags & DRM_MODE_ATOMIC_TEST_ONLY) {
+		ret = drm_atomic_check_only(state);
+	} else if (arg->flags & DRM_MODE_ATOMIC_NONBLOCK) {
+		ret = drm_atomic_nonblocking_commit(state);
+	} else {
+		if (drm_debug_enabled(DRM_UT_STATE))
+			drm_atomic_print_state(state);
+
+		ret = drm_atomic_commit(state);
+	}
+
+out:
+	complete_signaling(dev, state, fence_state, num_fences, !ret);
+
+	if (ret == -EDEADLK) {
+		drm_atomic_state_clear(state);
+		ret = drm_modeset_backoff(&ctx);
+		if (!ret)
+			goto retry;
+	}
+
+	drm_atomic_state_put(state);
+
+	drm_modeset_drop_locks(&ctx);
+	drm_modeset_acquire_fini(&ctx);
+
+	return ret;
+}
