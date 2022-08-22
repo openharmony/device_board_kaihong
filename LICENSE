@@ -3,7 +3,7 @@ Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
 
 The khdvk_3566b/kernel/sdk-linux subdirectory is licensed under the GPL V2 License.
 The khdvk_3566b/kernel/vendor subdirectory is licensed under the GPL V2 License.
-The others subdirectories are licensed under Apache License, Version 2.0.
+The khdvk_3566b/wifi and khdvk_3566b/bluetooth and others subdirectories are licensed under Apache License, Version 2.0.
 
 a) The Apache License, Version 2.0, (https://www.apache.org/licenses/LICENSE-2.0)
                                  Apache License
