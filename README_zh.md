@@ -16,8 +16,7 @@
 
 ```
 device/board/kaihong
-├── build                            # 编译脚本
-└── figures                          # 插图
+├── figures                          # 插图
 └── khdvk_3566b                      # khdvk_3566b开发板
 ```
 
