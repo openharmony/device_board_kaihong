@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Wireless LAN device configuration
+#
+
+config VENDOR_WL_ROCKCHIP
+	bool "VENDOR RK3566 WL RK3566"
+	default y

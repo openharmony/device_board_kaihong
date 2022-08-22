@@ -1,0 +1,6 @@
+config DEVFREQ_EVENT_ROCKCHIP_NOCP
+	tristate "ROCKCHIP NoC (Network On Chip) Probe DEVFREQ event Driver"
+	depends on ARCH_ROCKCHIP
+	help
+	  This add the devfreq-event driver for Rockchip SoC. It provides NoC
+	  (Network on Chip) Probe counters to monitor traffic statistics.

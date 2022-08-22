@@ -1,0 +1,5 @@
+config VENDOR_RK3566_DRIVER_RFKILL_RK
+	bool "rk3566 rf support"
+	default y
+	help
+		select y to support rk3566 rf

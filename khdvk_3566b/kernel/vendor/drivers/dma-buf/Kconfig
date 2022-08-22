@@ -1,0 +1,11 @@
+menu "VENDOR DMABUF options"
+
+config VENDOR_DMABUF_HEAPS
+     bool "DMA BUF HEAPS Drivers"
+     default y
+#	 select DMA_SHARED_BUFFER
+
+source "vendor/drivers/dma-buf/heaps/Kconfig"
+
+endmenu
+

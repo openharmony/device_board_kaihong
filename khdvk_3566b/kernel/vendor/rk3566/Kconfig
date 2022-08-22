@@ -1,0 +1,81 @@
+#
+# rk3566 driver configuration
+#
+
+config VENDOR_RK3566_DRIVER_MMC
+	bool "rk3566 soc drivers mmc"
+	default y
+if VENDOR_RK3566_DRIVER_MMC
+source "vendor/rk3566/mmc/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_REGULATOR
+	bool "rk3566 soc drivers regulator"
+	default y
+if VENDOR_RK3566_DRIVER_REGULATOR
+source "vendor/rk3566/regulator/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_PCI
+	bool "rk3566 soc drivers pci"
+	default y
+if VENDOR_RK3566_DRIVER_PCI
+source "vendor/rk3566/pci/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_INPUT
+	bool "rk3566 soc drivers input"
+	default y
+if VENDOR_RK3566_DRIVER_INPUT
+source "vendor/rk3566/input/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_STAGING
+	bool "rk3566 soc drivers staging"
+	default y
+if VENDOR_RK3566_DRIVER_STAGING
+source "vendor/rk3566/staging/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_NET
+	bool "rk3566 soc drivers net"
+	default y
+if VENDOR_RK3566_DRIVER_NET
+source "vendor/rk3566/net/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_DEVFREG
+	bool "rk3566 soc drivers cpu dev freg"
+	default y
+if VENDOR_RK3566_DRIVER_DEVFREG
+source "vendor/rk3566/devfreq/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_CPUFINFO
+	bool "rk3566 soc drivers cpu info"
+	default y
+if VENDOR_RK3566_DRIVER_CPUFINFO
+source "vendor/rk3566/rockchip/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_CPUFRQ
+	bool "rk3566 soc drivers cpufreg"
+	default y
+if VENDOR_RK3566_DRIVER_CPUFRQ
+source "vendor/rk3566/cpufreq/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_CLK
+	bool "rk3566 soc drivers clk"
+	default y
+if VENDOR_RK3566_DRIVER_CLK
+source "vendor/rk3566/clk/Kconfig"
+endif
+
+config VENDOR_RK3566_DRIVER_POWER
+	bool "Vendor Power Drivers"
+	default y
+
+source "vendor/rk3566/power/Kconfig"
+
+
