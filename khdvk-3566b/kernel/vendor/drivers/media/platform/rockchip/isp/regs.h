@@ -1960,3 +1960,72 @@ static inline void mi_raw0_set_addr(void __iomem *base, u32 val)
 {
 	writel(val, base + CIF_MI_RAW0_BASE_AD_INIT);
 }
+
+static inline void mi_mipi_raw0_enable(void __iomem *base)
+{
+	void __iomem *addr = base + CIF_MI_CTRL2;
+
+	writel(CIF_MI_CTRL2_MIPI_RAW0_ENABLE | readl(addr), addr);
+}
+
+static inline void mi_mipi_raw0_disable(void __iomem *base)
+{
+	void __iomem *addr = base + CIF_MI_CTRL2;
+
+	writel(~CIF_MI_CTRL2_MIPI_RAW0_ENABLE & readl(addr), addr);
+}
+
+static inline void mi_ctrl2(void __iomem *base, u32 val)
+{
+	writel(val, base + CIF_MI_CTRL2);
+}
+
+static inline void mi_dmarx_ready_enable(struct rkisp_stream *stream)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+	void __iomem *addr = base + CIF_MI_IMSC;
+
+	writel(CIF_MI_DMA_READY | readl(addr), addr);
+}
+
+static inline void mi_dmarx_ready_disable(struct rkisp_stream *stream)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+	void __iomem *addr = base + CIF_MI_IMSC;
+
+	writel(~CIF_MI_DMA_READY & readl(addr), addr);
+}
+
+static inline void dmarx_set_uv_swap(void __iomem *base)
+{
+	void __iomem *addr = base + CIF_MI_XTD_FORMAT_CTRL;
+	u32 reg = readl(addr) & ~BIT(2);
+
+	writel(reg | CIF_MI_XTD_FMT_CTRL_DMA_CB_CR_SWAP, addr);
+}
+
+static inline void dmarx_set_y_width(void __iomem *base, u32 val)
+{
+	writel(val, base + CIF_MI_DMA_Y_PIC_WIDTH);
+}
+
+static inline void dmarx_set_y_line_length(void __iomem *base, u32 val)
+{
+	writel(val, base + CIF_MI_DMA_Y_LLENGTH);
+}
+
+static inline void dmarx_ctrl(void __iomem *base, u32 val)
+{
+	void __iomem *addr = base + CIF_MI_DMA_CTRL;
+
+	writel(val | readl(addr), addr);
+}
+
+static inline void mi_dmarx_start(void __iomem *base)
+{
+	void __iomem *addr = base + CIF_MI_DMA_START;
+
+	writel(CIF_MI_DMA_START_ENABLE, addr);
+}
+
+#endif /* _RKISP_REGS_H */
