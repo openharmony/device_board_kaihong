@@ -2327,3 +2327,193 @@ static const struct regmap_range dw_dp_readable_ranges[] = {
 	regmap_reg_range(DPTX_PHYIF_CTRL, DPTX_PHYIF_PWRDOWN_CTRL),
 	regmap_reg_range(DPTX_AUX_CMD, DPTX_AUX_DATA3),
 	regmap_reg_range(DPTX_GENERAL_INTERRUPT, DPTX_HPD_INTERRUPT_ENABLE),
+};
+
+static const struct regmap_access_table dw_dp_readable_table = {
+	.yes_ranges     = dw_dp_readable_ranges,
+	.n_yes_ranges   = ARRAY_SIZE(dw_dp_readable_ranges),
+};
+
+static const struct regmap_config dw_dp_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.fast_io = true,
+	.max_register = DPTX_MAX_REGISTER,
+	.rd_table = &dw_dp_readable_table,
+};
+
+static int dw_dp_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct dw_dp *dp;
+	void __iomem *base;
+	int id, ret;
+
+	dp = devm_kzalloc(dev, sizeof(*dp), GFP_KERNEL);
+	if (!dp)
+		return -ENOMEM;
+
+	id = of_alias_get_id(dev->of_node, "dp");
+	if (id < 0)
+		id = 0;
+
+	dp->id = id;
+	dp->dev = dev;
+	dp->video.pixel_mode = DPTX_MP_QUAD_PIXEL;
+
+	mutex_init(&dp->irq_lock);
+	INIT_WORK(&dp->hpd_work, dw_dp_hpd_work);
+	init_completion(&dp->complete);
+
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	dp->regmap = devm_regmap_init_mmio(dev, base, &dw_dp_regmap_config);
+	if (IS_ERR(dp->regmap))
+		return dev_err_probe(dev, PTR_ERR(dp->regmap),
+				     "failed to create regmap\n");
+
+	dp->phy = devm_of_phy_get(dev, dev->of_node, NULL);
+	if (IS_ERR(dp->phy))
+		return dev_err_probe(dev, PTR_ERR(dp->phy),
+				     "failed to get phy\n");
+
+	ret = devm_clk_bulk_get_all(dev, &dp->clks);
+	if (ret < 1)
+		return dev_err_probe(dev, ret, "failed to get clocks\n");
+
+	dp->nr_clks = ret;
+
+	dp->rstc = devm_reset_control_get(dev, NULL);
+	if (IS_ERR(dp->rstc))
+		return dev_err_probe(dev, PTR_ERR(dp->rstc),
+				     "failed to get reset control\n");
+
+	dp->hpd_gpio = devm_gpiod_get_optional(dev, "hpd", GPIOD_IN);
+	if (IS_ERR(dp->hpd_gpio))
+		return dev_err_probe(dev, PTR_ERR(dp->hpd_gpio),
+				     "failed to get hpd GPIO\n");
+	if (dp->hpd_gpio) {
+		int hpd_irq = gpiod_to_irq(dp->hpd_gpio);
+
+		ret = devm_request_threaded_irq(dev, hpd_irq, NULL,
+						dw_dp_hpd_irq_handler,
+						IRQF_TRIGGER_RISING |
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT, "dw-dp-hpd", dp);
+		if (ret) {
+			dev_err(dev, "failed to request HPD interrupt\n");
+			return ret;
+		}
+	}
+
+	dp->irq = platform_get_irq(pdev, 0);
+	if (dp->irq < 0)
+		return dp->irq;
+
+	irq_set_status_flags(dp->irq, IRQ_NOAUTOEN);
+	ret = devm_request_threaded_irq(dev, dp->irq, NULL, dw_dp_irq_handler,
+					IRQF_ONESHOT, dev_name(dev), dp);
+	if (ret) {
+		dev_err(dev, "failed to request irq: %d\n", ret);
+		return ret;
+	}
+
+	ret = dw_dp_register_audio_driver(dp);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(dev, dw_dp_unregister_audio_driver, dp);
+	if (ret)
+		return ret;
+
+	dp->aux.dev = dev;
+	dp->aux.name = dev_name(dev);
+	dp->aux.transfer = dw_dp_aux_transfer;
+	ret = drm_dp_aux_register(&dp->aux);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(dev, dw_dp_aux_unregister, dp);
+	if (ret)
+		return ret;
+
+	dp->bridge.of_node = dev->of_node;
+	dp->bridge.funcs = &dw_dp_bridge_funcs;
+	dp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
+			 DRM_BRIDGE_OP_HPD;
+	dp->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
+
+	platform_set_drvdata(pdev, dp);
+
+	if (device_property_read_bool(dev, "split-mode")) {
+		struct dw_dp *secondary = dw_dp_find_by_id(dev->driver, !dp->id);
+
+		if (!secondary)
+			return -EPROBE_DEFER;
+
+		dp->right = secondary;
+		dp->split_mode = true;
+		secondary->left = dp;
+		secondary->split_mode = true;
+	}
+
+	return component_add(dev, &dw_dp_component_ops);
+}
+
+static int dw_dp_remove(struct platform_device *pdev)
+{
+	struct dw_dp *dp = platform_get_drvdata(pdev);
+
+	component_del(dp->dev, &dw_dp_component_ops);
+	cancel_work_sync(&dp->hpd_work);
+
+	return 0;
+}
+
+static int __maybe_unused dw_dp_runtime_suspend(struct device *dev)
+{
+	struct dw_dp *dp = dev_get_drvdata(dev);
+
+	clk_bulk_disable_unprepare(dp->nr_clks, dp->clks);
+
+	return 0;
+}
+
+static int __maybe_unused dw_dp_runtime_resume(struct device *dev)
+{
+	struct dw_dp *dp = dev_get_drvdata(dev);
+	int ret;
+
+	ret = clk_bulk_prepare_enable(dp->nr_clks, dp->clks);
+	if (ret)
+		return ret;
+
+	reset_control_assert(dp->rstc);
+	usleep_range(10, 20);
+	reset_control_deassert(dp->rstc);
+
+	return 0;
+}
+
+static const struct dev_pm_ops dw_dp_pm_ops = {
+	SET_RUNTIME_PM_OPS(dw_dp_runtime_suspend, dw_dp_runtime_resume, NULL)
+};
+
+static const struct of_device_id dw_dp_of_match[] = {
+	{ .compatible = "rockchip,rk3588-dp", },
+	{}
+};
+MODULE_DEVICE_TABLE(of, dw_dp_of_match);
+
+struct platform_driver dw_dp_driver = {
+	.probe	= dw_dp_probe,
+	.remove = dw_dp_remove,
+	.driver = {
+		.name = "dw-dp",
+		.of_match_table = dw_dp_of_match,
+		.pm = &dw_dp_pm_ops,
+	},
+};
