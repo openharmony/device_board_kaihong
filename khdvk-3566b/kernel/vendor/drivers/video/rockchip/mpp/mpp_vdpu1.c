@@ -413,3 +413,464 @@ static int vdpu_run(struct mpp_dev *mpp,
 	return 0;
 }
 
+static int vdpu_finish(struct mpp_dev *mpp,
+		       struct mpp_task *mpp_task)
+{
+	u32 i;
+	u32 s, e;
+	u32 dec_get;
+	s32 dec_length;
+	struct mpp_request *req;
+	struct vdpu_task *task = to_vdpu_task(mpp_task);
+
+	mpp_debug_enter();
+
+	/* read register after running */
+	for (i = 0; i < task->r_req_cnt; i++) {
+		req = &task->r_reqs[i];
+		s = req->offset / sizeof(u32);
+		e = s + req->size / sizeof(u32);
+		mpp_read_req(mpp, task->reg, s, e);
+	}
+	/* revert hack for irq status */
+	task->reg[VDPU1_REG_DEC_INT_EN_INDEX] = task->irq_status;
+	/* revert hack for decoded length */
+	dec_get = mpp_read_relaxed(mpp, VDPU1_REG_STREAM_RLC_BASE);
+	dec_length = dec_get - task->strm_addr;
+	task->reg[VDPU1_REG_STREAM_RLC_BASE_INDEX] = dec_length << 10;
+	mpp_debug(DEBUG_REGISTER,
+		  "dec_get %08x dec_length %d\n", dec_get, dec_length);
+
+	mpp_debug_leave();
+
+	return 0;
+}
+
+static int vdpu_result(struct mpp_dev *mpp,
+		       struct mpp_task *mpp_task,
+		       struct mpp_task_msgs *msgs)
+{
+	u32 i;
+	struct mpp_request *req;
+	struct vdpu_task *task = to_vdpu_task(mpp_task);
+
+	/* FIXME may overflow the kernel */
+	for (i = 0; i < task->r_req_cnt; i++) {
+		req = &task->r_reqs[i];
+
+		if (copy_to_user(req->data,
+				 (u8 *)task->reg + req->offset,
+				 req->size)) {
+			mpp_err("copy_to_user reg fail\n");
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+static int vdpu_free_task(struct mpp_session *session,
+			  struct mpp_task *mpp_task)
+{
+	struct vdpu_task *task = to_vdpu_task(mpp_task);
+
+	mpp_task_finalize(session, mpp_task);
+	kfree(task);
+
+	return 0;
+}
+
+#ifdef CONFIG_ROCKCHIP_MPP_PROC_FS
+static int vdpu_procfs_remove(struct mpp_dev *mpp)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	if (dec->procfs) {
+		proc_remove(dec->procfs);
+		dec->procfs = NULL;
+	}
+
+	return 0;
+}
+
+static int vdpu_procfs_init(struct mpp_dev *mpp)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	dec->procfs = proc_mkdir(mpp->dev->of_node->name, mpp->srv->procfs);
+	if (IS_ERR_OR_NULL(dec->procfs)) {
+		mpp_err("failed on open procfs\n");
+		dec->procfs = NULL;
+		return -EIO;
+	}
+	mpp_procfs_create_u32("aclk", 0644,
+			      dec->procfs, &dec->aclk_info.debug_rate_hz);
+	mpp_procfs_create_u32("session_buffers", 0644,
+			      dec->procfs, &mpp->session_max_buffers);
+
+	return 0;
+}
+#else
+static inline int vdpu_procfs_remove(struct mpp_dev *mpp)
+{
+	return 0;
+}
+
+static inline int vdpu_procfs_init(struct mpp_dev *mpp)
+{
+	return 0;
+}
+#endif
+
+static int vdpu_init(struct mpp_dev *mpp)
+{
+	int ret;
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	mpp->grf_info = &mpp->srv->grf_infos[MPP_DRIVER_VDPU1];
+
+	/* Get clock info from dtsi */
+	ret = mpp_get_clk_info(mpp, &dec->aclk_info, "aclk_vcodec");
+	if (ret)
+		mpp_err("failed on clk_get aclk_vcodec\n");
+	ret = mpp_get_clk_info(mpp, &dec->hclk_info, "hclk_vcodec");
+	if (ret)
+		mpp_err("failed on clk_get hclk_vcodec\n");
+	/* Set default rates */
+	mpp_set_clk_info_rate_hz(&dec->aclk_info, CLK_MODE_DEFAULT, 300 * MHZ);
+
+	/* Get reset control from dtsi */
+	dec->rst_a = mpp_reset_control_get(mpp, RST_TYPE_A, "video_a");
+	if (!dec->rst_a)
+		mpp_err("No aclk reset resource define\n");
+	dec->rst_h = mpp_reset_control_get(mpp, RST_TYPE_H, "video_h");
+	if (!dec->rst_h)
+		mpp_err("No hclk reset resource define\n");
+
+	return 0;
+}
+
+static int vdpu_clk_on(struct mpp_dev *mpp)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	mpp_clk_safe_enable(dec->aclk_info.clk);
+	mpp_clk_safe_enable(dec->hclk_info.clk);
+
+	return 0;
+}
+
+static int vdpu_clk_off(struct mpp_dev *mpp)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	mpp_clk_safe_disable(dec->aclk_info.clk);
+	mpp_clk_safe_disable(dec->hclk_info.clk);
+
+	return 0;
+}
+
+static int vdpu_3288_get_freq(struct mpp_dev *mpp,
+			      struct mpp_task *mpp_task)
+{
+	u32 width;
+	struct vdpu_task *task = to_vdpu_task(mpp_task);
+
+	width = VDPU1_GET_WIDTH(task->reg[VDPU1_RGE_WIDTH_INDEX]);
+	if (width > 2560)
+		task->clk_mode = CLK_MODE_ADVANCED;
+
+	return 0;
+}
+
+static int vdpu_3368_get_freq(struct mpp_dev *mpp,
+			      struct mpp_task *mpp_task)
+{
+	u32 width;
+	struct vdpu_task *task = to_vdpu_task(mpp_task);
+
+	width = VDPU1_GET_WIDTH(task->reg[VDPU1_RGE_WIDTH_INDEX]);
+	if (width > 2560)
+		task->clk_mode = CLK_MODE_ADVANCED;
+
+	return 0;
+}
+
+static int vdpu_set_freq(struct mpp_dev *mpp,
+			 struct mpp_task *mpp_task)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+	struct vdpu_task *task = to_vdpu_task(mpp_task);
+
+	mpp_clk_set_rate(&dec->aclk_info, task->clk_mode);
+
+	return 0;
+}
+
+static int vdpu_reduce_freq(struct mpp_dev *mpp)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	mpp_clk_set_rate(&dec->aclk_info, CLK_MODE_REDUCE);
+
+	return 0;
+}
+
+static int vdpu_irq(struct mpp_dev *mpp)
+{
+	mpp->irq_status = mpp_read(mpp, VDPU1_REG_DEC_INT_EN);
+	if (!(mpp->irq_status & VDPU1_DEC_INT_RAW))
+		return IRQ_NONE;
+
+	mpp_write(mpp, VDPU1_REG_DEC_INT_EN, 0);
+	/* set clock gating to save power */
+	mpp_write(mpp, VDPU1_REG_DEC_EN, VDPU1_CLOCK_GATE_EN);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static int vdpu_isr(struct mpp_dev *mpp)
+{
+	u32 err_mask;
+	struct vdpu_task *task = NULL;
+	struct mpp_task *mpp_task = mpp->cur_task;
+
+	/* FIXME use a spin lock here */
+	if (!mpp_task) {
+		dev_err(mpp->dev, "no current task\n");
+		return IRQ_HANDLED;
+	}
+	mpp_time_diff(mpp_task);
+	mpp->cur_task = NULL;
+	task = to_vdpu_task(mpp_task);
+	task->irq_status = mpp->irq_status;
+	mpp_debug(DEBUG_IRQ_STATUS, "irq_status: %08x\n",
+		  task->irq_status);
+
+	err_mask = VDPU1_INT_TIMEOUT
+		| VDPU1_INT_STRM_ERROR
+		| VDPU1_INT_ASO_ERROR
+		| VDPU1_INT_BUF_EMPTY
+		| VDPU1_INT_BUS_ERROR;
+
+	if (err_mask & task->irq_status)
+		atomic_inc(&mpp->reset_request);
+
+	mpp_task_finish(mpp_task->session, mpp_task);
+
+	mpp_debug_leave();
+
+	return IRQ_HANDLED;
+}
+
+static int vdpu_reset(struct mpp_dev *mpp)
+{
+	struct vdpu_dev *dec = to_vdpu_dev(mpp);
+
+	if (dec->rst_a && dec->rst_h) {
+		mpp_debug(DEBUG_RESET, "reset in\n");
+
+		/* Don't skip this or iommu won't work after reset */
+		rockchip_pmu_idle_request(mpp->dev, true);
+		mpp_safe_reset(dec->rst_a);
+		mpp_safe_reset(dec->rst_h);
+		udelay(5);
+		mpp_safe_unreset(dec->rst_a);
+		mpp_safe_unreset(dec->rst_h);
+		rockchip_pmu_idle_request(mpp->dev, false);
+
+		mpp_debug(DEBUG_RESET, "reset out\n");
+	}
+	mpp_write(mpp, VDPU1_REG_DEC_INT_EN, 0);
+
+	return 0;
+}
+
+static struct mpp_hw_ops vdpu_v1_hw_ops = {
+	.init = vdpu_init,
+	.clk_on = vdpu_clk_on,
+	.clk_off = vdpu_clk_off,
+	.set_freq = vdpu_set_freq,
+	.reduce_freq = vdpu_reduce_freq,
+	.reset = vdpu_reset,
+};
+
+static struct mpp_hw_ops vdpu_3288_hw_ops = {
+	.init = vdpu_init,
+	.clk_on = vdpu_clk_on,
+	.clk_off = vdpu_clk_off,
+	.get_freq = vdpu_3288_get_freq,
+	.set_freq = vdpu_set_freq,
+	.reduce_freq = vdpu_reduce_freq,
+	.reset = vdpu_reset,
+};
+
+static struct mpp_hw_ops vdpu_3368_hw_ops = {
+	.init = vdpu_init,
+	.clk_on = vdpu_clk_on,
+	.clk_off = vdpu_clk_off,
+	.get_freq = vdpu_3368_get_freq,
+	.set_freq = vdpu_set_freq,
+	.reduce_freq = vdpu_reduce_freq,
+	.reset = vdpu_reset,
+};
+
+static struct mpp_dev_ops vdpu_v1_dev_ops = {
+	.alloc_task = vdpu_alloc_task,
+	.run = vdpu_run,
+	.irq = vdpu_irq,
+	.isr = vdpu_isr,
+	.finish = vdpu_finish,
+	.result = vdpu_result,
+	.free_task = vdpu_free_task,
+};
+
+static const struct mpp_dev_var vdpu_v1_data = {
+	.device_type = MPP_DEVICE_VDPU1,
+	.hw_info = &vdpu_v1_hw_info,
+	.trans_info = vdpu_v1_trans,
+	.hw_ops = &vdpu_v1_hw_ops,
+	.dev_ops = &vdpu_v1_dev_ops,
+};
+
+static const struct mpp_dev_var vdpu_3288_data = {
+	.device_type = MPP_DEVICE_VDPU1,
+	.hw_info = &vdpu_v1_hw_info,
+	.trans_info = vdpu_v1_trans,
+	.hw_ops = &vdpu_3288_hw_ops,
+	.dev_ops = &vdpu_v1_dev_ops,
+};
+
+static const struct mpp_dev_var vdpu_3368_data = {
+	.device_type = MPP_DEVICE_VDPU1,
+	.hw_info = &vdpu_v1_hw_info,
+	.trans_info = vdpu_v1_trans,
+	.hw_ops = &vdpu_3368_hw_ops,
+	.dev_ops = &vdpu_v1_dev_ops,
+};
+
+static const struct mpp_dev_var avsd_plus_data = {
+	.device_type = MPP_DEVICE_AVSPLUS_DEC,
+	.hw_info = &vdpu_v1_hw_info,
+	.trans_info = vdpu_v1_trans,
+	.hw_ops = &vdpu_v1_hw_ops,
+	.dev_ops = &vdpu_v1_dev_ops,
+};
+
+static const struct of_device_id mpp_vdpu1_dt_match[] = {
+	{
+		.compatible = "rockchip,vpu-decoder-v1",
+		.data = &vdpu_v1_data,
+	},
+#ifdef CONFIG_CPU_RK3288
+	{
+		.compatible = "rockchip,vpu-decoder-rk3288",
+		.data = &vdpu_3288_data,
+	},
+#endif
+#ifdef CONFIG_CPU_RK3368
+	{
+		.compatible = "rockchip,vpu-decoder-rk3368",
+		.data = &vdpu_3368_data,
+	},
+#endif
+#ifdef CONFIG_CPU_RK3328
+	{
+		.compatible = "rockchip,avs-plus-decoder",
+		.data = &avsd_plus_data,
+	},
+#endif
+	{},
+};
+
+static int vdpu_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct vdpu_dev *dec = NULL;
+	struct mpp_dev *mpp = NULL;
+	const struct of_device_id *match = NULL;
+	int ret = 0;
+
+	dev_info(dev, "probe device\n");
+	dec = devm_kzalloc(dev, sizeof(struct vdpu_dev), GFP_KERNEL);
+	if (!dec)
+		return -ENOMEM;
+	platform_set_drvdata(pdev, dec);
+
+	mpp = &dec->mpp;
+	if (pdev->dev.of_node) {
+		match = of_match_node(mpp_vdpu1_dt_match, pdev->dev.of_node);
+		if (match)
+			mpp->var = (struct mpp_dev_var *)match->data;
+	}
+
+	ret = mpp_dev_probe(mpp, pdev);
+	if (ret) {
+		dev_err(dev, "probe sub driver failed\n");
+		return -EINVAL;
+	}
+
+	ret = devm_request_threaded_irq(dev, mpp->irq,
+					mpp_dev_irq,
+					mpp_dev_isr_sched,
+					IRQF_SHARED,
+					dev_name(dev), mpp);
+	if (ret) {
+		dev_err(dev, "register interrupter runtime failed\n");
+		return -EINVAL;
+	}
+
+	if (mpp->var->device_type == MPP_DEVICE_VDPU1) {
+		mpp->srv->sub_devices[MPP_DEVICE_VDPU1_PP] = mpp;
+		set_bit(MPP_DEVICE_VDPU1_PP, &mpp->srv->hw_support);
+	}
+
+	mpp->session_max_buffers = VDPU1_SESSION_MAX_BUFFERS;
+	vdpu_procfs_init(mpp);
+	/* register current device to mpp service */
+	mpp_dev_register_srv(mpp, mpp->srv);
+	dev_info(dev, "probing finish\n");
+
+	return 0;
+}
+
+static int vdpu_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct vdpu_dev *dec = platform_get_drvdata(pdev);
+
+	dev_info(dev, "remove device\n");
+	mpp_dev_remove(&dec->mpp);
+	vdpu_procfs_remove(&dec->mpp);
+
+	return 0;
+}
+
+static void vdpu_shutdown(struct platform_device *pdev)
+{
+	int ret;
+	int val;
+	struct device *dev = &pdev->dev;
+	struct vdpu_dev *dec = platform_get_drvdata(pdev);
+	struct mpp_dev *mpp = &dec->mpp;
+
+	dev_info(dev, "shutdown device\n");
+
+	atomic_inc(&mpp->srv->shutdown_request);
+	ret = readx_poll_timeout(atomic_read,
+				 &mpp->task_count,
+				 val, val == 0, 20000, 200000);
+	if (ret == -ETIMEDOUT)
+		dev_err(dev, "wait total running time out\n");
+}
+
+struct platform_driver rockchip_vdpu1_driver = {
+	.probe = vdpu_probe,
+	.remove = vdpu_remove,
+	.shutdown = vdpu_shutdown,
+	.driver = {
+		.name = VDPU1_DRIVER_NAME,
+		.of_match_table = of_match_ptr(mpp_vdpu1_dt_match),
+	},
+};
+EXPORT_SYMBOL(rockchip_vdpu1_driver);
