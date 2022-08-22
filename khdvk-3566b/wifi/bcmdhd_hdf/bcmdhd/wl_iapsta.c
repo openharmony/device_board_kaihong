@@ -4769,3 +4769,526 @@ wl_ext_iapsta_config(struct net_device *dev, char *command, int total_len)
 
 	return ret;
 }
+
+int
+wl_ext_isam_init(struct net_device *dev, char *command, int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	char *pch, *pick_tmp, *pick_tmp2, *param;
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	int i;
+
+	if (apsta_params->init) {
+		IAPSTA_ERROR(dev->name, "don't init twice\n");
+		return -1;
+	}
+	IAPSTA_TRACE(dev->name, "command=%s, len=%d\n", command, total_len);
+
+	pick_tmp = command;
+	param = bcmstrtok(&pick_tmp, " ", 0); // skip iapsta_init
+	param = bcmstrtok(&pick_tmp, " ", 0);
+	while (param != NULL) {
+		pick_tmp2 = bcmstrtok(&pick_tmp, " ", 0);
+		if (!pick_tmp2) {
+			IAPSTA_ERROR(dev->name, "wrong param %s\n", param);
+			return -1;
+		}
+		if (!strcmp(param, "mode")) {
+			pch = NULL;
+			if (!strcmp(pick_tmp2, "sta")) {
+				apsta_params->apstamode = ISTAONLY_MODE;
+			} else if (!strcmp(pick_tmp2, "ap")) {
+				apsta_params->apstamode = IAPONLY_MODE;
+			} else if (!strcmp(pick_tmp2, "sta-ap")) {
+				apsta_params->apstamode = ISTAAP_MODE;
+			} else if (!strcmp(pick_tmp2, "sta-sta")) {
+				apsta_params->apstamode = ISTASTA_MODE;
+				apsta_params->vsdb = TRUE;
+			} else if (!strcmp(pick_tmp2, "ap-ap")) {
+				apsta_params->apstamode = IDUALAP_MODE;
+			} else if (!strcmp(pick_tmp2, "sta-ap-ap")) {
+				apsta_params->apstamode = ISTAAPAP_MODE;
+			} else if (!strcmp(pick_tmp2, "apsta")) {
+				apsta_params->apstamode = ISTAAP_MODE;
+				apsta_params->if_info[IF_PIF].ifmode = ISTA_MODE;
+				apsta_params->if_info[IF_VIF].ifmode = IAP_MODE;
+			} else if (!strcmp(pick_tmp2, "dualap")) {
+				apsta_params->apstamode = IDUALAP_MODE;
+				apsta_params->if_info[IF_PIF].ifmode = IAP_MODE;
+				apsta_params->if_info[IF_VIF].ifmode = IAP_MODE;
+			} else if (!strcmp(pick_tmp2, "sta-go") ||
+					!strcmp(pick_tmp2, "gosta")) {
+				if (!FW_SUPPORTED(dhd, p2p)) {
+					return -1;
+				}
+				apsta_params->apstamode = ISTAGO_MODE;
+				apsta_params->if_info[IF_PIF].ifmode = ISTA_MODE;
+				apsta_params->if_info[IF_VIF].ifmode = IAP_MODE;
+#ifdef WLMESH
+			} else if (!strcmp(pick_tmp2, "mesh")) {
+				apsta_params->apstamode = IMESHONLY_MODE;
+			} else if (!strcmp(pick_tmp2, "sta-mesh")) {
+				apsta_params->apstamode = ISTAMESH_MODE;
+			} else if (!strcmp(pick_tmp2, "sta-ap-mesh")) {
+				apsta_params->apstamode = ISTAAPMESH_MODE;
+			} else if (!strcmp(pick_tmp2, "mesh-ap")) {
+				apsta_params->apstamode = IMESHAP_MODE;
+			} else if (!strcmp(pick_tmp2, "mesh-ap-ap")) {
+				apsta_params->apstamode = IMESHAPAP_MODE;
+#endif /* WLMESH */
+			} else {
+				IAPSTA_ERROR(dev->name, "mode [sta|ap|sta-ap|ap-ap]\n");
+				return -1;
+			}
+			pch = bcmstrtok(&pick_tmp2, " -", 0);
+			for (i=0; i<MAX_IF_NUM && pch; i++) {
+				if (!strcmp(pch, "sta"))
+					apsta_params->if_info[i].ifmode = ISTA_MODE;
+				else if (!strcmp(pch, "ap"))
+					apsta_params->if_info[i].ifmode = IAP_MODE;
+#ifdef WLMESH
+				else if (!strcmp(pch, "mesh")) {
+					if (dhd->conf->fw_type != FW_TYPE_MESH) {
+						IAPSTA_ERROR(dev->name, "wrong fw type\n");
+						return -1;
+					}
+					apsta_params->if_info[i].ifmode = IMESH_MODE;
+				}
+#endif /* WLMESH */
+				pch = bcmstrtok(&pick_tmp2, " -", 0);
+			}
+		}
+		else if (!strcmp(param, "rsdb")) {
+			apsta_params->rsdb = (int)simple_strtol(pick_tmp2, NULL, 0);
+		} else if (!strcmp(param, "vsdb")) {
+			if (!strcmp(pick_tmp2, "y")) {
+				apsta_params->vsdb = TRUE;
+			} else if (!strcmp(pick_tmp2, "n")) {
+				apsta_params->vsdb = FALSE;
+			} else {
+				IAPSTA_ERROR(dev->name, "vsdb [y|n]\n");
+				return -1;
+			}
+		} else if (!strcmp(param, "csa")) {
+			apsta_params->csa = (int)simple_strtol(pick_tmp2, NULL, 0);
+		} else if (!strcmp(param, "acs")) {
+			apsta_params->acs = (int)simple_strtol(pick_tmp2, NULL, 0);
+#if defined(WLMESH) && defined(WL_ESCAN)
+		} else if (!strcmp(param, "macs")) {
+			apsta_params->macs = (int)simple_strtol(pick_tmp2, NULL, 0);
+#endif /* WLMESH && WL_ESCAN */
+		} else if (!strcmp(param, "ifname")) {
+			pch = NULL;
+			pch = bcmstrtok(&pick_tmp2, " -", 0);
+			for (i=0; i<MAX_IF_NUM && pch; i++) {
+				strcpy(apsta_params->if_info[i].ifname, pch);
+				pch = bcmstrtok(&pick_tmp2, " -", 0);
+			}
+		} else if (!strcmp(param, "vifname")) {
+			strcpy(apsta_params->if_info[IF_VIF].ifname, pick_tmp2);
+		}
+		param = bcmstrtok(&pick_tmp, " ", 0);
+	}
+
+	if (apsta_params->apstamode == 0) {
+		IAPSTA_ERROR(dev->name, "mode [sta|ap|sta-ap|ap-ap]\n");
+		return -1;
+	}
+
+	wl_ext_iapsta_preinit(dev, apsta_params);
+#ifndef WL_STATIC_IF
+	wl_ext_iapsta_intf_add(dev, apsta_params);
+#endif /* WL_STATIC_IF */
+
+	return 0;
+}
+
+int
+wl_ext_iapsta_alive_preinit(struct net_device *dev)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+
+	if (apsta_params->init == TRUE) {
+		IAPSTA_ERROR(dev->name, "don't init twice\n");
+		return -1;
+	}
+
+	IAPSTA_TRACE(dev->name, "Enter\n");
+
+	apsta_params->init = TRUE;
+
+	return 0;
+}
+
+int
+wl_ext_iapsta_alive_postinit(struct net_device *dev)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	s32 apsta = 0, ap = 0;
+	struct wl_if_info *cur_if;
+	int i;
+
+	wl_ext_iovar_getint(dev, "apsta", &apsta);
+	wl_ext_ioctl(dev, WLC_GET_AP, &ap, sizeof(ap), 0);
+	if (apsta == 1 || ap == 0) {
+		apsta_params->apstamode = ISTAONLY_MODE;
+		apsta_params->if_info[IF_PIF].ifmode = ISTA_MODE;
+		op_mode = DHD_FLAG_STA_MODE;
+	} else {
+		apsta_params->apstamode = IAPONLY_MODE;
+		apsta_params->if_info[IF_PIF].ifmode = IAP_MODE;
+		op_mode = DHD_FLAG_HOSTAP_MODE;
+	}
+	// fix me: how to check it's ISTAAP_MODE or IDUALAP_MODE?
+
+	wl_ext_get_ioctl_ver(dev, &apsta_params->ioctl_ver);
+	WL_MSG(dev->name, "apstamode=%d\n", apsta_params->apstamode);
+
+	for (i=0; i<MAX_IF_NUM; i++) {
+		cur_if = &apsta_params->if_info[i];
+		if (i == 1 && !strlen(cur_if->ifname))
+			strcpy(cur_if->ifname, "wlan1");
+		if (i == 2 && !strlen(cur_if->ifname))
+			strcpy(cur_if->ifname, "wlan2");
+		if (cur_if->ifmode == ISTA_MODE) {
+			cur_if->channel = 0;
+			cur_if->maxassoc = -1;
+			wl_set_isam_status(cur_if, IF_READY);
+			cur_if->prio = PRIO_STA;
+			cur_if->vsdb = TRUE;
+			cur_if->prefix = 'S';
+			snprintf(cur_if->ssid, DOT11_MAX_SSID_LEN, "ttt_sta");
+		}
+		else if (cur_if->ifmode == IAP_MODE) {
+			cur_if->channel = 1;
+			cur_if->maxassoc = -1;
+			wl_set_isam_status(cur_if, IF_READY);
+			cur_if->prio = PRIO_AP;
+			cur_if->vsdb = FALSE;
+			cur_if->prefix = 'A';
+			snprintf(cur_if->ssid, DOT11_MAX_SSID_LEN, "ttt_ap");
+		}
+#ifdef WLMESH
+		else if (cur_if->ifmode == IMESH_MODE) {
+			cur_if->channel = 1;
+			cur_if->maxassoc = -1;
+			wl_set_isam_status(cur_if, IF_READY);
+			cur_if->prio = PRIO_MESH;
+			cur_if->vsdb = FALSE;
+			cur_if->prefix = 'M';
+			snprintf(cur_if->ssid, DOT11_MAX_SSID_LEN, "ttt_mesh");
+		}
+#endif /* WLMESH */
+	}
+
+	return op_mode;
+}
+
+static int
+wl_ext_iapsta_get_rsdb(struct net_device *net, struct dhd_pub *dhd)
+{
+	s8 iovar_buf[WLC_IOCTL_SMLEN];
+	wl_config_t *rsdb_p;
+	int ret = 0, rsdb = 0;
+
+	if (dhd->conf->chip == BCM4359_CHIP_ID || dhd->conf->chip == BCM4375_CHIP_ID) {
+		ret = wldev_iovar_getbuf(net, "rsdb_mode", NULL, 0,
+			iovar_buf, WLC_IOCTL_SMLEN, NULL);
+		if (!ret) {
+			if (dhd->conf->fw_type == FW_TYPE_MESH) {
+				rsdb = 1;
+			} else {
+				rsdb_p = (wl_config_t *) iovar_buf;
+				if (dhd->conf->chip == BCM4375_CHIP_ID)
+					rsdb = rsdb_p->status;
+				else
+					rsdb = rsdb_p->config;
+				IAPSTA_INFO(net->name, "config=%d, status=%d\n",
+					rsdb_p->config, rsdb_p->status);
+			}
+		}
+	}
+
+	IAPSTA_INFO(net->name, "rsdb_mode=%d\n", rsdb);
+
+	return rsdb;
+}
+
+static void
+wl_ext_iapsta_postinit(struct net_device *net, struct wl_if_info *cur_if)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	int pm;
+
+	IAPSTA_TRACE(cur_if->ifname, "ifidx=%d\n", cur_if->ifidx);
+	if (cur_if->ifidx == 0) {
+		apsta_params->rsdb = wl_ext_iapsta_get_rsdb(net, dhd);
+		apsta_params->vsdb = FALSE;
+		apsta_params->csa = 0;
+		apsta_params->acs = 0;
+		apsta_params->radar = wl_ext_radar_detect(net);
+		if (dhd->conf->fw_type == FW_TYPE_MESH) {
+			apsta_params->csa |= (CSA_FW_BIT | CSA_DRV_BIT);
+		}
+		if (dhd->conf->vndr_ie_assocreq && strlen(dhd->conf->vndr_ie_assocreq))
+			wl_ext_add_del_ie(net, VNDR_IE_ASSOCREQ_FLAG, dhd->conf->vndr_ie_assocreq, "add");
+	} else {
+		if (cur_if->ifmode == ISTA_MODE) {
+			wl_ext_iovar_setint(cur_if->dev, "roam_off", dhd->conf->roam_off);
+			wl_ext_iovar_setint(cur_if->dev, "bcn_timeout", dhd->conf->bcn_timeout);
+			if (dhd->conf->pm >= 0)
+				pm = dhd->conf->pm;
+			else
+				pm = PM_FAST;
+			wl_ext_ioctl(cur_if->dev, WLC_SET_PM, &pm, sizeof(pm), 1);
+			wl_ext_iovar_setint(cur_if->dev, "assoc_retry_max", 10);
+		}
+#ifdef WLMESH
+		else if (cur_if->ifmode == IMESH_MODE) {
+			pm = 0;
+			wl_ext_ioctl(cur_if->dev, WLC_SET_PM, &pm, sizeof(pm), 1);
+		}
+#endif /* WLMESH */
+	}
+#ifdef PROPTX_MAXCOUNT
+	wl_ext_update_wlfc_maxcount(dhd);
+#endif /* PROPTX_MAXCOUNT */
+
+}
+
+void
+wl_ext_iapsta_get_vif_macaddr(struct dhd_pub *dhd, int ifidx, u8 *mac_addr)
+{
+	if (ifidx >= 2) {
+		IAPSTA_TRACE("wlan", "ifidx=%d\n", ifidx);
+		mac_addr[0] |= 0x02;
+		mac_addr[4] ^= 0x80;
+		mac_addr[4] += ifidx;
+		mac_addr[5] += (ifidx-1);
+	}
+}
+
+int
+wl_ext_iapsta_attach_name(struct net_device *net, int ifidx)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	struct wl_if_info *cur_if = NULL;
+
+	if (ifidx < MAX_IF_NUM) {
+		IAPSTA_TRACE(net->name, "ifidx=%d\n", ifidx);
+		cur_if = &apsta_params->if_info[ifidx];
+	}
+	if (ifidx == 0) {
+		strcpy(cur_if->ifname, net->name);
+		wl_ext_iapsta_postinit(net, cur_if);
+		wl_set_isam_status(cur_if, IF_READY);
+	} else if (cur_if && wl_get_isam_status(cur_if, IF_ADDING)) {
+		strcpy(cur_if->ifname, net->name);
+		wl_ext_iapsta_postinit(net, cur_if);
+		wl_clr_isam_status(cur_if, IF_ADDING);
+		wl_set_isam_status(cur_if, IF_READY);
+#ifndef WL_STATIC_IF
+		wake_up_interruptible(&apsta_params->netif_change_event);
+#endif /* WL_STATIC_IF */
+	}
+
+	return 0;
+}
+
+int
+wl_ext_iapsta_update_net_device(struct net_device *net, int ifidx)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	struct wl_if_info *cur_if = NULL, *primary_if;
+
+	if (ifidx < MAX_IF_NUM) {
+		IAPSTA_TRACE(net->name, "ifidx=%d\n", ifidx);
+		cur_if = &apsta_params->if_info[ifidx];
+	}
+	if (cur_if && wl_get_isam_status(cur_if, IF_ADDING)) {
+		primary_if = &apsta_params->if_info[IF_PIF];
+		if (strlen(cur_if->ifname)) {
+			memset(net->name, 0, sizeof(IFNAMSIZ));
+			strcpy(net->name, cur_if->ifname);
+			net->name[IFNAMSIZ-1] = '\0';
+		}
+#ifndef WL_STATIC_IF
+		if (apsta_params->apstamode != IUNKNOWN_MODE &&
+				apsta_params->apstamode != ISTAAPAP_MODE &&
+				apsta_params->apstamode != ISTASTA_MODE) {
+			memcpy(net->dev_addr, primary_if->dev->dev_addr, ETHER_ADDR_LEN);
+			net->dev_addr[0] |= 0x02;
+			wl_ext_iapsta_get_vif_macaddr(dhd, ifidx, net->dev_addr);
+		}
+#endif /* WL_STATIC_IF */
+	}
+
+	return 0;
+}
+
+int
+wl_ext_iapsta_attach_netdev(struct net_device *net, int ifidx, uint8 bssidx)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	struct wl_if_info *cur_if = NULL, *primary_if;
+
+	if (ifidx < MAX_IF_NUM) {
+		IAPSTA_TRACE(net->name, "ifidx=%d, bssidx=%d\n", ifidx, bssidx);
+		cur_if = &apsta_params->if_info[ifidx];
+	}
+	if (ifidx == 0) {
+		memset(apsta_params, 0, sizeof(struct wl_apsta_params));
+		apsta_params->dhd = dhd;
+		cur_if->dev = net;
+		cur_if->ifidx = ifidx;
+		cur_if->bssidx = bssidx;
+		cur_if->ifmode = ISTA_MODE;
+		cur_if->prio = PRIO_STA;
+		cur_if->vsdb = TRUE;
+		cur_if->prefix = 'S';
+		wl_ext_event_register(net, dhd, WLC_E_LAST, wl_ext_iapsta_event,
+			apsta_params, PRIO_EVENT_IAPSTA);
+		strcpy(cur_if->ifname, net->name);
+		init_waitqueue_head(&apsta_params->netif_change_event);
+		init_waitqueue_head(&apsta_params->ap_recon_sta_event);
+		mutex_init(&apsta_params->usr_sync);
+		mutex_init(&apsta_params->in4way_sync);
+		mutex_init(&cur_if->pm_sync);
+#ifdef TPUT_MONITOR
+		init_timer_compat(&apsta_params->monitor_timer, wl_tput_monitor_timer, apsta_params);
+#endif /* TPUT_MONITOR */
+#ifdef ACS_MONITOR
+		wl_acs_attach(dhd, cur_if);
+#endif /* ACS_MONITOR */
+		INIT_DELAYED_WORK(&cur_if->pm_enable_work, wl_ext_pm_work_handler);
+#ifdef SET_CARRIER
+		wl_ext_net_setcarrier(cur_if, FALSE, TRUE);
+#endif /* SET_CARRIER */
+		init_timer_compat(&cur_if->connect_timer, wl_ext_connect_timeout, cur_if);
+	} else if (cur_if && wl_get_isam_status(cur_if, IF_ADDING)) {
+		primary_if = &apsta_params->if_info[IF_PIF];
+		cur_if->dev = net;
+		cur_if->ifidx = ifidx;
+		cur_if->bssidx = bssidx;
+		wl_ext_event_register(net, dhd, WLC_E_LAST, wl_ext_iapsta_event,
+			apsta_params, PRIO_EVENT_IAPSTA);
+#if defined(WLMESH) && defined(WL_ESCAN)
+		if (cur_if->ifmode == IMESH_MODE && apsta_params->macs) {
+			wl_mesh_escan_attach(dhd, cur_if);
+		}
+#endif /* WLMESH && WL_ESCAN */
+#ifdef ACS_MONITOR
+		wl_acs_attach(dhd, cur_if);
+#endif /* ACS_MONITOR */
+		mutex_init(&cur_if->pm_sync);
+		INIT_DELAYED_WORK(&cur_if->pm_enable_work, wl_ext_pm_work_handler);
+#ifdef SET_CARRIER
+		wl_ext_net_setcarrier(cur_if, FALSE, TRUE);
+#endif /* SET_CARRIER */
+		init_timer_compat(&cur_if->connect_timer, wl_ext_connect_timeout, cur_if);
+	}
+
+	return 0;
+}
+
+int
+wl_ext_iapsta_dettach_netdev(struct net_device *net, int ifidx)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+	struct wl_apsta_params *apsta_params = dhd->iapsta_params;
+	struct wl_if_info *cur_if = NULL;
+
+	if (!apsta_params)
+		return 0;
+
+	if (ifidx < MAX_IF_NUM) {
+		IAPSTA_TRACE(net->name, "ifidx=%d\n", ifidx);
+		cur_if = &apsta_params->if_info[ifidx];
+	}
+
+	if (ifidx == 0) {
+		wl_ext_mod_timer(&cur_if->connect_timer, 0, 0);
+#ifdef SET_CARRIER
+		wl_ext_net_setcarrier(cur_if, FALSE, FALSE);
+#endif /* SET_CARRIER */
+		wl_ext_add_remove_pm_enable_work(net, FALSE);
+#ifdef ACS_MONITOR
+		wl_acs_detach(cur_if);
+#endif /* ACS_MONITOR */
+#ifdef TPUT_MONITOR
+		wl_ext_mod_timer(&apsta_params->monitor_timer, 0, 0);
+#endif /* TPUT_MONITOR */
+#if defined(WLMESH) && defined(WL_ESCAN)
+		if (cur_if->ifmode == IMESH_MODE && apsta_params->macs) {
+			wl_mesh_escan_detach(dhd, cur_if);
+		}
+#endif /* WLMESH && WL_ESCAN */
+		wl_ext_event_deregister(net, dhd, WLC_E_LAST, wl_ext_iapsta_event);
+#ifdef STA_MGMT
+		wl_ext_flush_sta_list(net, ifidx);
+#endif /* STA_MGMT */
+		memset(apsta_params, 0, sizeof(struct wl_apsta_params));
+	}
+	else if (cur_if && (wl_get_isam_status(cur_if, IF_READY) ||
+			wl_get_isam_status(cur_if, IF_ADDING))) {
+		wl_ext_mod_timer(&cur_if->connect_timer, 0, 0);
+#ifdef SET_CARRIER
+		wl_ext_net_setcarrier(cur_if, FALSE, FALSE);
+#endif /* SET_CARRIER */
+		wl_ext_add_remove_pm_enable_work(net, FALSE);
+#ifdef ACS_MONITOR
+		wl_acs_detach(cur_if);
+#endif /* ACS_MONITOR */
+#if defined(WLMESH) && defined(WL_ESCAN)
+		if (cur_if->ifmode == IMESH_MODE && apsta_params->macs) {
+			wl_mesh_escan_detach(dhd, cur_if);
+		}
+#endif /* WLMESH && WL_ESCAN */
+		wl_ext_event_deregister(net, dhd, WLC_E_LAST, wl_ext_iapsta_event);
+#ifdef STA_MGMT
+		wl_ext_flush_sta_list(net, ifidx);
+#endif /* STA_MGMT */
+		memset(cur_if, 0, sizeof(struct wl_if_info));
+	}
+
+	return 0;
+}
+
+int
+wl_ext_iapsta_attach(struct net_device *net)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+	struct wl_apsta_params *iapsta_params;
+
+	IAPSTA_TRACE(net->name, "Enter\n");
+
+	iapsta_params = kzalloc(sizeof(struct wl_apsta_params), GFP_KERNEL);
+	if (unlikely(!iapsta_params)) {
+		IAPSTA_ERROR("wlan", "Could not allocate apsta_params\n");
+		return -ENOMEM;
+	}
+	dhd->iapsta_params = (void *)iapsta_params;
+
+	return 0;
+}
+
+void
+wl_ext_iapsta_dettach(struct net_device *net)
+{
+	struct dhd_pub *dhd = dhd_get_pub(net);
+
+	IAPSTA_TRACE(net->name, "Enter\n");
+
+	if (dhd->iapsta_params) {
+		kfree(dhd->iapsta_params);
+		dhd->iapsta_params = NULL;
+	}
+}
+#endif /* WL_EXT_IAPSTA */
+
