@@ -1298,3 +1298,415 @@ static struct mpp_dev_ops rkvenc_ccu_dev_ops = {
 };
 
 
+static const struct mpp_dev_var rkvenc_v2_data = {
+	.device_type = MPP_DEVICE_RKVENC,
+	.hw_info = &rkvenc_v2_hw_info.hw,
+	.trans_info = trans_rkvenc_v2,
+	.hw_ops = &rkvenc_hw_ops,
+	.dev_ops = &rkvenc_dev_ops_v2,
+};
+
+static const struct mpp_dev_var rkvenc_ccu_data = {
+	.device_type = MPP_DEVICE_RKVENC,
+	.hw_info = &rkvenc_v2_hw_info.hw,
+	.trans_info = trans_rkvenc_v2,
+	.hw_ops = &rkvenc_hw_ops,
+	.dev_ops = &rkvenc_ccu_dev_ops,
+};
+
+static const struct of_device_id mpp_rkvenc_dt_match[] = {
+	{
+		.compatible = "rockchip,rkv-encoder-v2",
+		.data = &rkvenc_v2_data,
+	},
+#ifdef CONFIG_CPU_RK3588
+	{
+		.compatible = "rockchip,rkv-encoder-v2-core",
+		.data = &rkvenc_ccu_data,
+	},
+	{
+		.compatible = "rockchip,rkv-encoder-v2-ccu",
+	},
+#endif
+	{},
+};
+
+static int rkvenc_ccu_probe(struct platform_device *pdev)
+{
+	struct rkvenc_ccu *ccu;
+	struct device *dev = &pdev->dev;
+
+	ccu = devm_kzalloc(dev, sizeof(*ccu), GFP_KERNEL);
+	if (!ccu)
+		return -ENOMEM;
+
+	platform_set_drvdata(pdev, ccu);
+
+	mutex_init(&ccu->lock);
+	INIT_LIST_HEAD(&ccu->core_list);
+
+	return 0;
+}
+
+static int rkvenc_attach_ccu(struct device *dev, struct rkvenc_dev *enc)
+{
+	struct device_node *np;
+	struct platform_device *pdev;
+	struct rkvenc_ccu *ccu;
+
+	mpp_debug_enter();
+
+	np = of_parse_phandle(dev->of_node, "rockchip,ccu", 0);
+	if (!np || !of_device_is_available(np))
+		return -ENODEV;
+
+	pdev = of_find_device_by_node(np);
+	of_node_put(np);
+	if (!pdev)
+		return -ENODEV;
+
+	ccu = platform_get_drvdata(pdev);
+	if (!ccu)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&enc->core_link);
+	mutex_lock(&ccu->lock);
+	ccu->core_num++;
+	list_add_tail(&enc->core_link, &ccu->core_list);
+	mutex_unlock(&ccu->lock);
+
+	/* attach the ccu-domain to current core */
+	if (!ccu->main_core) {
+		/**
+		 * set the first device for the main-core,
+		 * then the domain of the main-core named ccu-domain
+		 */
+		ccu->main_core = &enc->mpp;
+	} else {
+		struct mpp_iommu_info *ccu_info, *cur_info;
+
+		/* set the ccu-domain for current device */
+		ccu_info = ccu->main_core->iommu_info;
+		cur_info = enc->mpp.iommu_info;
+
+		cur_info->domain = ccu_info->domain;
+		cur_info->rw_sem = ccu_info->rw_sem;
+		mpp_iommu_attach(cur_info);
+	}
+	enc->ccu = ccu;
+
+	dev_info(dev, "attach ccu as core %d\n", enc->mpp.core_id);
+	mpp_debug_enter();
+
+	return 0;
+}
+
+static int rkvenc2_alloc_rcbbuf(struct platform_device *pdev, struct rkvenc_dev *enc)
+{
+	int ret;
+	u32 vals[2];
+	dma_addr_t iova;
+	u32 sram_used, sram_size;
+	struct device_node *sram_np;
+	struct resource sram_res;
+	resource_size_t sram_start, sram_end;
+	struct iommu_domain *domain;
+	struct device *dev = &pdev->dev;
+
+	/* get rcb iova start and size */
+	ret = device_property_read_u32_array(dev, "rockchip,rcb-iova", vals, 2);
+	if (ret)
+		return ret;
+
+	iova = PAGE_ALIGN(vals[0]);
+	sram_used = PAGE_ALIGN(vals[1]);
+	if (!sram_used) {
+		dev_err(dev, "sram rcb invalid.\n");
+		return -EINVAL;
+	}
+	/* alloc reserve iova for rcb */
+	ret = iommu_dma_reserve_iova(dev, iova, sram_used);
+	if (ret) {
+		dev_err(dev, "alloc rcb iova error.\n");
+		return ret;
+	}
+	/* get sram device node */
+	sram_np = of_parse_phandle(dev->of_node, "rockchip,sram", 0);
+	if (!sram_np) {
+		dev_err(dev, "could not find phandle sram\n");
+		return -ENODEV;
+	}
+	/* get sram start and size */
+	ret = of_address_to_resource(sram_np, 0, &sram_res);
+	of_node_put(sram_np);
+	if (ret) {
+		dev_err(dev, "find sram res error\n");
+		return ret;
+	}
+	/* check sram start and size is PAGE_SIZE align */
+	sram_start = round_up(sram_res.start, PAGE_SIZE);
+	sram_end = round_down(sram_res.start + resource_size(&sram_res), PAGE_SIZE);
+	if (sram_end <= sram_start) {
+		dev_err(dev, "no available sram, phy_start %pa, phy_end %pa\n",
+			&sram_start, &sram_end);
+		return -ENOMEM;
+	}
+	sram_size = sram_end - sram_start;
+	sram_size = sram_used < sram_size ? sram_used : sram_size;
+	/* iova map to sram */
+	domain = enc->mpp.iommu_info->domain;
+	ret = iommu_map(domain, iova, sram_start, sram_size, IOMMU_READ | IOMMU_WRITE);
+	if (ret) {
+		dev_err(dev, "sram iommu_map error.\n");
+		return ret;
+	}
+	/* alloc dma for the remaining buffer, sram + dma */
+	if (sram_size < sram_used) {
+		struct page *page;
+		size_t page_size = PAGE_ALIGN(sram_used - sram_size);
+
+		page = alloc_pages(GFP_KERNEL | __GFP_ZERO, get_order(page_size));
+		if (!page) {
+			dev_err(dev, "unable to allocate pages\n");
+			ret = -ENOMEM;
+			goto err_sram_map;
+		}
+		/* iova map to dma */
+		ret = iommu_map(domain, iova + sram_size, page_to_phys(page),
+				page_size, IOMMU_READ | IOMMU_WRITE);
+		if (ret) {
+			dev_err(dev, "page iommu_map error.\n");
+			__free_pages(page, get_order(page_size));
+			goto err_sram_map;
+		}
+		enc->rcb_page = page;
+	}
+
+	enc->sram_size = sram_size;
+	enc->sram_used = sram_used;
+	enc->sram_iova = iova;
+	enc->sram_enabled = -1;
+	dev_info(dev, "sram_start %pa\n", &sram_start);
+	dev_info(dev, "sram_iova %pad\n", &enc->sram_iova);
+	dev_info(dev, "sram_size %u\n", enc->sram_size);
+	dev_info(dev, "sram_used %u\n", enc->sram_used);
+
+	return 0;
+
+err_sram_map:
+	iommu_unmap(domain, iova, sram_size);
+
+	return ret;
+}
+
+static int rkvenc_core_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct device *dev = &pdev->dev;
+	struct rkvenc_dev *enc = NULL;
+	struct mpp_dev *mpp = NULL;
+
+	enc = devm_kzalloc(dev, sizeof(*enc), GFP_KERNEL);
+	if (!enc)
+		return -ENOMEM;
+
+	mpp = &enc->mpp;
+	platform_set_drvdata(pdev, enc);
+
+	if (pdev->dev.of_node) {
+		struct device_node *np = pdev->dev.of_node;
+		const struct of_device_id *match = NULL;
+
+		match = of_match_node(mpp_rkvenc_dt_match, np);
+		if (match)
+			mpp->var = (struct mpp_dev_var *)match->data;
+
+		mpp->core_id = of_alias_get_id(np, "rkvenc");
+	}
+
+	ret = mpp_dev_probe(mpp, pdev);
+	if (ret)
+		return ret;
+
+	rkvenc2_alloc_rcbbuf(pdev, enc);
+
+	/* attach core to ccu */
+	ret = rkvenc_attach_ccu(dev, enc);
+	if (ret) {
+		dev_err(dev, "attach ccu failed\n");
+		return ret;
+	}
+
+	ret = devm_request_threaded_irq(dev, mpp->irq,
+					mpp_dev_irq,
+					mpp_dev_isr_sched,
+					IRQF_SHARED,
+					dev_name(dev), mpp);
+	if (ret) {
+		dev_err(dev, "register interrupter runtime failed\n");
+		return -EINVAL;
+	}
+	mpp->session_max_buffers = RKVENC_SESSION_MAX_BUFFERS;
+	enc->hw_info = to_rkvenc_info(mpp->var->hw_info);
+	rkvenc_procfs_init(mpp);
+	rkvenc_procfs_ccu_init(mpp);
+
+	/* if current is main-core, register current device to mpp service */
+	if (mpp == enc->ccu->main_core)
+		mpp_dev_register_srv(mpp, mpp->srv);
+
+	return 0;
+}
+
+static int rkvenc_probe_default(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct device *dev = &pdev->dev;
+	struct rkvenc_dev *enc = NULL;
+	struct mpp_dev *mpp = NULL;
+	const struct of_device_id *match = NULL;
+
+	enc = devm_kzalloc(dev, sizeof(*enc), GFP_KERNEL);
+	if (!enc)
+		return -ENOMEM;
+
+	mpp = &enc->mpp;
+	platform_set_drvdata(pdev, enc);
+
+	if (pdev->dev.of_node) {
+		match = of_match_node(mpp_rkvenc_dt_match, pdev->dev.of_node);
+		if (match)
+			mpp->var = (struct mpp_dev_var *)match->data;
+	}
+
+	ret = mpp_dev_probe(mpp, pdev);
+	if (ret)
+		return ret;
+
+	rkvenc2_alloc_rcbbuf(pdev, enc);
+
+	ret = devm_request_threaded_irq(dev, mpp->irq,
+					mpp_dev_irq,
+					mpp_dev_isr_sched,
+					IRQF_SHARED,
+					dev_name(dev), mpp);
+	if (ret) {
+		dev_err(dev, "register interrupter runtime failed\n");
+		goto failed_get_irq;
+	}
+	mpp->session_max_buffers = RKVENC_SESSION_MAX_BUFFERS;
+	enc->hw_info = to_rkvenc_info(mpp->var->hw_info);
+	rkvenc_procfs_init(mpp);
+	mpp_dev_register_srv(mpp, mpp->srv);
+
+	return 0;
+
+failed_get_irq:
+	mpp_dev_remove(mpp);
+
+	return ret;
+}
+
+static int rkvenc_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+
+	dev_info(dev, "probing start\n");
+
+	if (strstr(np->name, "ccu"))
+		ret = rkvenc_ccu_probe(pdev);
+	else if (strstr(np->name, "core"))
+		ret = rkvenc_core_probe(pdev);
+	else
+		ret = rkvenc_probe_default(pdev);
+
+	dev_info(dev, "probing finish\n");
+
+	return ret;
+}
+
+static int rkvenc2_free_rcbbuf(struct platform_device *pdev, struct rkvenc_dev *enc)
+{
+	struct iommu_domain *domain;
+
+	if (enc->rcb_page) {
+		size_t page_size = PAGE_ALIGN(enc->sram_used - enc->sram_size);
+
+		__free_pages(enc->rcb_page, get_order(page_size));
+	}
+	if (enc->sram_iova) {
+		domain = enc->mpp.iommu_info->domain;
+		iommu_unmap(domain, enc->sram_iova, enc->sram_used);
+	}
+
+	return 0;
+}
+
+static int rkvenc_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+
+	if (strstr(np->name, "ccu")) {
+		dev_info(dev, "remove ccu\n");
+	} else if (strstr(np->name, "core")) {
+		struct rkvenc_dev *enc = platform_get_drvdata(pdev);
+
+		dev_info(dev, "remove core\n");
+		if (enc->ccu) {
+			mutex_lock(&enc->ccu->lock);
+			list_del_init(&enc->core_link);
+			enc->ccu->core_num--;
+			mutex_unlock(&enc->ccu->lock);
+		}
+		rkvenc2_free_rcbbuf(pdev, enc);
+		mpp_dev_remove(&enc->mpp);
+		rkvenc_procfs_remove(&enc->mpp);
+	} else {
+		struct rkvenc_dev *enc = platform_get_drvdata(pdev);
+
+		dev_info(dev, "remove device\n");
+		rkvenc2_free_rcbbuf(pdev, enc);
+		mpp_dev_remove(&enc->mpp);
+		rkvenc_procfs_remove(&enc->mpp);
+	}
+
+	return 0;
+}
+
+static void rkvenc_shutdown(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+
+	if (!strstr(dev_name(dev), "ccu")) {
+		int ret;
+		int val;
+		struct rkvenc_dev *enc = platform_get_drvdata(pdev);
+		struct mpp_dev *mpp = &enc->mpp;
+
+		dev_info(dev, "shutdown device\n");
+
+		if (mpp->srv)
+			atomic_inc(&mpp->srv->shutdown_request);
+
+		ret = readx_poll_timeout(atomic_read,
+					 &mpp->task_count,
+					 val, val == 0, 1000, 200000);
+		if (ret == -ETIMEDOUT)
+			dev_err(dev, "wait total running time out\n");
+
+	}
+	dev_info(dev, "shutdown success\n");
+}
+
+struct platform_driver rockchip_rkvenc2_driver = {
+	.probe = rkvenc_probe,
+	.remove = rkvenc_remove,
+	.shutdown = rkvenc_shutdown,
+	.driver = {
+		.name = RKVENC_DRIVER_NAME,
+		.of_match_table = of_match_ptr(mpp_rkvenc_dt_match),
+	},
+};
