@@ -1640,3 +1640,1917 @@ wl_ext_tcpka_conn_enable(struct net_device *dev, char *data, char *command,
 	return ret;
 }
 
+static int
+wl_ext_tcpka_conn_info(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	s8 iovar_buf[WLC_IOCTL_SMLEN];
+	tcpka_conn_sess_info_t *info = NULL;
+	uint32 sess_id = 0;
+	int ret = 0, bytes_written = 0;
+
+	if (data) {
+		sscanf(data, "%d", &sess_id);
+		AEXT_INFO(dev->name, "tcpka_conn_sess_info %d\n", sess_id);
+		ret = wl_ext_iovar_getbuf(dev, "tcpka_conn_sess_info", (char *)&sess_id,
+			sizeof(uint32), iovar_buf, sizeof(iovar_buf), NULL);
+		if (!ret) {
+			info = (tcpka_conn_sess_info_t *) iovar_buf;
+			bytes_written += snprintf(command+bytes_written, total_len,
+				"id   :%d\n"
+				"ipid :%d\n"
+				"seq  :%u\n"
+				"ack  :%u",
+				sess_id, info->ipid, info->seq, info->ack);
+			AEXT_INFO(dev->name, "%s\n", command);
+			ret = bytes_written;
+		}
+	}
+
+	return ret;
+}
+#endif /* WL_EXT_TCPKA */
+
+static int
+wl_ext_rsdb_mode(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	s8 iovar_buf[WLC_IOCTL_SMLEN];
+	wl_config_t rsdb_mode_cfg = {1, 0}, *rsdb_p;
+	int ret = 0;
+
+	if (data) {
+		rsdb_mode_cfg.config = (int)simple_strtol(data, NULL, 0);
+		ret = wl_ext_iovar_setbuf(dev, "rsdb_mode", (char *)&rsdb_mode_cfg,
+			sizeof(rsdb_mode_cfg), iovar_buf, WLC_IOCTL_SMLEN, NULL);
+		AEXT_INFO(dev->name, "rsdb_mode %d\n", rsdb_mode_cfg.config);
+	} else {
+		ret = wl_ext_iovar_getbuf(dev, "rsdb_mode", NULL, 0,
+			iovar_buf, WLC_IOCTL_SMLEN, NULL);
+		if (!ret) {
+			rsdb_p = (wl_config_t *) iovar_buf;
+			ret = snprintf(command, total_len, "%d", rsdb_p->config);
+			AEXT_TRACE(dev->name, "command result is %s\n", command);
+		}
+	}
+
+	return ret;
+}
+
+static int
+wl_ext_recal(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	int ret = 0, i, nchan, nssid = 0;
+	int params_size = WL_SCAN_PARAMS_FIXED_SIZE + WL_NUMCHANNELS * sizeof(uint16);
+	wl_scan_params_t *params = NULL;
+	int ioctl_ver;
+	char *p;
+
+	AEXT_TRACE(dev->name, "Enter\n");
+
+	if (data) {
+		params_size += WL_SCAN_PARAMS_SSID_MAX * sizeof(wlc_ssid_t);
+		params = (wl_scan_params_t *) kzalloc(params_size, GFP_KERNEL);
+		if (params == NULL) {
+			ret = -ENOMEM;
+			goto exit;
+		}
+		memset(params, 0, params_size);
+
+		wl_ext_get_ioctl_ver(dev, &ioctl_ver);
+
+		memcpy(&params->bssid, &ether_bcast, ETHER_ADDR_LEN);
+		params->bss_type = DOT11_BSSTYPE_ANY;
+		params->scan_type = 0;
+		params->nprobes = -1;
+		params->active_time = -1;
+		params->passive_time = -1;
+		params->home_time = -1;
+		params->channel_num = 0;
+
+		params->scan_type |= WL_SCANFLAGS_PASSIVE;
+		nchan = 2;
+		params->channel_list[0] = wf_channel2chspec(1, WL_CHANSPEC_BW_20);
+		params->channel_list[1] = wf_channel2chspec(2, WL_CHANSPEC_BW_20);
+
+		params->nprobes = htod32(params->nprobes);
+		params->active_time = htod32(params->active_time);
+		params->passive_time = htod32(params->passive_time);
+		params->home_time = htod32(params->home_time);
+
+		for (i = 0; i < nchan; i++) {
+			wl_ext_chspec_host_to_driver(ioctl_ver, params->channel_list[i]);
+		}
+
+		p = (char*)params->channel_list + nchan * sizeof(uint16);
+
+		params->channel_num = htod32((nssid << WL_SCAN_PARAMS_NSSID_SHIFT) |
+		                             (nchan & WL_SCAN_PARAMS_COUNT_MASK));
+		params_size = p - (char*)params + nssid * sizeof(wlc_ssid_t);
+
+		AEXT_INFO(dev->name, "recal\n");
+		ret = wl_ext_ioctl(dev, WLC_SCAN, params, params_size, 1);
+	}
+
+exit:
+	if (params)
+		kfree(params);
+	return ret;
+}
+
+static s32
+wl_ext_add_remove_eventmsg(struct net_device *ndev, u16 event, bool add)
+{
+	s8 iovbuf[WL_EVENTING_MASK_LEN + 12];
+	s8 eventmask[WL_EVENTING_MASK_LEN];
+	s32 err = 0;
+
+	if (!ndev)
+		return -ENODEV;
+
+	/* Setup event_msgs */
+	err = wldev_iovar_getbuf(ndev, "event_msgs", NULL, 0, iovbuf, sizeof(iovbuf), NULL);
+	if (unlikely(err)) {
+		AEXT_ERROR(ndev->name, "Get event_msgs error (%d)\n", err);
+		goto eventmsg_out;
+	}
+	memcpy(eventmask, iovbuf, WL_EVENTING_MASK_LEN);
+	if (add) {
+		setbit(eventmask, event);
+	} else {
+		clrbit(eventmask, event);
+	}
+	err = wldev_iovar_setbuf(ndev, "event_msgs", eventmask, WL_EVENTING_MASK_LEN, iovbuf,
+			sizeof(iovbuf), NULL);
+	if (unlikely(err)) {
+		AEXT_ERROR(ndev->name, "Set event_msgs error (%d)\n", err);
+		goto eventmsg_out;
+	}
+
+eventmsg_out:
+	return err;
+}
+
+static int
+wl_ext_event_msg(struct net_device *dev, char *data,
+	char *command, int total_len)
+{
+	s8 iovbuf[WL_EVENTING_MASK_LEN + 12];
+	s8 eventmask[WL_EVENTING_MASK_LEN];
+	int i, bytes_written = 0, add = -1;
+	uint event;
+	char *vbuf;
+	bool skipzeros;
+
+	/* dhd_priv wl event_msg [offset] [1/0, 1 for add, 0 for remove] */
+	/* dhd_priv wl event_msg 40 1 */
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+		sscanf(data, "%d %d", &event, &add);
+		/* Setup event_msgs */
+		bytes_written = wldev_iovar_getbuf(dev, "event_msgs", NULL, 0, iovbuf,
+			sizeof(iovbuf), NULL);
+		if (unlikely(bytes_written)) {
+			AEXT_ERROR(dev->name, "Get event_msgs error (%d)\n", bytes_written);
+			goto eventmsg_out;
+		}
+		memcpy(eventmask, iovbuf, WL_EVENTING_MASK_LEN);
+		if (add == -1) {
+			if (isset(eventmask, event))
+				bytes_written += snprintf(command+bytes_written, total_len, "1");
+			else
+				bytes_written += snprintf(command+bytes_written, total_len, "0");
+			AEXT_INFO(dev->name, "%s\n", command);
+			goto eventmsg_out;
+		}
+		bytes_written = wl_ext_add_remove_eventmsg(dev, event, add);
+	}
+	else {
+		/* Setup event_msgs */
+		bytes_written = wldev_iovar_getbuf(dev, "event_msgs", NULL, 0, iovbuf,
+			sizeof(iovbuf), NULL);
+		if (bytes_written) {
+			AEXT_ERROR(dev->name, "Get event_msgs error (%d)\n", bytes_written);
+			goto eventmsg_out;
+		}
+		vbuf = (char *)iovbuf;
+		bytes_written += snprintf(command+bytes_written, total_len, "0x");
+		for (i = (sizeof(eventmask) - 1); i >= 0; i--) {
+			if (vbuf[i] || (i == 0))
+				skipzeros = FALSE;
+			if (skipzeros)
+				continue;
+			bytes_written += snprintf(command+bytes_written, total_len,
+				"%02x", vbuf[i] & 0xff);
+		}
+		AEXT_INFO(dev->name, "%s\n", command);
+	}
+
+eventmsg_out:
+	return bytes_written;
+}
+
+#ifdef PKT_FILTER_SUPPORT
+extern void dhd_pktfilter_offload_set(dhd_pub_t * dhd, char *arg);
+extern void dhd_pktfilter_offload_delete(dhd_pub_t *dhd, int id);
+extern void dhd_pktfilter_offload_enable(dhd_pub_t * dhd, char *arg, int enable, int master_mode);
+static int
+wl_ext_pkt_filter_add(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	int i, filter_id, new_id = 0, cnt;
+	conf_pkt_filter_add_t *filter_add = &dhd->conf->pkt_filter_add;
+	char **pktfilter = dhd->pktfilter;
+	int err = 0;
+
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+
+		new_id = simple_strtol(data, NULL, 10);
+		if (new_id <= 0) {
+			AEXT_ERROR(dev->name, "wrong id %d\n", new_id);
+			return -1;
+		}
+
+		cnt = dhd->pktfilter_count;
+		for (i=0; i<cnt; i++) {
+			if (!pktfilter[i])
+				continue;
+			filter_id = simple_strtol(pktfilter[i], NULL, 10);
+			if (new_id == filter_id) {
+				AEXT_ERROR(dev->name, "filter id %d already in list\n", filter_id);
+				return -1;
+			}
+		}
+
+		cnt = filter_add->count;
+		if (cnt >= DHD_CONF_FILTER_MAX) {
+			AEXT_ERROR(dev->name, "not enough filter\n");
+			return -1;
+		}
+		for (i=0; i<cnt; i++) {
+			filter_id = simple_strtol(filter_add->filter[i], NULL, 10);
+			if (new_id == filter_id) {
+				AEXT_ERROR(dev->name, "filter id %d already in list\n", filter_id);
+				return -1;
+			}
+		}
+
+		strcpy(&filter_add->filter[cnt][0], data);
+		dhd->pktfilter[dhd->pktfilter_count] = filter_add->filter[cnt];
+		filter_add->count++;
+		dhd->pktfilter_count++;
+
+		dhd_pktfilter_offload_set(dhd, data);
+		AEXT_INFO(dev->name, "filter id %d added\n", new_id);
+	}
+
+	return err;
+}
+
+static int
+wl_ext_pkt_filter_delete(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	int i, j, filter_id, cnt;
+	char **pktfilter = dhd->pktfilter;
+	conf_pkt_filter_add_t *filter_add = &dhd->conf->pkt_filter_add;
+	bool in_filter = FALSE;
+	int id, err = 0;
+
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+		id = (int)simple_strtol(data, NULL, 0);
+
+		cnt = filter_add->count;
+		for (i=0; i<cnt; i++) {
+			filter_id = simple_strtol(filter_add->filter[i], NULL, 10);
+			if (id == filter_id) {
+				in_filter = TRUE;
+				memset(filter_add->filter[i], 0, PKT_FILTER_LEN);
+				for (j=i; j<(cnt-1); j++) {
+					strcpy(filter_add->filter[j], filter_add->filter[j+1]);
+					memset(filter_add->filter[j+1], 0, PKT_FILTER_LEN);
+				}
+				cnt--;
+				filter_add->count--;
+				dhd->pktfilter_count--;
+			}
+		}
+
+		cnt = dhd->pktfilter_count;
+		for (i=0; i<cnt; i++) {
+			if (!pktfilter[i])
+				continue;
+			filter_id = simple_strtol(pktfilter[i], NULL, 10);
+			if (id == filter_id) {
+				in_filter = TRUE;
+				memset(pktfilter[i], 0, strlen(pktfilter[i]));
+			}
+		}
+
+		if (in_filter) {
+			dhd_pktfilter_offload_delete(dhd, id);
+			AEXT_INFO(dev->name, "filter id %d deleted\n", id);
+		} else {
+			AEXT_ERROR(dev->name, "filter id %d not in list\n", id);
+			err = -1;
+		}
+	}
+
+	return err;
+}
+
+static int
+wl_ext_pkt_filter_enable(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	int err = 0, id, enable;
+	int i, filter_id, cnt;
+	char **pktfilter = dhd->pktfilter;
+	bool in_filter = FALSE;
+
+	/* dhd_priv wl pkt_filter_enable [id] [1/0] */
+	/* dhd_priv wl pkt_filter_enable 141 1 */
+	if (data) {
+		sscanf(data, "%d %d", &id, &enable);
+
+		cnt = dhd->pktfilter_count;
+		for (i=0; i<cnt; i++) {
+			if (!pktfilter[i])
+				continue;
+			filter_id = simple_strtol(pktfilter[i], NULL, 10);
+			if (id == filter_id) {
+				in_filter = TRUE;
+				break;
+			}
+		}
+
+		if (in_filter) {
+			dhd_pktfilter_offload_enable(dhd, dhd->pktfilter[i],
+				enable, dhd_master_mode);
+			AEXT_INFO(dev->name, "filter id %d %s\n", id, enable?"enabled":"disabled");
+		} else {
+			AEXT_ERROR(dev->name, "filter id %d not in list\n", id);
+			err = -1;
+		}
+	}
+
+	return err;
+}
+#endif /* PKT_FILTER_SUPPORT */
+
+#ifdef SENDPROB
+static int
+wl_ext_send_probreq(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	int err = 0;
+	char addr_str[16], addr[6];
+	char iovar_buf[WLC_IOCTL_SMLEN]="\0";
+	char ie_data[WLC_IOCTL_SMLEN] = "\0";
+	wl_probe_params_t params;
+
+	/* dhd_priv wl send_probreq [dest. addr] [OUI+VAL] */
+	/* dhd_priv wl send_probreq 0x00904c010203 0x00904c01020304050607 */
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+		sscanf(data, "%s %s", addr_str, ie_data);
+		AEXT_TRACE(dev->name, "addr=%s, ie=%s\n", addr_str, ie_data);
+
+		if (strlen(addr_str) != 14) {
+			AEXT_ERROR(dev->name, "wrong addr %s\n", addr_str);
+			goto exit;
+		}
+		wl_pattern_atoh(addr_str, (char *) addr);
+		memset(&params, 0, sizeof(params));
+		memcpy(&params.bssid, addr, ETHER_ADDR_LEN);
+		memcpy(&params.mac, addr, ETHER_ADDR_LEN);
+
+		err = wl_ext_add_del_ie(dev, VNDR_IE_PRBREQ_FLAG, ie_data, "add");
+		if (err)
+			goto exit;
+		err = wl_ext_iovar_setbuf(dev, "sendprb", (char *)&params, sizeof(params),
+			iovar_buf, sizeof(iovar_buf), NULL);
+		OSL_SLEEP(100);
+		wl_ext_add_del_ie(dev, VNDR_IE_PRBREQ_FLAG, ie_data, "del");
+	}
+
+exit:
+    return err;
+}
+
+static int
+wl_ext_send_probresp(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	int err = 0;
+	char addr_str[16], addr[6];
+	char iovar_buf[WLC_IOCTL_SMLEN]="\0";
+	char ie_data[WLC_IOCTL_SMLEN] = "\0";
+
+	/* dhd_priv wl send_probresp [dest. addr] [OUI+VAL] */
+	/* dhd_priv wl send_probresp 0x00904c010203 0x00904c01020304050607 */
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+		sscanf(data, "%s %s", addr_str, ie_data);
+		AEXT_TRACE(dev->name, "addr=%s, ie=%s\n", addr_str, ie_data);
+
+		if (strlen(addr_str) != 14) {
+			AEXT_ERROR(dev->name, "wrong addr %s\n", addr_str);
+			goto exit;
+		}
+		wl_pattern_atoh(addr_str, (char *) addr);
+
+		err = wl_ext_add_del_ie(dev, VNDR_IE_PRBRSP_FLAG, ie_data, "add");
+		if (err)
+			goto exit;
+		err = wl_ext_iovar_setbuf(dev, "send_probresp", addr, sizeof(addr),
+			iovar_buf, sizeof(iovar_buf), NULL);
+		OSL_SLEEP(100);
+		wl_ext_add_del_ie(dev, VNDR_IE_PRBRSP_FLAG, ie_data, "del");
+	}
+
+exit:
+    return err;
+}
+
+static int
+wl_ext_recv_probreq(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	int err = 0, enable = 0;
+	char cmd[32];
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+
+	/* enable:
+	    1. dhd_priv wl 86 0
+	    2. dhd_priv wl event_msg 44 1
+	    disable:
+	    1. dhd_priv wl 86 2;
+	    2. dhd_priv wl event_msg 44 0
+	*/
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+		sscanf(data, "%d", &enable);
+		if (enable) {
+			strcpy(cmd, "wl 86 0");
+			err = wl_ext_wl_iovar(dev, cmd, total_len);
+			if (err)
+				goto exit;
+			strcpy(cmd, "wl event_msg 44 1");
+			err = wl_ext_wl_iovar(dev, cmd, total_len);
+			if (err)
+				goto exit;
+			dhd->recv_probereq = TRUE;
+		} else {
+			if (dhd->conf->pm) {
+				strcpy(cmd, "wl 86 2");
+				wl_ext_wl_iovar(dev, cmd, total_len);
+			}
+			strcpy(cmd, "wl event_msg 44 0");
+			wl_ext_wl_iovar(dev, cmd, total_len);
+			dhd->recv_probereq = FALSE;
+		}
+	}
+
+exit:
+    return err;
+}
+
+static int
+wl_ext_recv_probresp(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	int err = 0, enable = 0;
+	char cmd[64];
+
+	/* enable:
+	    1. dhd_priv wl pkt_filter_add 150 0 0 0 0xFF 0x50
+	    2. dhd_priv wl pkt_filter_enable 150 1 
+	    3. dhd_priv wl mpc 0
+	    4. dhd_priv wl 108 1
+	    disable:
+	    1. dhd_priv wl 108 0
+	    2. dhd_priv wl mpc 1
+	    3. dhd_priv wl pkt_filter_disable 150 0
+	    4. dhd_priv pkt_filter_delete 150
+	*/
+	if (data) {
+		AEXT_TRACE(dev->name, "data = %s\n", data);
+		sscanf(data, "%d", &enable);
+		if (enable) {
+			strcpy(cmd, "wl pkt_filter_add 150 0 0 0 0xFF 0x50");
+			err = wl_ext_wl_iovar(dev, cmd, total_len);
+			if (err)
+				goto exit;
+			strcpy(cmd, "wl pkt_filter_enable 150 1");
+			err = wl_ext_wl_iovar(dev, cmd, total_len);
+			if (err)
+				goto exit;
+			strcpy(cmd, "wl mpc 0");
+			err = wl_ext_wl_iovar(dev, cmd, total_len);
+			if (err)
+				goto exit;
+			strcpy(cmd, "wl 108 1");
+			err= wl_ext_wl_iovar(dev, cmd, total_len);
+		} else {
+			strcpy(cmd, "wl 108 0");
+			wl_ext_wl_iovar(dev, cmd, total_len);
+			strcpy(cmd, "wl mpc 1");
+			wl_ext_wl_iovar(dev, cmd, total_len);
+			strcpy(cmd, "wl pkt_filter_enable 150 0");
+			wl_ext_wl_iovar(dev, cmd, total_len);
+			strcpy(cmd, "wl pkt_filter_delete 150");
+			wl_ext_wl_iovar(dev, cmd, total_len);
+		}
+	}
+
+exit:
+    return err;
+}
+#endif /* SENDPROB */
+
+#if defined(USE_IW)
+static int
+wl_ext_gtk_key_info(struct net_device *dev, char *data, char *command, int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	int err = 0;
+	char iovar_buf[WLC_IOCTL_SMLEN]="\0";
+	gtk_keyinfo_t keyinfo;
+	bcol_gtk_para_t bcol_keyinfo;
+
+	/* wl gtk_key_info [kck kek replay_ctr] */
+	/* wl gtk_key_info 001122..FF001122..FF00000000000001 */
+	if (data) {
+		if (!dhd->conf->rekey_offload) {
+			AEXT_INFO(dev->name, "rekey_offload disabled\n");
+			return BCME_UNSUPPORTED;
+		}
+
+		memset(&bcol_keyinfo, 0, sizeof(bcol_keyinfo));
+		bcol_keyinfo.enable = 1;
+		bcol_keyinfo.ptk_len = 64;
+		memcpy(&bcol_keyinfo.ptk, data, RSN_KCK_LENGTH+RSN_KEK_LENGTH);
+		err = wl_ext_iovar_setbuf(dev, "bcol_gtk_rekey_ptk", &bcol_keyinfo,
+			sizeof(bcol_keyinfo), iovar_buf, sizeof(iovar_buf), NULL);
+		if (!err) {
+			goto exit;
+		}
+
+		memset(&keyinfo, 0, sizeof(keyinfo));
+		memcpy(&keyinfo, data, RSN_KCK_LENGTH+RSN_KEK_LENGTH+RSN_REPLAY_LEN);
+		err = wl_ext_iovar_setbuf(dev, "gtk_key_info", &keyinfo, sizeof(keyinfo),
+			iovar_buf, sizeof(iovar_buf), NULL);
+		if (err) {
+			AEXT_ERROR(dev->name, "failed to set gtk_key_info\n");
+			return err;
+		}
+	}
+
+exit:
+	if (android_msg_level & ANDROID_INFO_LEVEL) {
+		prhex("kck", (uchar *)keyinfo.KCK, RSN_KCK_LENGTH);
+		prhex("kek", (uchar *)keyinfo.KEK, RSN_KEK_LENGTH);
+		prhex("replay_ctr", (uchar *)keyinfo.ReplayCounter, RSN_REPLAY_LEN);
+	}
+    return err;
+}
+#endif /* USE_IW */
+
+#ifdef WL_EXT_WOWL
+static int
+wl_ext_wowl_pattern(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	s8 iovar_buf[WLC_IOCTL_SMLEN];
+	uint buf_len = 0;
+	int	offset;
+	char mask[128]="\0", pattern[128]="\0", add[4]="\0",
+		mask_tmp[128], *pmask_tmp;
+	uint32 masksize, patternsize, pad_len = 0;
+	wl_wowl_pattern2_t *wowl_pattern2 = NULL;
+	wl_wowl_pattern_t *wowl_pattern = NULL;
+	char *mask_and_pattern;
+	wl_wowl_pattern_list_t *list;
+	uint8 *ptr;
+	int ret = 0, i, j, v;
+
+	if (data) {
+		sscanf(data, "%s %d %s %s", add, &offset, mask_tmp, pattern);
+		if (strcmp(add, "add") != 0 && strcmp(add, "clr") != 0) {
+			AEXT_ERROR(dev->name, "first arg should be add or clr\n");
+			goto exit;
+		}
+		if (!strcmp(add, "clr")) {
+			AEXT_INFO(dev->name, "wowl_pattern clr\n");
+			ret = wl_ext_iovar_setbuf(dev, "wowl_pattern", add,
+				sizeof(add), iovar_buf, sizeof(iovar_buf), NULL);
+			goto exit;
+		}
+		masksize = strlen(mask_tmp) -2;
+		AEXT_TRACE(dev->name, "0 mask_tmp=%s, masksize=%d\n", mask_tmp, masksize);
+
+		// add pading
+		if (masksize % 16)
+			pad_len = (16 - masksize % 16);
+		for (i=0; i<pad_len; i++)
+			strcat(mask_tmp, "0");
+		masksize += pad_len;
+		AEXT_TRACE(dev->name, "1 mask_tmp=%s, masksize=%d\n", mask_tmp, masksize);
+
+		// translate 0x00 to 0, others to 1
+		j = 0;
+		pmask_tmp = &mask_tmp[2];
+		for (i=0; i<masksize/2; i++) {
+			if(strncmp(&pmask_tmp[i*2], "00", 2))
+				pmask_tmp[j] = '1';
+			else
+				pmask_tmp[j] = '0';
+			j++;
+		}
+		pmask_tmp[j] = '\0';
+		masksize = masksize / 2;
+		AEXT_TRACE(dev->name, "2 mask_tmp=%s, masksize=%d\n", mask_tmp, masksize);
+
+		// reorder per 8bits
+		pmask_tmp = &mask_tmp[2];
+		for (i=0; i<masksize/8; i++) {
+			char c;
+			for (j=0; j<4; j++) {
+				c = pmask_tmp[i*8+j];
+				pmask_tmp[i*8+j] = pmask_tmp[(i+1)*8-j-1];
+				pmask_tmp[(i+1)*8-j-1] = c;
+			}
+		}
+		AEXT_TRACE(dev->name, "3 mask_tmp=%s, masksize=%d\n", mask_tmp, masksize);
+
+		// translate 8bits to 1byte
+		j = 0; v = 0;
+		pmask_tmp = &mask_tmp[2];
+		strcpy(mask, "0x");
+		for (i=0; i<masksize; i++) {
+			v = (v<<1) | (pmask_tmp[i]=='1');
+			if (((i+1)%4) == 0) {
+				if (v < 10)
+					mask[j+2] = v + '0';
+				else
+					mask[j+2] = (v-10) + 'a';
+				j++;
+				v = 0;
+			}
+		}
+		mask[j+2] = '\0';
+		masksize = j/2;
+		AEXT_TRACE(dev->name, "4 mask=%s, masksize=%d\n", mask, masksize);
+
+		patternsize = (strlen(pattern)-2)/2;
+		buf_len = sizeof(wl_wowl_pattern2_t) + patternsize + masksize;
+		wowl_pattern2 = kmalloc(buf_len, GFP_KERNEL);
+		if (wowl_pattern2 == NULL) {
+			AEXT_ERROR(dev->name, "Failed to allocate buffer of %d bytes\n", buf_len);
+			goto exit;
+		}
+		memset(wowl_pattern2, 0, sizeof(wl_wowl_pattern2_t));
+
+		strncpy(wowl_pattern2->cmd, add, sizeof(add));
+		wowl_pattern2->wowl_pattern.type = 0;
+		wowl_pattern2->wowl_pattern.offset = offset;
+		mask_and_pattern = (char*)wowl_pattern2 + sizeof(wl_wowl_pattern2_t);
+
+		wowl_pattern2->wowl_pattern.masksize = masksize;
+		ret = wl_pattern_atoh(mask, mask_and_pattern);
+		if (ret == -1) {
+			AEXT_ERROR(dev->name, "rejecting mask=%s\n", mask);
+			goto exit;
+		}
+
+		mask_and_pattern += wowl_pattern2->wowl_pattern.masksize;
+		wowl_pattern2->wowl_pattern.patternoffset = sizeof(wl_wowl_pattern_t) +
+			wowl_pattern2->wowl_pattern.masksize;
+
+		wowl_pattern2->wowl_pattern.patternsize = patternsize;
+		ret = wl_pattern_atoh(pattern, mask_and_pattern);
+		if (ret == -1) {
+			AEXT_ERROR(dev->name, "rejecting pattern=%s\n", pattern);
+			goto exit;
+		}
+
+		AEXT_INFO(dev->name, "%s %d %s %s\n", add, offset, mask, pattern);
+
+		ret = wl_ext_iovar_setbuf(dev, "wowl_pattern", (char *)wowl_pattern2,
+			buf_len, iovar_buf, sizeof(iovar_buf), NULL);
+	}
+	else {
+		ret = wl_ext_iovar_getbuf(dev, "wowl_pattern", NULL, 0,
+			iovar_buf, sizeof(iovar_buf), NULL);
+		if (!ret) {
+			list = (wl_wowl_pattern_list_t *)iovar_buf;
+			ret = snprintf(command, total_len, "#of patterns :%d\n", list->count);
+			ptr = (uint8 *)list->pattern;
+			for (i=0; i<list->count; i++) {
+				uint8 *pattern;
+				wowl_pattern = (wl_wowl_pattern_t *)ptr;
+				ret += snprintf(command+ret, total_len,
+					"Pattern %d:\n"
+					"ID         :0x%x\n"
+					"Offset     :%d\n"
+					"Masksize   :%d\n"
+					"Mask       :0x",
+					i+1, (uint32)wowl_pattern->id, wowl_pattern->offset,
+					wowl_pattern->masksize);
+				pattern = ((uint8 *)wowl_pattern + sizeof(wl_wowl_pattern_t));
+				for (j = 0; j < wowl_pattern->masksize; j++) {
+					ret += snprintf(command+ret, total_len, "%02x", pattern[j]);
+				}
+				ret += snprintf(command+ret, total_len, "\n");
+				ret += snprintf(command+ret, total_len,
+					"PatternSize:%d\n"
+					"Pattern    :0x",
+					wowl_pattern->patternsize);
+
+				pattern = ((uint8*)wowl_pattern + wowl_pattern->patternoffset);
+				for (j=0; j<wowl_pattern->patternsize; j++)
+					ret += snprintf(command+ret, total_len, "%02x", pattern[j]);
+				ret += snprintf(command+ret, total_len, "\n");
+				ptr += (wowl_pattern->masksize + wowl_pattern->patternsize +
+				        sizeof(wl_wowl_pattern_t));
+			}
+
+			AEXT_INFO(dev->name, "%s\n", command);
+		}
+	}
+
+exit:
+	if (wowl_pattern2)
+		kfree(wowl_pattern2);
+	return ret;
+}
+
+static int
+wl_ext_wowl_wakeind(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	s8 iovar_buf[WLC_IOCTL_SMLEN];
+	wl_wowl_wakeind_t *wake = NULL;
+	int ret = -1;
+	char clr[6]="\0";
+
+	if (data) {
+		sscanf(data, "%s", clr);
+		if (!strcmp(clr, "clear")) {
+			AEXT_INFO(dev->name, "wowl_wakeind clear\n");
+			ret = wl_ext_iovar_setbuf(dev, "wowl_wakeind", clr, sizeof(clr),
+				iovar_buf, sizeof(iovar_buf), NULL);
+		} else {
+			AEXT_ERROR(dev->name, "first arg should be clear\n");
+		}
+	} else {
+		ret = wl_ext_iovar_getbuf(dev, "wowl_wakeind", NULL, 0,
+			iovar_buf, sizeof(iovar_buf), NULL);
+		if (!ret) {
+			wake = (wl_wowl_wakeind_t *) iovar_buf;
+			ret = snprintf(command, total_len, "wakeind=0x%x", wake->ucode_wakeind);
+			if (wake->ucode_wakeind & WL_WOWL_MAGIC)
+				ret += snprintf(command+ret, total_len, " (MAGIC packet)");
+			if (wake->ucode_wakeind & WL_WOWL_NET)
+				ret += snprintf(command+ret, total_len, " (Netpattern)");
+			if (wake->ucode_wakeind & WL_WOWL_DIS)
+				ret += snprintf(command+ret, total_len, " (Disassoc/Deauth)");
+			if (wake->ucode_wakeind & WL_WOWL_BCN)
+				ret += snprintf(command+ret, total_len, " (Loss of beacon)");
+			if (wake->ucode_wakeind & WL_WOWL_TCPKEEP_TIME)
+				ret += snprintf(command+ret, total_len, " (TCPKA timeout)");
+			if (wake->ucode_wakeind & WL_WOWL_TCPKEEP_DATA)
+				ret += snprintf(command+ret, total_len, " (TCPKA data)");
+			if (wake->ucode_wakeind & WL_WOWL_TCPFIN)
+				ret += snprintf(command+ret, total_len, " (TCP FIN)");
+			AEXT_INFO(dev->name, "%s\n", command);
+		}
+	}
+
+	return ret;
+}
+#endif /* WL_EXT_WOWL */
+
+#ifdef WL_GPIO_NOTIFY
+typedef struct notify_payload {
+	int index;
+	int len;
+	char payload[128];
+} notify_payload_t;
+
+static int
+wl_ext_gpio_notify(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	s8 iovar_buf[WLC_IOCTL_SMLEN];
+	notify_payload_t notify, *pnotify = NULL;
+	int i, ret = 0, bytes_written = 0;
+	char frame_str[WLC_IOCTL_SMLEN+3];
+
+	if (data) {
+		memset(&notify, 0, sizeof(notify));
+		memset(frame_str, 0, sizeof(frame_str));
+		sscanf(data, "%d %s", &notify.index, frame_str);
+
+		if (notify.index < 0)
+			notify.index = 0;
+
+		if (strlen(frame_str)) {
+			notify.len = wl_pattern_atoh(frame_str, notify.payload);
+			if (notify.len == -1) {
+				AEXT_ERROR(dev->name, "rejecting pattern=%s\n", frame_str);
+				goto exit;
+			}
+			AEXT_INFO(dev->name, "index=%d, len=%d\n", notify.index, notify.len);
+			if (android_msg_level & ANDROID_INFO_LEVEL)
+				prhex("payload", (uchar *)notify.payload, notify.len);
+			ret = wl_ext_iovar_setbuf(dev, "bcol_gpio_noti", (char *)&notify,
+				sizeof(notify), iovar_buf, WLC_IOCTL_SMLEN, NULL);
+		} else {
+			AEXT_INFO(dev->name, "index=%d\n", notify.index);
+			ret = wl_ext_iovar_getbuf(dev, "bcol_gpio_noti", &notify.index,
+				sizeof(notify.index), iovar_buf, sizeof(iovar_buf), NULL);
+			if (!ret) {
+				pnotify = (notify_payload_t *)iovar_buf;
+				bytes_written += snprintf(command+bytes_written, total_len,
+					"Id            :%d\n"
+					"Packet        :0x",
+					pnotify->index);
+				for (i=0; i<pnotify->len; i++) {
+					bytes_written += snprintf(command+bytes_written, total_len,
+						"%02x", pnotify->payload[i]);
+				}
+				AEXT_TRACE(dev->name, "command result is\n%s\n", command);
+				ret = bytes_written;
+			}
+		}
+	}
+
+exit:
+	return ret;
+}
+#endif /* WL_GPIO_NOTIFY */
+
+#ifdef CSI_SUPPORT
+typedef struct csi_config {
+	/* Peer device mac address. */
+	struct ether_addr addr;
+	/* BW to be used in the measurements. This needs to be supported both by the */
+	/* device itself and the peer. */
+	uint32 bw;
+	/* Time interval between measurements (units: 1 ms). */
+	uint32 period;
+	/* CSI method */
+	uint32 method;
+} csi_config_t;
+
+typedef struct csi_list {
+	uint32 cnt;
+	csi_config_t configs[1];
+} csi_list_t;
+
+static int
+wl_ether_atoe(const char *a, struct ether_addr *n)
+{
+	char *c = NULL;
+	int i = 0;
+
+	memset(n, 0, ETHER_ADDR_LEN);
+	for (;;) {
+		n->octet[i++] = (uint8)strtoul(a, &c, 16);
+		if (!*c++ || i == ETHER_ADDR_LEN)
+			break;
+		a = c;
+	}
+	return (i == ETHER_ADDR_LEN);
+}
+
+static int
+wl_ext_csi(struct net_device *dev, char *data, char *command, int total_len)
+{
+	csi_config_t csi, *csip;
+	csi_list_t *csi_list;
+	int ret = -1, period=-1, i;
+	char mac[32], *buf = NULL;
+	struct ether_addr ea;
+	int bytes_written = 0;
+
+	buf = kmalloc(WLC_IOCTL_SMLEN, GFP_KERNEL);
+	if (buf == NULL) {
+		AEXT_ERROR(dev->name, "Failed to allocate buffer of %d bytes\n", WLC_IOCTL_SMLEN);
+		goto exit;
+	}
+	memset(buf, 0, WLC_IOCTL_SMLEN);
+
+	if (data) {
+		sscanf(data, "%s %d", mac, &period);
+		ret = wl_ether_atoe(mac, &ea);
+		if (!ret) {
+			AEXT_ERROR(dev->name, "rejecting mac=%s, ret=%d\n", mac, ret);
+			goto exit;
+		}
+		AEXT_TRACE(dev->name, "mac=%pM, period=%d", &ea, period);
+		if (period > 0) {
+			memset(&csi, 0, sizeof(csi_config_t));
+			bcopy(&ea, &csi.addr, ETHER_ADDR_LEN);
+			csi.period = period;
+			ret = wl_ext_iovar_setbuf(dev, "csi", (char *)&csi, sizeof(csi),
+				buf, WLC_IOCTL_SMLEN, NULL);
+		} else if (period == 0) {
+			memset(&csi, 0, sizeof(csi_config_t));
+			bcopy(&ea, &csi.addr, ETHER_ADDR_LEN);
+			ret = wl_ext_iovar_setbuf(dev, "csi_del", (char *)&csi, sizeof(csi),
+				buf, WLC_IOCTL_SMLEN, NULL);
+		} else {
+			ret = wl_ext_iovar_getbuf(dev, "csi", &ea, ETHER_ADDR_LEN, buf,
+				WLC_IOCTL_SMLEN, NULL);
+			if (!ret) {
+				csip = (csi_config_t *) buf;
+					/* Dump all lists */
+				bytes_written += snprintf(command+bytes_written, total_len,
+					"Mac    :%pM\n"
+					"Period :%d\n"
+					"BW     :%d\n"
+					"Method :%d\n",
+					&csip->addr, csip->period, csip->bw, csip->method);
+				AEXT_TRACE(dev->name, "command result is %s\n", command);
+				ret = bytes_written;
+			}
+		}
+	}
+	else {
+		ret = wl_ext_iovar_getbuf(dev, "csi_list", NULL, 0, buf, WLC_IOCTL_SMLEN, NULL);
+		if (!ret) {
+			csi_list = (csi_list_t *)buf;
+			bytes_written += snprintf(command+bytes_written, total_len,
+				"Total number :%d\n", csi_list->cnt);
+			for (i=0; i<csi_list->cnt; i++) {
+				csip = &csi_list->configs[i];
+				bytes_written += snprintf(command+bytes_written, total_len,
+					"Idx    :%d\n"
+					"Mac    :%pM\n"
+					"Period :%d\n"
+					"BW     :%d\n"
+					"Method :%d\n\n",
+					i+1, &csip->addr, csip->period, csip->bw, csip->method);
+			}
+			AEXT_TRACE(dev->name, "command result is %s\n", command);
+			ret = bytes_written;
+		}
+	}
+
+exit:
+	if (buf)
+		kfree(buf);
+	return ret;
+}
+#endif /* CSI_SUPPORT */
+
+static int
+wl_ext_get_country(struct net_device *dev, char *data, char *command,
+	int total_len)
+{
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	wl_country_t cspec = {{0}, 0, {0}};
+	int bytes_written = 0, ret = 0;
+
+	if (data) {
+		char *country_code = data;
+		char *rev_info_delim = country_code + 2; /* 2 bytes of country code */
+		int revinfo = -1;
+		if ((rev_info_delim) &&
+			(strnicmp(rev_info_delim, "/", strlen("/")) == 0) && (rev_info_delim + 1)) {
+			revinfo  = bcm_atoi(rev_info_delim + 1);
+		}
+#ifdef WL_CFG80211
+		bytes_written = wl_cfg80211_set_country_code(dev, country_code,
+			true, true, revinfo);
+#else
+		bytes_written = wldev_set_country(dev, country_code, true, true, revinfo);
+#endif /* WL_CFG80211 */
+	} else {
+		ret = dhd_conf_get_country(dhd, &cspec);
+		if (!ret) {
+			bytes_written += snprintf(command+bytes_written, total_len,
+				"%s/%d", cspec.ccode, cspec.rev);
+		}
+		if (!bytes_written)
+			bytes_written = -1;
+		AEXT_TRACE(dev->name, "command result is %s\n", command);
+	}
+
+	return bytes_written;
+}
+
+typedef int (wl_ext_tpl_parse_t)(struct net_device *dev, char *data, char *command,
+	int total_len);
+
+typedef struct wl_ext_iovar_tpl_t {
+	int get;
+	int set;
+	char *name;
+	wl_ext_tpl_parse_t *parse;
+} wl_ext_iovar_tpl_t;
+
+const wl_ext_iovar_tpl_t wl_ext_iovar_tpl_list[] = {
+	{WLC_GET_VAR,	WLC_SET_VAR,	"event_msg",	wl_ext_event_msg},
+#if defined(USE_IW)
+	{WLC_GET_VAR,	WLC_SET_VAR,	"gtk_key_info",	wl_ext_gtk_key_info},
+#endif /* USE_IW */
+	{WLC_GET_VAR,	WLC_SET_VAR,	"recal",		wl_ext_recal},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"rsdb_mode",	wl_ext_rsdb_mode},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"mkeep_alive",	wl_ext_mkeep_alive},
+#ifdef PKT_FILTER_SUPPORT
+	{WLC_GET_VAR,	WLC_SET_VAR,	"pkt_filter_add",		wl_ext_pkt_filter_add},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"pkt_filter_delete",	wl_ext_pkt_filter_delete},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"pkt_filter_enable",	wl_ext_pkt_filter_enable},
+#endif /* PKT_FILTER_SUPPORT */
+#if defined(WL_EXT_IAPSTA) && defined(WLMESH)
+	{WLC_GET_VAR,	WLC_SET_VAR,	"mesh_peer_status",	wl_ext_mesh_peer_status},
+#endif /* WL_EXT_IAPSTA && WLMESH */
+#ifdef SENDPROB
+	{WLC_GET_VAR,	WLC_SET_VAR,	"send_probreq",		wl_ext_send_probreq},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"send_probresp",	wl_ext_send_probresp},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"recv_probreq",		wl_ext_recv_probreq},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"recv_probresp",	wl_ext_recv_probresp},
+#endif /* SENDPROB */
+#ifdef WL_EXT_TCPKA
+	{WLC_GET_VAR,	WLC_SET_VAR,	"tcpka_conn_add",		wl_ext_tcpka_conn_add},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"tcpka_conn_enable",	wl_ext_tcpka_conn_enable},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"tcpka_conn_sess_info",	wl_ext_tcpka_conn_info},
+#endif /* WL_EXT_TCPKA */
+#ifdef WL_EXT_WOWL
+	{WLC_GET_VAR,	WLC_SET_VAR,	"wowl_pattern",		wl_ext_wowl_pattern},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"wowl_wakeind",		wl_ext_wowl_wakeind},
+#endif /* WL_EXT_WOWL */
+#ifdef IDHCP
+	{WLC_GET_VAR,	WLC_SET_VAR,	"dhcpc_dump",		wl_ext_dhcpc_dump},
+	{WLC_GET_VAR,	WLC_SET_VAR,	"dhcpc_param",		wl_ext_dhcpc_param},
+#endif /* IDHCP */
+#ifdef WL_GPIO_NOTIFY
+	{WLC_GET_VAR,	WLC_SET_VAR,	"bcol_gpio_noti",	wl_ext_gpio_notify},
+#endif /* WL_GPIO_NOTIFY */
+#ifdef CSI_SUPPORT
+	{WLC_GET_VAR,	WLC_SET_VAR,	"csi",				wl_ext_csi},
+#endif /* CSI_SUPPORT */
+	{WLC_GET_VAR,	WLC_SET_VAR,	"country",			wl_ext_get_country},
+};
+
+/*
+Ex: dhd_priv wl [cmd] [val]
+  dhd_priv wl 85
+  dhd_priv wl 86 1
+  dhd_priv wl mpc
+  dhd_priv wl mpc 1
+*/
+static int
+wl_ext_wl_iovar(struct net_device *dev, char *command, int total_len)
+{
+	int cmd, val, ret = -1, i;
+	char name[32], *pch, *pick_tmp, *data;
+	int bytes_written=-1;
+	const wl_ext_iovar_tpl_t *tpl = wl_ext_iovar_tpl_list;
+	int tpl_count = ARRAY_SIZE(wl_ext_iovar_tpl_list);
+
+	AEXT_TRACE(dev->name, "cmd %s\n", command);
+	pick_tmp = command;
+
+	pch = bcmstrtok(&pick_tmp, " ", 0); // pick wl
+	if (!pch || strncmp(pch, "wl", 2))
+		goto exit;
+
+	pch = bcmstrtok(&pick_tmp, " ", 0); // pick cmd
+	if (!pch)
+		goto exit;
+
+	memset(name, 0 , sizeof (name));
+	cmd = (int)simple_strtol(pch, NULL, 0);
+	if (cmd == 0) {
+		strcpy(name, pch);
+	}
+	data = bcmstrtok(&pick_tmp, "", 0); // pick data
+	if (data && cmd == 0) {
+		cmd = WLC_SET_VAR;
+	} else if (cmd == 0) {
+		cmd = WLC_GET_VAR;
+	}
+
+	/* look for a matching code in the table */
+	for (i = 0; i < tpl_count; i++, tpl++) {
+		if ((tpl->get == cmd || tpl->set == cmd) && !strcmp(tpl->name, name))
+			break;
+	}
+	if (i < tpl_count && tpl->parse) {
+		ret = tpl->parse(dev, data, command, total_len);
+	} else {
+		if (cmd == WLC_SET_VAR) {
+			val = (int)simple_strtol(data, NULL, 0);
+			AEXT_INFO(dev->name, "set %s %d\n", name, val);
+			ret = wl_ext_iovar_setint(dev, name, val);
+		} else if (cmd == WLC_GET_VAR) {
+			AEXT_INFO(dev->name, "get %s\n", name);
+			ret = wl_ext_iovar_getint(dev, name, &val);
+			if (!ret) {
+				bytes_written = snprintf(command, total_len, "%d", val);
+				AEXT_INFO(dev->name, "command result is %s\n", command);
+				ret = bytes_written;
+			}
+		} else if (data) {
+			val = (int)simple_strtol(data, NULL, 0);
+			AEXT_INFO(dev->name, "set %d %d\n", cmd, val);
+			ret = wl_ext_ioctl(dev, cmd, &val, sizeof(val), TRUE);
+		} else {
+			AEXT_INFO(dev->name, "get %d\n", cmd);
+			ret = wl_ext_ioctl(dev, cmd, &val, sizeof(val), FALSE);
+			if (!ret) {
+				bytes_written = snprintf(command, total_len, "%d", val);
+				AEXT_INFO(dev->name, "command result is %s\n", command);
+				ret = bytes_written;
+			}
+		}
+	}
+
+exit:
+	return ret;
+}
+
+int
+wl_ext_conf_iovar(struct net_device *dev, char *command, int total_len)
+{
+	int ret = 0;
+	char name[32], *pch, *pick_tmp, *data;
+	int bytes_written=-1;
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+
+	AEXT_TRACE(dev->name, "cmd %s\n", command);
+	pick_tmp = command;
+
+	pch = bcmstrtok(&pick_tmp, " ", 0); // pick conf
+	if (!pch || strncmp(pch, "conf", 4))
+		goto exit;
+
+	pch = bcmstrtok(&pick_tmp, " ", 0); // pick cmd
+	if (!pch)
+		goto exit;
+
+	strncpy(name, pch, sizeof(name));
+	
+	data = bcmstrtok(&pick_tmp, "", 0); // pick data
+
+	if (!strcmp(name, "pm")) {
+		if (data) {
+			dhd->conf->pm = simple_strtol(data, NULL, 0);
+			ret = 0;
+		} else {
+			bytes_written = snprintf(command, total_len, "%d", dhd->conf->pm);
+			ret = bytes_written;
+		}
+	} else {
+		AEXT_ERROR(dev->name, "no config parameter found\n");
+	}
+
+exit:
+	return ret;
+}
+
+int
+wl_android_ext_priv_cmd(struct net_device *net, char *command,
+	int total_len, int *bytes_written)
+{
+	int ret = 0;
+
+	if (strnicmp(command, CMD_CHANNELS, strlen(CMD_CHANNELS)) == 0) {
+		*bytes_written = wl_ext_channels(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_CHANNEL, strlen(CMD_CHANNEL)) == 0) {
+		*bytes_written = wl_ext_channel(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_ROAM_TRIGGER, strlen(CMD_ROAM_TRIGGER)) == 0) {
+		*bytes_written = wl_ext_roam_trigger(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_PM, strlen(CMD_PM)) == 0) {
+		*bytes_written = wl_ext_pm(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_MONITOR, strlen(CMD_MONITOR)) == 0) {
+		*bytes_written = wl_ext_monitor(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_SET_SUSPEND_BCN_LI_DTIM, strlen(CMD_SET_SUSPEND_BCN_LI_DTIM)) == 0) {
+		int bcn_li_dtim;
+		bcn_li_dtim = (int)simple_strtol((command + strlen(CMD_SET_SUSPEND_BCN_LI_DTIM) + 1), NULL, 10);
+		*bytes_written = net_os_set_suspend_bcn_li_dtim(net, bcn_li_dtim);
+	}
+#ifdef WL_EXT_IAPSTA
+	else if (strnicmp(command, CMD_IAPSTA_INIT, strlen(CMD_IAPSTA_INIT)) == 0 ||
+			strnicmp(command, CMD_ISAM_INIT, strlen(CMD_ISAM_INIT)) == 0) {
+		*bytes_written = wl_ext_isam_init(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_IAPSTA_CONFIG, strlen(CMD_IAPSTA_CONFIG)) == 0 ||
+			strnicmp(command, CMD_ISAM_CONFIG, strlen(CMD_ISAM_CONFIG)) == 0) {
+		*bytes_written = wl_ext_iapsta_config(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_IAPSTA_ENABLE, strlen(CMD_IAPSTA_ENABLE)) == 0 ||
+			strnicmp(command, CMD_ISAM_ENABLE, strlen(CMD_ISAM_ENABLE)) == 0) {
+		*bytes_written = wl_ext_iapsta_enable(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_IAPSTA_DISABLE, strlen(CMD_IAPSTA_DISABLE)) == 0 ||
+			strnicmp(command, CMD_ISAM_DISABLE, strlen(CMD_ISAM_DISABLE)) == 0) {
+		*bytes_written = wl_ext_iapsta_disable(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_ISAM_STATUS, strlen(CMD_ISAM_STATUS)) == 0) {
+		*bytes_written = wl_ext_isam_status(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_ISAM_PARAM, strlen(CMD_ISAM_PARAM)) == 0) {
+		*bytes_written = wl_ext_isam_param(net, command, total_len);
+	}
+#if defined(WLMESH) && defined(WL_ESCAN)
+	else if (strnicmp(command, CMD_ISAM_PEER_PATH, strlen(CMD_ISAM_PEER_PATH)) == 0) {
+		*bytes_written = wl_ext_isam_peer_path(net, command, total_len);
+	}
+#endif /* WLMESH && WL_ESCAN */
+#endif /* WL_EXT_IAPSTA */
+#ifdef WL_CFG80211
+	else if (strnicmp(command, CMD_AUTOCHANNEL, strlen(CMD_AUTOCHANNEL)) == 0) {
+		*bytes_written = wl_cfg80211_autochannel(net, command, total_len);
+	}
+#endif /* WL_CFG80211 */
+#if defined(WL_WIRELESS_EXT) && defined(WL_ESCAN)
+	else if (strnicmp(command, CMD_AUTOCHANNEL, strlen(CMD_AUTOCHANNEL)) == 0) {
+		*bytes_written = wl_iw_autochannel(net, command, total_len);
+	}
+#endif /* WL_WIRELESS_EXT && WL_ESCAN */
+	else if (strnicmp(command, CMD_WLMSGLEVEL, strlen(CMD_WLMSGLEVEL)) == 0) {
+		*bytes_written = wl_ext_wlmsglevel(net, command, total_len);
+	}
+#ifdef WLEASYMESH
+    else if (strnicmp(command, CMD_EASYMESH, strlen(CMD_EASYMESH)) == 0) {
+		int skip = strlen(CMD_EASYMESH) + 1;
+		*bytes_written = wl_ext_easymesh(net, command+skip, total_len);
+    }
+#endif /* WLEASYMESH */
+#if defined(PKT_STATICS) && defined(BCMSDIO)
+	else if (strnicmp(command, CMD_DUMP_PKT_STATICS, strlen(CMD_DUMP_PKT_STATICS)) == 0) {
+		struct dhd_pub *dhd = dhd_get_pub(net);
+		dhd_bus_dump_txpktstatics(dhd);
+	}
+	else if (strnicmp(command, CMD_CLEAR_PKT_STATICS, strlen(CMD_CLEAR_PKT_STATICS)) == 0) {
+		struct dhd_pub *dhd = dhd_get_pub(net);
+		dhd_bus_clear_txpktstatics(dhd);
+	}
+#endif /* PKT_STATICS && BCMSDIO */
+	else if (strnicmp(command, CMD_WL, strlen(CMD_WL)) == 0) {
+		*bytes_written = wl_ext_wl_iovar(net, command, total_len);
+	}
+	else if (strnicmp(command, CMD_CONF, strlen(CMD_CONF)) == 0) {
+		*bytes_written = wl_ext_conf_iovar(net, command, total_len);
+	}
+	else
+		ret = -1;
+
+	return ret;
+}
+
+#if defined(WL_CFG80211) || defined(WL_ESCAN)
+int
+wl_ext_get_distance(struct net_device *net, u32 band)
+{
+	u32 bw = WL_CHANSPEC_BW_20;
+	s32 bw_cap = 0, distance = 0;
+	struct {
+		u32 band;
+		u32 bw_cap;
+	} param = {0, 0};
+	char buf[WLC_IOCTL_SMLEN]="\0";
+	s32 err = BCME_OK;
+
+	param.band = band;
+	err = wl_ext_iovar_getbuf(net, "bw_cap", &param, sizeof(param), buf,
+		sizeof(buf), NULL);
+	if (err) {
+		if (err != BCME_UNSUPPORTED) {
+			AEXT_ERROR(net->name, "bw_cap failed, %d\n", err);
+			return err;
+		} else {
+			err = wl_ext_iovar_getint(net, "mimo_bw_cap", &bw_cap);
+			if (bw_cap != WLC_N_BW_20ALL)
+				bw = WL_CHANSPEC_BW_40;
+		}
+	} else {
+		if (WL_BW_CAP_80MHZ(buf[0]))
+			bw = WL_CHANSPEC_BW_80;
+		else if (WL_BW_CAP_40MHZ(buf[0]))
+			bw = WL_CHANSPEC_BW_40;
+		else
+			bw = WL_CHANSPEC_BW_20;
+	}
+
+	if (bw == WL_CHANSPEC_BW_20)
+		distance = 2;
+	else if (bw == WL_CHANSPEC_BW_40)
+		distance = 4;
+	else if (bw == WL_CHANSPEC_BW_80)
+		distance = 8;
+	else
+		distance = 16;
+	AEXT_INFO(net->name, "bw=0x%x, distance=%d\n", bw, distance);
+
+	return distance;
+}
+
+int
+wl_ext_get_best_channel(struct net_device *net,
+#if defined(BSSCACHE)
+	wl_bss_cache_ctrl_t *bss_cache_ctrl,
+#else
+	wl_scan_results_t *bss_list,
+#endif /* BSSCACHE */
+	int ioctl_ver, int *best_2g_ch, int *best_5g_ch
+)
+{
+	struct wl_bss_info *bi = NULL;	/* must be initialized */
+	s32 i, j;
+#if defined(BSSCACHE)
+	wl_bss_cache_t *node;
+#endif /* BSSCACHE */
+	int b_band[CH_MAX_2G_CHANNEL]={0}, a_band1[4]={0}, a_band4[5]={0};
+	s32 cen_ch, distance, distance_2g, distance_5g, ch, min_ap=999;
+	u8 valid_chan_list[sizeof(u32)*(WL_NUMCHANNELS + 1)];
+	wl_uint32_list_t *list;
+	int ret;
+	chanspec_t chanspec;
+	struct dhd_pub *dhd = dhd_get_pub(net);
+
+	memset(b_band, -1, sizeof(b_band));
+	memset(a_band1, -1, sizeof(a_band1));
+	memset(a_band4, -1, sizeof(a_band4));
+
+	memset(valid_chan_list, 0, sizeof(valid_chan_list));
+	list = (wl_uint32_list_t *)(void *) valid_chan_list;
+	list->count = htod32(WL_NUMCHANNELS);
+	ret = wl_ext_ioctl(net, WLC_GET_VALID_CHANNELS, &valid_chan_list,
+		sizeof(valid_chan_list), 0);
+	if (ret<0) {
+		AEXT_ERROR(net->name, "get channels failed with %d\n", ret);
+		return 0;
+	} else {
+		for (i = 0; i < dtoh32(list->count); i++) {
+			ch = dtoh32(list->element[i]);
+			if (!dhd_conf_match_channel(dhd, ch))
+				continue;
+			if (ch < CH_MAX_2G_CHANNEL)
+				b_band[ch-1] = 0;
+			else if (ch <= 48)
+				a_band1[(ch-36)/4] = 0;
+			else if (ch >= 149 && ch <= 161)
+				a_band4[(ch-149)/4] = 0;
+		}
+	}
+
+	distance_2g = wl_ext_get_distance(net, WLC_BAND_2G);
+	distance_5g = wl_ext_get_distance(net, WLC_BAND_5G);
+
+#if defined(BSSCACHE)
+	node = bss_cache_ctrl->m_cache_head;
+	for (i=0; node && i<256; i++)
+#else
+	for (i=0; i < bss_list->count; i++)
+#endif /* BSSCACHE */
+	{
+#if defined(BSSCACHE)
+		bi = node->results.bss_info;
+#else
+		bi = bi ? (wl_bss_info_t *)((uintptr)bi + dtoh32(bi->length)) : bss_list->bss_info;
+#endif /* BSSCACHE */
+		chanspec = wl_ext_chspec_driver_to_host(ioctl_ver, bi->chanspec);
+		cen_ch = CHSPEC_CHANNEL(bi->chanspec);
+		distance = 0;
+		if (CHSPEC_IS20(chanspec))
+			distance += 2;
+		else if (CHSPEC_IS40(chanspec))
+			distance += 4;
+		else if (CHSPEC_IS80(chanspec))
+			distance += 8;
+		else
+			distance += 16;
+
+		if (CHSPEC_IS2G(chanspec)) {
+			distance += distance_2g;
+			for (j=0; j<ARRAYSIZE(b_band); j++) {
+				if (b_band[j] >= 0 && abs(cen_ch-(1+j)) <= distance)
+					b_band[j] += 1;
+			}
+		} else {
+			distance += distance_5g;
+			if (cen_ch <= 48) {
+				for (j=0; j<ARRAYSIZE(a_band1); j++) {
+					if (a_band1[j] >= 0 && abs(cen_ch-(36+j*4)) <= distance)
+						a_band1[j] += 1;
+				}
+			} else if (cen_ch >= 149) {
+				for (j=0; j<ARRAYSIZE(a_band4); j++) {
+					if (a_band4[j] >= 0 && abs(cen_ch-(149+j*4)) <= distance)
+						a_band4[j] += 1;
+				}
+			}
+		}
+#if defined(BSSCACHE)
+		node = node->next;
+#endif /* BSSCACHE */
+	}
+
+	*best_2g_ch = 0;
+	min_ap = 999;
+	for (i=0; i<CH_MAX_2G_CHANNEL; i++) {
+		if(b_band[i] < min_ap && b_band[i] >= 0) {
+			min_ap = b_band[i];
+			*best_2g_ch = i+1;
+		}
+	}
+	*best_5g_ch = 0;
+	min_ap = 999;
+	for (i=0; i<ARRAYSIZE(a_band1); i++) {
+		if(a_band1[i] < min_ap && a_band1[i] >= 0) {
+			min_ap = a_band1[i];
+			*best_5g_ch = i*4 + 36;
+		}
+	}
+	for (i=0; i<ARRAYSIZE(a_band4); i++) {
+		if(a_band4[i] < min_ap && a_band4[i] >= 0) {
+			min_ap = a_band4[i];
+			*best_5g_ch = i*4 + 149;
+		}
+	}
+
+	if (android_msg_level & ANDROID_INFO_LEVEL) {
+		struct bcmstrbuf strbuf;
+		char *tmp_buf = NULL;
+		tmp_buf = kmalloc(WLC_IOCTL_SMLEN, GFP_KERNEL);
+		if (tmp_buf == NULL) {
+			AEXT_ERROR(net->name, "Failed to allocate buffer of %d bytes\n", WLC_IOCTL_SMLEN);
+			goto exit;
+		}
+		bcm_binit(&strbuf, tmp_buf, WLC_IOCTL_SMLEN);
+		for (j=0; j<ARRAYSIZE(b_band); j++)
+			bcm_bprintf(&strbuf, "%d/%d, ", b_band[j], 1+j);
+		bcm_bprintf(&strbuf, "\n");
+		for (j=0; j<ARRAYSIZE(a_band1); j++)
+			bcm_bprintf(&strbuf, "%d/%d, ", a_band1[j], 36+j*4);
+		bcm_bprintf(&strbuf, "\n");
+		for (j=0; j<ARRAYSIZE(a_band4); j++)
+			bcm_bprintf(&strbuf, "%d/%d, ", a_band4[j], 149+j*4);
+		bcm_bprintf(&strbuf, "\n");
+		bcm_bprintf(&strbuf, "best_2g_ch=%d, best_5g_ch=%d\n",
+			*best_2g_ch, *best_5g_ch);
+		AEXT_INFO(net->name, "\n%s", strbuf.origbuf);
+		if (tmp_buf) {
+			kfree(tmp_buf);
+		}
+	}
+
+exit:
+	return 0;
+}
+#endif /* WL_CFG80211 || WL_ESCAN */
+
+#ifdef WL_CFG80211
+#define APCS_MAX_RETRY		10
+static int
+wl_ext_fw_apcs(struct net_device *dev, uint32 band)
+{
+	int channel = 0, chosen = 0, retry = 0, ret = 0, spect = 0;
+	u8 *reqbuf = NULL;
+	uint32 buf_size;
+
+	ret = wldev_ioctl_get(dev, WLC_GET_SPECT_MANAGMENT, &spect, sizeof(spect));
+	if (ret) {
+		AEXT_ERROR(dev->name, "ACS: error getting the spect, ret=%d\n", ret);
+		goto done;
+	}
+
+	if (spect > 0) {
+		ret = wl_cfg80211_set_spect(dev, 0);
+		if (ret < 0) {
+			AEXT_ERROR(dev->name, "ACS: error while setting spect, ret=%d\n", ret);
+			goto done;
+		}
+	}
+
+	reqbuf = kmalloc(CHANSPEC_BUF_SIZE, GFP_KERNEL);
+	if (reqbuf == NULL) {
+		AEXT_ERROR(dev->name, "failed to allocate chanspec buffer\n");
+		goto done;
+	}
+	memset(reqbuf, 0, CHANSPEC_BUF_SIZE);
+
+	if (band == WLC_BAND_AUTO) {
+		AEXT_INFO(dev->name, "ACS full channel scan \n");
+		reqbuf[0] = htod32(0);
+	} else if (band == WLC_BAND_5G) {
+		AEXT_INFO(dev->name, "ACS 5G band scan \n");
+		if ((ret = wl_cfg80211_get_chanspecs_5g(dev, reqbuf, CHANSPEC_BUF_SIZE)) < 0) {
+			AEXT_ERROR(dev->name, "ACS 5g chanspec retreival failed! \n");
+			goto done;
+		}
+	} else if (band == WLC_BAND_2G) {
+		/*
+		 * If channel argument is not provided/ argument 20 is provided,
+		 * Restrict channel to 2GHz, 20MHz BW, No SB
+		 */
+		AEXT_INFO(dev->name, "ACS 2G band scan \n");
+		if ((ret = wl_cfg80211_get_chanspecs_2g(dev, reqbuf, CHANSPEC_BUF_SIZE)) < 0) {
+			AEXT_ERROR(dev->name, "ACS 2g chanspec retreival failed! \n");
+			goto done;
+		}
+	} else {
+		AEXT_ERROR(dev->name, "ACS: No band chosen\n");
+		goto done;
+	}
+
+	buf_size = (band == WLC_BAND_AUTO) ? sizeof(int) : CHANSPEC_BUF_SIZE;
+	ret = wldev_ioctl_set(dev, WLC_START_CHANNEL_SEL, (void *)reqbuf,
+		buf_size);
+	if (ret < 0) {
+		AEXT_ERROR(dev->name, "can't start auto channel scan, err = %d\n", ret);
+		channel = 0;
+		goto done;
+	}
+
+	/* Wait for auto channel selection, max 3000 ms */
+	if ((band == WLC_BAND_2G) || (band == WLC_BAND_5G)) {
+		OSL_SLEEP(500);
+	} else {
+		/*
+		 * Full channel scan at the minimum takes 1.2secs
+		 * even with parallel scan. max wait time: 3500ms
+		 */
+		OSL_SLEEP(1000);
+	}
+
+	retry = APCS_MAX_RETRY;
+	while (retry--) {
+		ret = wldev_ioctl_get(dev, WLC_GET_CHANNEL_SEL, &chosen,
+			sizeof(chosen));
+		if (ret < 0) {
+			chosen = 0;
+		} else {
+			chosen = dtoh32(chosen);
+		}
+
+		if (chosen) {
+			int chosen_band;
+			int apcs_band;
+#ifdef D11AC_IOTYPES
+			if (wl_cfg80211_get_ioctl_version() == 1) {
+				channel = LCHSPEC_CHANNEL((chanspec_t)chosen);
+			} else {
+				channel = CHSPEC_CHANNEL((chanspec_t)chosen);
+			}
+#else
+			channel = CHSPEC_CHANNEL((chanspec_t)chosen);
+#endif /* D11AC_IOTYPES */
+			apcs_band = (band == WLC_BAND_AUTO) ? WLC_BAND_2G : band;
+			chosen_band = (channel <= CH_MAX_2G_CHANNEL) ? WLC_BAND_2G : WLC_BAND_5G;
+			if (apcs_band == chosen_band) {
+				WL_MSG(dev->name, "selected channel = %d\n", channel);
+				break;
+			}
+		}
+		AEXT_INFO(dev->name, "%d tried, ret = %d, chosen = 0x%x\n",
+			(APCS_MAX_RETRY - retry), ret, chosen);
+		OSL_SLEEP(250);
+	}
+
+done:
+	if (spect > 0) {
+		if ((ret = wl_cfg80211_set_spect(dev, spect) < 0)) {
+			AEXT_ERROR(dev->name, "ACS: error while setting spect\n");
+		}
+	}
+
+	if (reqbuf) {
+		kfree(reqbuf);
+	}
+
+	return channel;
+}
+#endif /* WL_CFG80211 */
+
+#ifdef WL_ESCAN
+int
+wl_ext_drv_scan(struct net_device *dev, uint32 band, bool fast_scan)
+{
+	int ret = -1, i, cnt = 0;
+	int retry = 0, retry_max, retry_interval = 250, up = 1;
+	wl_scan_info_t scan_info;
+
+	retry_max = WL_ESCAN_TIMER_INTERVAL_MS/retry_interval;
+	ret = wldev_ioctl_get(dev, WLC_GET_UP, &up, sizeof(s32));
+	if (ret < 0 || up == 0) {
+		ret = wldev_ioctl_set(dev, WLC_UP, &up, sizeof(s32));
+	}
+	memset(&scan_info, 0, sizeof(wl_scan_info_t));
+	if (band == WLC_BAND_2G || band == WLC_BAND_AUTO) {
+		for (i=0; i<13; i++)
+			scan_info.channels.channel[i] = i + 1;
+		cnt += 13;
+	}
+	if (band == WLC_BAND_5G || band == WLC_BAND_AUTO) {
+		for (i=0; i<4; i++)
+			scan_info.channels.channel[i+cnt] = 36 + i*4;
+		cnt += 4;
+		for (i=0; i<4; i++)
+			scan_info.channels.channel[i+cnt] = 149 + i*4;
+		cnt += 4;
+	}
+	scan_info.channels.count = cnt;
+	if (fast_scan)
+		scan_info.scan_time = 40;
+	scan_info.bcast_ssid = TRUE;
+	retry = retry_max;
+	while (retry--) {
+		ret = wl_escan_set_scan(dev, &scan_info);
+		if (!ret)
+			break;
+		OSL_SLEEP(retry_interval);
+	}
+	if (retry == 0) {
+		AEXT_ERROR(dev->name, "scan retry failed %d\n", retry_max);
+		ret = -1;
+	}
+
+	return ret;
+}
+
+int
+wl_ext_drv_apcs(struct net_device *dev, uint32 band)
+{
+	int ret = 0, channel = 0;
+	struct dhd_pub *dhd = dhd_get_pub(dev);
+	struct wl_escan_info *escan = NULL;
+	int retry = 0, retry_max, retry_interval = 250;
+
+	escan = dhd->escan;
+	WL_MSG(dev->name, "ACS_SCAN\n");
+	escan->autochannel = 1;
+	ret = wl_ext_drv_scan(dev, band, TRUE);
+	if (ret < 0)
+		goto done;
+	retry_max = WL_ESCAN_TIMER_INTERVAL_MS/retry_interval;
+	retry = retry_max;
+	while (retry--) {
+		if (escan->escan_state == ESCAN_STATE_IDLE) {
+			if (band == WLC_BAND_5G)
+				channel = escan->best_5g_ch;
+			else
+				channel = escan->best_2g_ch;
+			WL_MSG(dev->name, "selected channel = %d\n", channel);
+			goto done;
+		}
+		AEXT_INFO(dev->name, "escan_state=%d, %d tried, ret = %d\n",
+			escan->escan_state, (retry_max - retry), ret);
+		OSL_SLEEP(retry_interval);
+	}
+
+done:
+	escan->autochannel = 0;
+
+	return channel;
+}
+#endif /* WL_ESCAN */
+
+int
+wl_ext_autochannel(struct net_device *dev, uint acs, uint32 band)
+{
+	int channel = 0;
+	uint16 chan_2g, chan_5g;
+
+	AEXT_INFO(dev->name, "acs=0x%x, band=%d \n", acs, band);
+
+#ifdef WL_CFG80211
+	if (acs & ACS_FW_BIT) {
+		int ret = 0;
+		ret = wldev_ioctl_get(dev, WLC_GET_CHANNEL_SEL, &channel, sizeof(channel));
+		channel = 0;
+		if (ret != BCME_UNSUPPORTED)
+			channel = wl_ext_fw_apcs(dev, band);
+		if (channel)
+			return channel;
+	}
+#endif
+
+#ifdef WL_ESCAN
+	if (acs & ACS_DRV_BIT)
+		channel = wl_ext_drv_apcs(dev, band);
+#endif /* WL_ESCAN */
+
+	if (channel == 0) {
+		wl_ext_get_default_chan(dev, &chan_2g, &chan_5g, TRUE);
+		if (band == WLC_BAND_5G) {
+			channel = chan_5g;
+		} else {
+			channel = chan_2g;
+		}
+		AEXT_ERROR(dev->name, "ACS failed. Fall back to default channel (%d) \n", channel);
+	}
+
+	return channel;
+}
+
+#if defined(RSSIAVG)
+void
+wl_free_rssi_cache(wl_rssi_cache_ctrl_t *rssi_cache_ctrl)
+{
+	wl_rssi_cache_t *node, *cur, **rssi_head;
+	int i=0;
+
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+	node = *rssi_head;
+
+	for (;node;) {
+		AEXT_INFO("wlan", "Free %d with BSSID %pM\n", i, &node->BSSID);
+		cur = node;
+		node = cur->next;
+		kfree(cur);
+		i++;
+	}
+	*rssi_head = NULL;
+}
+
+void
+wl_delete_dirty_rssi_cache(wl_rssi_cache_ctrl_t *rssi_cache_ctrl)
+{
+	wl_rssi_cache_t *node, *prev, **rssi_head;
+	int i = -1, tmp = 0;
+	struct osl_timespec now;
+
+	osl_do_gettimeofday(&now);
+
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+	node = *rssi_head;
+	prev = node;
+	for (;node;) {
+		i++;
+		if (now.tv_sec > node->tv.tv_sec) {
+			if (node == *rssi_head) {
+				tmp = 1;
+				*rssi_head = node->next;
+			} else {
+				tmp = 0;
+				prev->next = node->next;
+			}
+			AEXT_INFO("wlan", "Del %d with BSSID %pM\n", i, &node->BSSID);
+			kfree(node);
+			if (tmp == 1) {
+				node = *rssi_head;
+				prev = node;
+			} else {
+				node = prev->next;
+			}
+			continue;
+		}
+		prev = node;
+		node = node->next;
+	}
+}
+
+void
+wl_delete_disconnected_rssi_cache(wl_rssi_cache_ctrl_t *rssi_cache_ctrl,
+	u8 *bssid)
+{
+	wl_rssi_cache_t *node, *prev, **rssi_head;
+	int i = -1, tmp = 0;
+
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+	node = *rssi_head;
+	prev = node;
+	for (;node;) {
+		i++;
+		if (!memcmp(&node->BSSID, bssid, ETHER_ADDR_LEN)) {
+			if (node == *rssi_head) {
+				tmp = 1;
+				*rssi_head = node->next;
+			} else {
+				tmp = 0;
+				prev->next = node->next;
+			}
+			AEXT_INFO("wlan", "Del %d with BSSID %pM\n", i, &node->BSSID);
+			kfree(node);
+			if (tmp == 1) {
+				node = *rssi_head;
+				prev = node;
+			} else {
+				node = prev->next;
+			}
+			continue;
+		}
+		prev = node;
+		node = node->next;
+	}
+}
+
+void
+wl_reset_rssi_cache(wl_rssi_cache_ctrl_t *rssi_cache_ctrl)
+{
+	wl_rssi_cache_t *node, **rssi_head;
+
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+
+	/* reset dirty */
+	node = *rssi_head;
+	for (;node;) {
+		node->dirty += 1;
+		node = node->next;
+	}
+}
+
+int
+wl_update_connected_rssi_cache(struct net_device *net,
+	wl_rssi_cache_ctrl_t *rssi_cache_ctrl, int *rssi_avg)
+{
+	wl_rssi_cache_t *node, *prev, *leaf, **rssi_head;
+	int j, k=0;
+	int rssi, error=0;
+	struct ether_addr bssid;
+	struct osl_timespec now, timeout;
+	scb_val_t scbval;
+
+	if (!g_wifi_on)
+		return 0;
+
+	error = wldev_ioctl(net, WLC_GET_BSSID, &bssid, sizeof(bssid), 0);
+	if (error == BCME_NOTASSOCIATED) {
+		AEXT_INFO("wlan", "Not Associated! res:%d\n", error);
+		return 0;
+	}
+	if (error) {
+		AEXT_ERROR(net->name, "Could not get bssid (%d)\n", error);
+	}
+	error = wldev_get_rssi(net, &scbval);
+	if (error) {
+		AEXT_ERROR(net->name, "Could not get rssi (%d)\n", error);
+		return error;
+	}
+	rssi = scbval.val;
+
+	osl_do_gettimeofday(&now);
+	timeout.tv_sec = now.tv_sec + RSSICACHE_TIMEOUT;
+	if (timeout.tv_sec < now.tv_sec) {
+		/*
+		 * Integer overflow - assume long enough timeout to be assumed
+		 * to be infinite, i.e., the timeout would never happen.
+		 */
+		AEXT_TRACE(net->name,
+			"Too long timeout (secs=%d) to ever happen - now=%lu, timeout=%lu\n",
+			RSSICACHE_TIMEOUT, now.tv_sec, timeout.tv_sec);
+	}
+
+	/* update RSSI */
+	rssi_head = &rssi_cache_ctrl->m_cache_head;
+	node = *rssi_head;
+	prev = NULL;
+	for (;node;) {
+		if (!memcmp(&node->BSSID, &bssid, ETHER_ADDR_LEN)) {
+			AEXT_INFO("wlan", "Update %d with BSSID %pM, RSSI=%d\n", k, &bssid, rssi);
+			for (j=0; j<RSSIAVG_LEN-1; j++)
+				node->RSSI[j] = node->RSSI[j+1];
+			node->RSSI[j] = rssi;
+			node->dirty = 0;
+			node->tv = timeout;
+			goto exit;
+		}
+		prev = node;
+		node = node->next;
+		k++;
+	}
+
+	leaf = kmalloc(sizeof(wl_rssi_cache_t), GFP_KERNEL);
+	if (!leaf) {
+		AEXT_ERROR(net->name, "Memory alloc failure %d\n", (int)sizeof(wl_rssi_cache_t));
+		return 0;
+	}
+	AEXT_INFO(net->name, "Add %d with cached BSSID %pM, RSSI=%3d in the leaf\n",
+		k, &bssid, rssi);
+
+	leaf->next = NULL;
+	leaf->dirty = 0;
+	leaf->tv = timeout;
+	memcpy(&leaf->BSSID, &bssid, ETHER_ADDR_LEN);
+	for (j=0; j<RSSIAVG_LEN; j++)
+		leaf->RSSI[j] = rssi;
+
+	if (!prev)
+		*rssi_head = leaf;
+	else
+		prev->next = leaf;
+
+exit:
+	*rssi_avg = (int)wl_get_avg_rssi(rssi_cache_ctrl, &bssid);
+
+	return error;
+}
