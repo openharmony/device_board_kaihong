@@ -4989,3 +4989,376 @@ enum {
 #define FTM_PARAMS_SET_FTMS_PER_BURST(_p, _nftms) FTM_PARAMS_SET_FIELD(_p, \
 	FTM_PARAMS_FTMS_PER_BURST_OFFSET, FTM_PARAMS_FTMS_PER_BURST_MASK, \
 	FTM_PARAMS_FTMS_PER_BURST_SHIFT, _nftms)
+
+enum {
+	FTM_PARAMS_FTMS_PER_BURST_NOPREF = 0
+};
+
+#define FTM_PARAMS_CHAN_INFO_OFFSET 6
+#define FTM_PARAMS_CHAN_INFO_MASK 0xfc
+#define FTM_PARAMS_CHAN_INFO_SHIFT 2
+#define FTM_PARAMS_CHAN_INFO(_p) FTM_PARAMS_FIELD(_p, FTM_PARAMS_CHAN_INFO_OFFSET, \
+	FTM_PARAMS_CHAN_INFO_MASK, FTM_PARAMS_CHAN_INFO_SHIFT)
+#define FTM_PARAMS_SET_CHAN_INFO(_p, _ci) FTM_PARAMS_SET_FIELD(_p, \
+	FTM_PARAMS_CHAN_INFO_OFFSET, FTM_PARAMS_CHAN_INFO_MASK, FTM_PARAMS_CHAN_INFO_SHIFT, _ci)
+
+/* burst period - units of 100ms */
+#define FTM_PARAMS_BURST_PERIOD(_p) (((_p)->info[8] << 8) | (_p)->info[7])
+#define FTM_PARAMS_SET_BURST_PERIOD(_p, _bp) do {\
+	(_p)->info[7] = (_bp) & 0xff; \
+	(_p)->info[8] = ((_bp) >> 8) & 0xff; \
+} while (0)
+
+#define FTM_PARAMS_BURST_PERIOD_MS(_p) (FTM_PARAMS_BURST_PERIOD(_p) * 100)
+
+enum {
+	FTM_PARAMS_BURST_PERIOD_NOPREF = 0
+};
+
+/* FTM status values - last updated from 11mcD4.0 */
+enum {
+	FTM_PARAMS_STATUS_RESERVED	= 0,
+	FTM_PARAMS_STATUS_SUCCESSFUL = 1,
+	FTM_PARAMS_STATUS_INCAPABLE = 2,
+	FTM_PARAMS_STATUS_FAILED = 3,
+	/* Below are obsolte */
+	FTM_PARAMS_STATUS_OVERRIDDEN = 4,
+	FTM_PARAMS_STATUS_ASAP_INCAPABLE = 5,
+	FTM_PARAMS_STATUS_ASAP_FAILED = 6,
+	/* rest are reserved */
+};
+
+enum {
+	FTM_PARAMS_CHAN_INFO_NO_PREF 		= 0,
+	FTM_PARAMS_CHAN_INFO_RESERVE1 		= 1,
+	FTM_PARAMS_CHAN_INFO_RESERVE2 		= 2,
+	FTM_PARAMS_CHAN_INFO_RESERVE3 		= 3,
+	FTM_PARAMS_CHAN_INFO_NON_HT_5 		= 4,
+	FTM_PARAMS_CHAN_INFO_RESERVE5		= 5,
+	FTM_PARAMS_CHAN_INFO_NON_HT_10 		= 6,
+	FTM_PARAMS_CHAN_INFO_RESERVE7		= 7,
+	FTM_PARAMS_CHAN_INFO_NON_HT_20 		= 8, /* excludes 2.4G, and High rate DSSS */
+	FTM_PARAMS_CHAN_INFO_HT_MF_20 		= 9,
+	FTM_PARAMS_CHAN_INFO_VHT_20 		= 10,
+	FTM_PARAMS_CHAN_INFO_HT_MF_40 		= 11,
+	FTM_PARAMS_CHAN_INFO_VHT_40 		= 12,
+	FTM_PARAMS_CHAN_INFO_VHT_80 		= 13,
+	FTM_PARAMS_CHAN_INFO_VHT_80_80 		= 14,
+	FTM_PARAMS_CHAN_INFO_VHT_160_2_RFLOS 	= 15,
+	FTM_PARAMS_CHAN_INFO_VHT_160		= 16,
+	/* Reserved from 17 - 30 */
+	FTM_PARAMS_CHAN_INFO_DMG_2160 		= 31,
+	/* Reserved from 32 - 63 */
+	FTM_PARAMS_CHAN_INFO_MAX		= 63
+};
+
+/* tag_ID/length/value_buffer tuple */
+typedef BWL_PRE_PACKED_STRUCT struct {
+	uint8	id;
+	uint8	len;
+	uint8	data[1];
+} BWL_POST_PACKED_STRUCT ftm_vs_tlv_t;
+
+BWL_PRE_PACKED_STRUCT struct dot11_ftm_vs_ie {
+	uint8 id;						/* DOT11_MNG_VS_ID */
+	uint8 len;						/* length following */
+	uint8 oui[3];					/* BRCM_PROP_OUI (or Customer) */
+	uint8 sub_type;					/* BRCM_FTM_IE_TYPE (or Customer) */
+	uint8 version;
+	ftm_vs_tlv_t	tlvs[1];
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_ftm_vs_ie dot11_ftm_vs_ie_t;
+
+/* same as payload of dot11_ftm_vs_ie.
+* This definition helps in having struct access
+* of pay load while building FTM VS IE from other modules(NAN)
+*/
+BWL_PRE_PACKED_STRUCT struct dot11_ftm_vs_ie_pyld {
+	uint8 sub_type;					/* BRCM_FTM_IE_TYPE (or Customer) */
+	uint8 version;
+	ftm_vs_tlv_t	tlvs[1];
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_ftm_vs_ie_pyld dot11_ftm_vs_ie_pyld_t;
+
+/* ftm vs api version */
+#define BCM_FTM_VS_PARAMS_VERSION 0x01
+
+/* ftm vendor specific information tlv types */
+enum {
+	FTM_VS_TLV_NONE = 0,
+	FTM_VS_TLV_REQ_PARAMS = 1,		/* additional request params (in FTM_REQ) */
+	FTM_VS_TLV_MEAS_INFO = 2,		/* measurement information (in FTM_MEAS) */
+	FTM_VS_TLV_SEC_PARAMS = 3,		/* security parameters (in either) */
+	FTM_VS_TLV_SEQ_PARAMS = 4,		/* toast parameters (FTM_REQ, BRCM proprietary) */
+	FTM_VS_TLV_MF_BUF = 5,			/* multi frame buffer - may span ftm vs ie's */
+	FTM_VS_TLV_TIMING_PARAMS = 6,            /* timing adjustments */
+	FTM_VS_TLV_MF_STATS_BUF = 7		/* multi frame statistics buffer */
+	/* add additional types above */
+};
+
+/* the following definitions are *DEPRECATED* and moved to implemenetion files. They
+ * are retained here because previous (May 2016) some branches use them
+ */
+#define FTM_TPK_LEN            16
+#define FTM_RI_RR_BUF_LEN      32
+#define FTM_TPK_RI_RR_LEN      13
+#define FTM_TPK_RI_RR_LEN_SECURE_2_0    28
+#define FTM_TPK_DIGEST_LEN     32
+#define FTM_TPK_BUFFER_LEN     128
+#define FTM_TPK_RI_PHY_LEN     7
+#define FTM_TPK_RR_PHY_LEN     7
+#define FTM_TPK_DATA_BUFFER_LEN 88
+#define FTM_TPK_LEN_SECURE_2_0          32
+#define FTM_TPK_RI_PHY_LEN_SECURE_2_0  14
+#define FTM_TPK_RR_PHY_LEN_SECURE_2_0  14
+
+BWL_PRE_PACKED_STRUCT struct dot11_ftm_vs_params {
+	uint8 id;                       /* DOT11_MNG_VS_ID */
+	uint8 len;
+	uint8 oui[3];                   /* Proprietary OUI, BRCM_PROP_OUI */
+	uint8 bcm_vs_id;
+	ftm_vs_tlv_t ftm_tpk_ri_rr[1];          /* ftm_TPK_ri_rr place holder */
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_ftm_vs_params dot11_ftm_vs_tpk_ri_rr_params_t;
+#define DOT11_FTM_VS_LEN  (sizeof(dot11_ftm_vs_tpk_ri_rr_params_t) - TLV_HDR_LEN)
+/* end *DEPRECATED* ftm definitions */
+
+BWL_PRE_PACKED_STRUCT struct dot11_ftm_sync_info {
+	uint8 id;		/* Extended - 255 11mc D4.3  */
+	uint8 len;
+	uint8 id_ext;
+	uint8 tsf_sync_info[4];
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_ftm_sync_info dot11_ftm_sync_info_t;
+
+/* ftm tsf sync info ie len - includes id ext */
+#define DOT11_FTM_SYNC_INFO_IE_LEN (sizeof(dot11_ftm_sync_info_t) - TLV_HDR_LEN)
+
+#define DOT11_FTM_IS_SYNC_INFO_IE(_ie) (\
+	DOT11_MNG_IE_ID_EXT_MATCH(_ie, DOT11_MNG_FTM_SYNC_INFO) && \
+	(_ie)->len == DOT11_FTM_SYNC_INFO_IE_LEN)
+
+BWL_PRE_PACKED_STRUCT struct dot11_dh_param_ie {
+	uint8   id;	/* OWE */
+	uint8   len;
+	uint8   ext_id;	/* EXT_MNG_OWE_DH_PARAM_ID */
+	uint16  group;
+	uint8   pub_key[0];
+} BWL_POST_PACKED_STRUCT;
+typedef struct dot11_dh_param_ie dot11_dh_param_ie_t;
+
+#define DOT11_DH_EXTID_OFFSET   (OFFSETOF(dot11_dh_param_ie_t, ext_id))
+
+#define DOT11_OWE_DH_PARAM_IE(_ie) (\
+	DOT11_MNG_IE_ID_EXT_MATCH(_ie, EXT_MNG_OWE_DH_PARAM_ID))
+
+#define DOT11_MNG_OWE_IE_ID_EXT_INIT(_ie, _id, _len) do {\
+	(_ie)->id = DOT11_MNG_ID_EXT_ID; \
+	(_ie)->len = _len; \
+	(_ie)->ext_id = _id; \
+} while (0)
+
+/* 802.11u interworking access network options */
+#define IW_ANT_MASK					0x0f
+#define IW_INTERNET_MASK				0x10
+#define IW_ASRA_MASK					0x20
+#define IW_ESR_MASK					0x40
+#define IW_UESA_MASK					0x80
+
+/* 802.11u interworking access network type */
+#define IW_ANT_PRIVATE_NETWORK				0
+#define IW_ANT_PRIVATE_NETWORK_WITH_GUEST		1
+#define IW_ANT_CHARGEABLE_PUBLIC_NETWORK		2
+#define IW_ANT_FREE_PUBLIC_NETWORK			3
+#define IW_ANT_PERSONAL_DEVICE_NETWORK			4
+#define IW_ANT_EMERGENCY_SERVICES_NETWORK		5
+#define IW_ANT_TEST_NETWORK				14
+#define IW_ANT_WILDCARD_NETWORK				15
+
+#define IW_ANT_LEN			1
+#define IW_VENUE_LEN			2
+#define IW_HESSID_LEN			6
+#define IW_HESSID_OFF			(IW_ANT_LEN + IW_VENUE_LEN)
+#define IW_MAX_LEN			(IW_ANT_LEN + IW_VENUE_LEN + IW_HESSID_LEN)
+
+/* 802.11u advertisement protocol */
+#define ADVP_ANQP_PROTOCOL_ID				0
+#define ADVP_MIH_PROTOCOL_ID				1
+
+/* 802.11u advertisement protocol masks */
+#define ADVP_QRL_MASK					0x7f
+#define ADVP_PAME_BI_MASK				0x80
+
+/* 802.11u advertisement protocol values */
+#define ADVP_QRL_REQUEST				0x00
+#define ADVP_QRL_RESPONSE				0x7f
+#define ADVP_PAME_BI_DEPENDENT				0x00
+#define ADVP_PAME_BI_INDEPENDENT			ADVP_PAME_BI_MASK
+
+/* 802.11u ANQP information ID */
+#define ANQP_ID_QUERY_LIST				256
+#define ANQP_ID_CAPABILITY_LIST				257
+#define ANQP_ID_VENUE_NAME_INFO				258
+#define ANQP_ID_EMERGENCY_CALL_NUMBER_INFO		259
+#define ANQP_ID_NETWORK_AUTHENTICATION_TYPE_INFO	260
+#define ANQP_ID_ROAMING_CONSORTIUM_LIST			261
+#define ANQP_ID_IP_ADDRESS_TYPE_AVAILABILITY_INFO	262
+#define ANQP_ID_NAI_REALM_LIST				263
+#define ANQP_ID_G3PP_CELLULAR_NETWORK_INFO		264
+#define ANQP_ID_AP_GEOSPATIAL_LOCATION			265
+#define ANQP_ID_AP_CIVIC_LOCATION			266
+#define ANQP_ID_AP_LOCATION_PUBLIC_ID_URI		267
+#define ANQP_ID_DOMAIN_NAME_LIST			268
+#define ANQP_ID_EMERGENCY_ALERT_ID_URI			269
+#define ANQP_ID_EMERGENCY_NAI				271
+#define ANQP_ID_NEIGHBOR_REPORT				272
+#define ANQP_ID_VENDOR_SPECIFIC_LIST			56797
+
+/* 802.11u ANQP ID len */
+#define ANQP_INFORMATION_ID_LEN				2
+
+/* 802.11u ANQP OUI */
+#define ANQP_OUI_SUBTYPE				9
+
+/* 802.11u venue name */
+#define VENUE_LANGUAGE_CODE_SIZE			3
+#define VENUE_NAME_SIZE					255
+
+/* 802.11u venue groups */
+#define VENUE_UNSPECIFIED				0
+#define VENUE_ASSEMBLY					1
+#define VENUE_BUSINESS					2
+#define VENUE_EDUCATIONAL				3
+#define VENUE_FACTORY					4
+#define VENUE_INSTITUTIONAL				5
+#define VENUE_MERCANTILE				6
+#define VENUE_RESIDENTIAL				7
+#define VENUE_STORAGE					8
+#define VENUE_UTILITY					9
+#define VENUE_VEHICULAR					10
+#define VENUE_OUTDOOR					11
+
+/* 802.11u network authentication type indicator */
+#define NATI_UNSPECIFIED				-1
+#define NATI_ACCEPTANCE_OF_TERMS_CONDITIONS		0
+#define NATI_ONLINE_ENROLLMENT_SUPPORTED		1
+#define NATI_HTTP_HTTPS_REDIRECTION			2
+#define NATI_DNS_REDIRECTION				3
+
+/* 802.11u IP address type availability - IPv6 */
+#define IPA_IPV6_SHIFT					0
+#define IPA_IPV6_MASK					(0x03 << IPA_IPV6_SHIFT)
+#define	IPA_IPV6_NOT_AVAILABLE				0x00
+#define IPA_IPV6_AVAILABLE				0x01
+#define IPA_IPV6_UNKNOWN_AVAILABILITY			0x02
+
+/* 802.11u IP address type availability - IPv4 */
+#define IPA_IPV4_SHIFT					2
+#define IPA_IPV4_MASK					(0x3f << IPA_IPV4_SHIFT)
+#define	IPA_IPV4_NOT_AVAILABLE				0x00
+#define IPA_IPV4_PUBLIC					0x01
+#define IPA_IPV4_PORT_RESTRICT				0x02
+#define IPA_IPV4_SINGLE_NAT				0x03
+#define IPA_IPV4_DOUBLE_NAT				0x04
+#define IPA_IPV4_PORT_RESTRICT_SINGLE_NAT		0x05
+#define IPA_IPV4_PORT_RESTRICT_DOUBLE_NAT		0x06
+#define IPA_IPV4_UNKNOWN_AVAILABILITY			0x07
+
+/* 802.11u NAI realm encoding */
+#define REALM_ENCODING_RFC4282				0
+#define REALM_ENCODING_UTF8				1
+
+/* 802.11u IANA EAP method type numbers */
+#define REALM_EAP_TLS					13
+#define REALM_EAP_LEAP					17
+#define REALM_EAP_SIM					18
+#define REALM_EAP_TTLS					21
+#define REALM_EAP_AKA					23
+#define REALM_EAP_PEAP					25
+#define REALM_EAP_FAST					43
+#define REALM_EAP_PSK					47
+#define REALM_EAP_AKAP					50
+#define REALM_EAP_EXPANDED				254
+
+/* 802.11u authentication ID */
+#define REALM_EXPANDED_EAP				1
+#define REALM_NON_EAP_INNER_AUTHENTICATION		2
+#define REALM_INNER_AUTHENTICATION_EAP			3
+#define REALM_EXPANDED_INNER_EAP			4
+#define REALM_CREDENTIAL				5
+#define REALM_TUNNELED_EAP_CREDENTIAL			6
+#define REALM_VENDOR_SPECIFIC_EAP			221
+
+/* 802.11u non-EAP inner authentication type */
+#define REALM_RESERVED_AUTH				0
+#define REALM_PAP					1
+#define REALM_CHAP					2
+#define REALM_MSCHAP					3
+#define REALM_MSCHAPV2					4
+
+/* 802.11u credential type */
+#define REALM_SIM					1
+#define REALM_USIM					2
+#define REALM_NFC					3
+#define REALM_HARDWARE_TOKEN				4
+#define REALM_SOFTOKEN					5
+#define REALM_CERTIFICATE				6
+#define REALM_USERNAME_PASSWORD				7
+#define REALM_SERVER_SIDE				8
+#define REALM_RESERVED_CRED				9
+#define REALM_VENDOR_SPECIFIC_CRED			10
+
+/* 802.11u 3GPP PLMN */
+#define G3PP_GUD_VERSION				0
+#define G3PP_PLMN_LIST_IE				0
+
+/* AP Location Public ID Info encoding */
+#define PUBLIC_ID_URI_FQDN_SE_ID		0
+/* URI/FQDN Descriptor field values */
+#define LOCATION_ENCODING_HELD			1
+#define LOCATION_ENCODING_SUPL			2
+#define URI_FQDN_SIZE					255
+
+/** hotspot2.0 indication element (vendor specific) */
+BWL_PRE_PACKED_STRUCT struct hs20_ie {
+	uint8 oui[3];
+	uint8 type;
+	uint8 config;
+} BWL_POST_PACKED_STRUCT;
+typedef struct hs20_ie hs20_ie_t;
+#define HS20_IE_LEN 5	/* HS20 IE length */
+
+/** IEEE 802.11 Annex E */
+typedef enum {
+	DOT11_2GHZ_20MHZ_CLASS_12	= 81,	/* Ch 1-11 */
+	DOT11_5GHZ_20MHZ_CLASS_1	= 115,	/* Ch 36-48 */
+	DOT11_5GHZ_20MHZ_CLASS_2_DFS	= 118,	/* Ch 52-64 */
+	DOT11_5GHZ_20MHZ_CLASS_3	= 124,	/* Ch 149-161 */
+	DOT11_5GHZ_20MHZ_CLASS_4_DFS	= 121,	/* Ch 100-140 */
+	DOT11_5GHZ_20MHZ_CLASS_5	= 125,	/* Ch 149-165 */
+	DOT11_5GHZ_40MHZ_CLASS_22	= 116,	/* Ch 36-44,   lower */
+	DOT11_5GHZ_40MHZ_CLASS_23_DFS 	= 119,	/* Ch 52-60,   lower */
+	DOT11_5GHZ_40MHZ_CLASS_24_DFS	= 122,	/* Ch 100-132, lower */
+	DOT11_5GHZ_40MHZ_CLASS_25	= 126,	/* Ch 149-157, lower */
+	DOT11_5GHZ_40MHZ_CLASS_27	= 117,	/* Ch 40-48,   upper */
+	DOT11_5GHZ_40MHZ_CLASS_28_DFS	= 120,	/* Ch 56-64,   upper */
+	DOT11_5GHZ_40MHZ_CLASS_29_DFS	= 123,	/* Ch 104-136, upper */
+	DOT11_5GHZ_40MHZ_CLASS_30	= 127,	/* Ch 153-161, upper */
+	DOT11_2GHZ_40MHZ_CLASS_32	= 83,	/* Ch 1-7,     lower */
+	DOT11_2GHZ_40MHZ_CLASS_33	= 84,	/* Ch 5-11,    upper */
+} dot11_op_class_t;
+
+/* QoS map */
+#define QOS_MAP_FIXED_LENGTH	(8 * 2)	/* DSCP ranges fixed with 8 entries */
+
+#define BCM_AIBSS_IE_TYPE 56
+
+#define SSE_OUI                                  "\x00\x00\xF0"
+#define VENDOR_ENTERPRISE_STA_OUI_TYPE           0x22
+#define MAX_VSIE_DISASSOC                        (1)
+#define DISCO_VSIE_LEN                           0x09u
+
+/* This marks the end of a packed structure section. */
+#include <packed_section_end.h>
+
+#endif /* _802_11_H_ */
