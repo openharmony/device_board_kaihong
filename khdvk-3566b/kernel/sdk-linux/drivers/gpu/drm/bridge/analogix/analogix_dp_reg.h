@@ -297,3 +297,214 @@
 #define SEL_24M					(0x1 << 3)
 #define TX_DVDD_BIT_1_0625V			(0x4 << 0)
 
+/* ANALOGIX_DP_ANALOG_CTL_3 */
+#define DRIVE_DVDD_BIT_1_0625V			(0x4 << 5)
+#define VCO_BIT_600_MICRO			(0x5 << 0)
+
+/* ANALOGIX_DP_PLL_FILTER_CTL_1 */
+#define PD_RING_OSC				(0x1 << 6)
+#define AUX_TERMINAL_CTRL_50_OHM		(0x2 << 4)
+#define TX_CUR1_2X				(0x1 << 2)
+#define TX_CUR_16_MA				(0x3 << 0)
+
+/* ANALOGIX_DP_TX_AMP_TUNING_CTL */
+#define CH3_AMP_400_MV				(0x0 << 24)
+#define CH2_AMP_400_MV				(0x0 << 16)
+#define CH1_AMP_400_MV				(0x0 << 8)
+#define CH0_AMP_400_MV				(0x0 << 0)
+
+/* ANALOGIX_DP_AUX_HW_RETRY_CTL */
+#define AUX_BIT_PERIOD_EXPECTED_DELAY(x)	(((x) & 0x7) << 8)
+#define AUX_HW_RETRY_INTERVAL_MASK		(0x3 << 3)
+#define AUX_HW_RETRY_INTERVAL_600_MICROSECONDS	(0x0 << 3)
+#define AUX_HW_RETRY_INTERVAL_800_MICROSECONDS	(0x1 << 3)
+#define AUX_HW_RETRY_INTERVAL_1000_MICROSECONDS	(0x2 << 3)
+#define AUX_HW_RETRY_INTERVAL_1800_MICROSECONDS	(0x3 << 3)
+#define AUX_HW_RETRY_COUNT_SEL(x)		(((x) & 0x7) << 0)
+
+/* ANALOGIX_DP_COMMON_INT_STA_1 */
+#define VSYNC_DET				(0x1 << 7)
+#define PLL_LOCK_CHG				(0x1 << 6)
+#define SPDIF_ERR				(0x1 << 5)
+#define SPDIF_UNSTBL				(0x1 << 4)
+#define VID_FORMAT_CHG				(0x1 << 3)
+#define AUD_CLK_CHG				(0x1 << 2)
+#define VID_CLK_CHG				(0x1 << 1)
+#define SW_INT					(0x1 << 0)
+
+/* ANALOGIX_DP_COMMON_INT_STA_2 */
+#define ENC_EN_CHG				(0x1 << 6)
+#define HW_BKSV_RDY				(0x1 << 3)
+#define HW_SHA_DONE				(0x1 << 2)
+#define HW_AUTH_STATE_CHG			(0x1 << 1)
+#define HW_AUTH_DONE				(0x1 << 0)
+
+/* ANALOGIX_DP_COMMON_INT_STA_3 */
+#define AFIFO_UNDER				(0x1 << 7)
+#define AFIFO_OVER				(0x1 << 6)
+#define R0_CHK_FLAG				(0x1 << 5)
+
+/* ANALOGIX_DP_COMMON_INT_STA_4 */
+#define PSR_ACTIVE				(0x1 << 7)
+#define PSR_INACTIVE				(0x1 << 6)
+#define SPDIF_BI_PHASE_ERR			(0x1 << 5)
+#define HOTPLUG_CHG				(0x1 << 2)
+#define HPD_LOST				(0x1 << 1)
+#define PLUG					(0x1 << 0)
+
+/* ANALOGIX_DP_INT_STA */
+#define INT_HPD					(0x1 << 6)
+#define HW_TRAINING_FINISH			(0x1 << 5)
+#define RPLY_RECEIV				(0x1 << 1)
+#define AUX_ERR					(0x1 << 0)
+
+/* ANALOGIX_DP_INT_CTL */
+#define SOFT_INT_CTRL				(0x1 << 2)
+#define INT_POL1				(0x1 << 1)
+#define INT_POL0				(0x1 << 0)
+
+/* ANALOGIX_DP_SYS_CTL_1 */
+#define DET_STA					(0x1 << 2)
+#define FORCE_DET				(0x1 << 1)
+#define DET_CTRL				(0x1 << 0)
+
+/* ANALOGIX_DP_SYS_CTL_2 */
+#define CHA_CRI(x)				(((x) & 0xf) << 4)
+#define CHA_STA					(0x1 << 2)
+#define FORCE_CHA				(0x1 << 1)
+#define CHA_CTRL				(0x1 << 0)
+
+/* ANALOGIX_DP_SYS_CTL_3 */
+#define HPD_STATUS				(0x1 << 6)
+#define F_HPD					(0x1 << 5)
+#define HPD_CTRL				(0x1 << 4)
+#define HDCP_RDY				(0x1 << 3)
+#define STRM_VALID				(0x1 << 2)
+#define F_VALID					(0x1 << 1)
+#define VALID_CTRL				(0x1 << 0)
+
+/* ANALOGIX_DP_SYS_CTL_4 */
+#define FIX_M_AUD				(0x1 << 4)
+#define ENHANCED				(0x1 << 3)
+#define FIX_M_VID				(0x1 << 2)
+#define M_VID_UPDATE_CTRL			(0x3 << 0)
+
+/* ANALOGIX_DP_AUD_CTL */
+#define MISC_CTRL_RESET				(0x1 << 4)
+#define DP_AUDIO_EN				(0x1 << 0)
+
+/* ANALOGIX_DP_TRAINING_PTN_SET */
+#define SCRAMBLER_TYPE				(0x1 << 9)
+#define HW_LINK_TRAINING_PATTERN		(0x1 << 8)
+#define SCRAMBLING_DISABLE			(0x1 << 5)
+#define SCRAMBLING_ENABLE			(0x0 << 5)
+#define LINK_QUAL_PATTERN_SET_MASK		(0x3 << 2)
+#define LINK_QUAL_PATTERN_SET_PRBS7		(0x3 << 2)
+#define LINK_QUAL_PATTERN_SET_D10_2		(0x1 << 2)
+#define LINK_QUAL_PATTERN_SET_DISABLE		(0x0 << 2)
+#define SW_TRAINING_PATTERN_SET_MASK		(0x3 << 0)
+#define SW_TRAINING_PATTERN_SET_PTN3		(0x3 << 0)
+#define SW_TRAINING_PATTERN_SET_PTN2		(0x2 << 0)
+#define SW_TRAINING_PATTERN_SET_PTN1		(0x1 << 0)
+#define SW_TRAINING_PATTERN_SET_NORMAL		(0x0 << 0)
+
+/* ANALOGIX_DP_LN0_LINK_TRAINING_CTL */
+#define PRE_EMPHASIS_SET_MASK			(0x3 << 3)
+#define PRE_EMPHASIS_SET_SHIFT			(3)
+
+/* ANALOGIX_DP_DEBUG_CTL */
+#define PLL_LOCK				(0x1 << 4)
+#define F_PLL_LOCK				(0x1 << 3)
+#define PLL_LOCK_CTRL				(0x1 << 2)
+#define PN_INV					(0x1 << 0)
+
+/* ANALOGIX_DP_PLL_CTL */
+#define DP_PLL_PD				(0x1 << 7)
+#define DP_PLL_RESET				(0x1 << 6)
+#define DP_PLL_LOOP_BIT_DEFAULT			(0x1 << 4)
+#define DP_PLL_REF_BIT_1_1250V			(0x5 << 0)
+#define DP_PLL_REF_BIT_1_2500V			(0x7 << 0)
+
+/* ANALOGIX_DP_PHY_PD */
+#define DP_INC_BG				(0x1 << 7)
+#define DP_EXP_BG				(0x1 << 6)
+#define DP_PHY_PD				(0x1 << 5)
+#define RK_AUX_PD				(0x1 << 5)
+#define AUX_PD					(0x1 << 4)
+#define RK_PLL_PD				(0x1 << 4)
+#define CH3_PD					(0x1 << 3)
+#define CH2_PD					(0x1 << 2)
+#define CH1_PD					(0x1 << 1)
+#define CH0_PD					(0x1 << 0)
+#define DP_ALL_PD				(0xff)
+
+/* ANALOGIX_DP_PHY_TEST */
+#define MACRO_RST				(0x1 << 5)
+#define CH1_TEST				(0x1 << 1)
+#define CH0_TEST				(0x1 << 0)
+
+/* ANALOGIX_DP_AUX_CH_STA */
+#define AUX_BUSY				(0x1 << 4)
+#define AUX_STATUS_MASK				(0xf << 0)
+
+/* ANALOGIX_DP_AUX_CH_DEFER_CTL */
+#define DEFER_CTRL_EN				(0x1 << 7)
+#define DEFER_COUNT(x)				(((x) & 0x7f) << 0)
+
+/* ANALOGIX_DP_AUX_RX_COMM */
+#define AUX_RX_COMM_I2C_DEFER			(0x2 << 2)
+#define AUX_RX_COMM_AUX_DEFER			(0x2 << 0)
+
+/* ANALOGIX_DP_BUFFER_DATA_CTL */
+#define BUF_CLR					(0x1 << 7)
+#define BUF_DATA_COUNT(x)			(((x) & 0x1f) << 0)
+
+/* ANALOGIX_DP_AUX_CH_CTL_1 */
+#define AUX_LENGTH(x)				(((x - 1) & 0xf) << 4)
+#define AUX_TX_COMM_MASK			(0xf << 0)
+#define AUX_TX_COMM_DP_TRANSACTION		(0x1 << 3)
+#define AUX_TX_COMM_I2C_TRANSACTION		(0x0 << 3)
+#define AUX_TX_COMM_MOT				(0x1 << 2)
+#define AUX_TX_COMM_WRITE			(0x0 << 0)
+#define AUX_TX_COMM_READ			(0x1 << 0)
+
+/* ANALOGIX_DP_AUX_ADDR_7_0 */
+#define AUX_ADDR_7_0(x)				(((x) >> 0) & 0xff)
+
+/* ANALOGIX_DP_AUX_ADDR_15_8 */
+#define AUX_ADDR_15_8(x)			(((x) >> 8) & 0xff)
+
+/* ANALOGIX_DP_AUX_ADDR_19_16 */
+#define AUX_ADDR_19_16(x)			(((x) >> 16) & 0x0f)
+
+/* ANALOGIX_DP_AUX_CH_CTL_2 */
+#define ADDR_ONLY				(0x1 << 1)
+#define AUX_EN					(0x1 << 0)
+
+/* ANALOGIX_DP_SOC_GENERAL_CTL */
+#define AUDIO_MODE_SPDIF_MODE			(0x1 << 8)
+#define AUDIO_MODE_MASTER_MODE			(0x0 << 8)
+#define MASTER_VIDEO_INTERLACE_EN		(0x1 << 4)
+#define VIDEO_MASTER_CLK_SEL			(0x1 << 2)
+#define VIDEO_MASTER_MODE_EN			(0x1 << 1)
+#define VIDEO_MODE_MASK				(0x1 << 0)
+#define VIDEO_MODE_SLAVE_MODE			(0x1 << 0)
+#define VIDEO_MODE_MASTER_MODE			(0x0 << 0)
+
+/* ANALOGIX_DP_AUD_CHANNEL_CTL */
+#define AUD_CHANNEL_COUNT_6			(0x5 << 0)
+#define AUD_CHANNEL_COUNT_4			(0x3 << 0)
+#define AUD_CHANNEL_COUNT_2			(0x1 << 0)
+
+/* ANALOGIX_DP_PKT_SEND_CTL */
+#define IF_UP					(0x1 << 4)
+#define IF_EN					(0x1 << 0)
+
+/* ANALOGIX_DP_CRC_CON */
+#define PSR_VID_CRC_FLUSH			(0x1 << 2)
+#define PSR_VID_CRC_ENABLE			(0x1 << 0)
+
+/* ANALOGIX_DP_I2S_CTRL */
+#define I2S_EN					(0x1 << 4)
+
+#endif /* _ANALOGIX_DP_REG_H */
