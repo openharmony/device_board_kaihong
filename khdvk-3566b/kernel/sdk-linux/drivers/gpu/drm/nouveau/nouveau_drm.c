@@ -697,3 +697,683 @@ nouveau_drm_device_fini(struct drm_device *dev)
  * Section "12 PCI Express* Controller (x16) Registers"
  */
 
+static void quirk_broken_nv_runpm(struct pci_dev *pdev)
+{
+	struct drm_device *dev = pci_get_drvdata(pdev);
+	struct nouveau_drm *drm = nouveau_drm(dev);
+	struct pci_dev *bridge = pci_upstream_bridge(pdev);
+
+	if (!bridge || bridge->vendor != PCI_VENDOR_ID_INTEL)
+		return;
+
+	switch (bridge->device) {
+	case 0x1901:
+		drm->old_pm_cap = pdev->pm_cap;
+		pdev->pm_cap = 0;
+		NV_INFO(drm, "Disabling PCI power management to avoid bug\n");
+		break;
+	}
+}
+
+static int nouveau_drm_probe(struct pci_dev *pdev,
+			     const struct pci_device_id *pent)
+{
+	struct nvkm_device *device;
+	struct drm_device *drm_dev;
+	int ret;
+
+	if (vga_switcheroo_client_probe_defer(pdev))
+		return -EPROBE_DEFER;
+
+	/* We need to check that the chipset is supported before booting
+	 * fbdev off the hardware, as there's no way to put it back.
+	 */
+	ret = nvkm_device_pci_new(pdev, nouveau_config, "error",
+				  true, false, 0, &device);
+	if (ret)
+		return ret;
+
+	nvkm_device_del(&device);
+
+	/* Remove conflicting drivers (vesafb, efifb etc). */
+	ret = drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, "nouveaufb");
+	if (ret)
+		return ret;
+
+	ret = nvkm_device_pci_new(pdev, nouveau_config, nouveau_debug,
+				  true, true, ~0ULL, &device);
+	if (ret)
+		return ret;
+
+	pci_set_master(pdev);
+
+	if (nouveau_atomic)
+		driver_pci.driver_features |= DRIVER_ATOMIC;
+
+	drm_dev = drm_dev_alloc(&driver_pci, &pdev->dev);
+	if (IS_ERR(drm_dev)) {
+		ret = PTR_ERR(drm_dev);
+		goto fail_nvkm;
+	}
+
+	ret = pci_enable_device(pdev);
+	if (ret)
+		goto fail_drm;
+
+	drm_dev->pdev = pdev;
+	pci_set_drvdata(pdev, drm_dev);
+
+	ret = nouveau_drm_device_init(drm_dev);
+	if (ret)
+		goto fail_pci;
+
+	ret = drm_dev_register(drm_dev, pent->driver_data);
+	if (ret)
+		goto fail_drm_dev_init;
+
+	quirk_broken_nv_runpm(pdev);
+	return 0;
+
+fail_drm_dev_init:
+	nouveau_drm_device_fini(drm_dev);
+fail_pci:
+	pci_disable_device(pdev);
+fail_drm:
+	drm_dev_put(drm_dev);
+fail_nvkm:
+	nvkm_device_del(&device);
+	return ret;
+}
+
+void
+nouveau_drm_device_remove(struct drm_device *dev)
+{
+	struct nouveau_drm *drm = nouveau_drm(dev);
+	struct nvkm_client *client;
+	struct nvkm_device *device;
+
+	drm_dev_unregister(dev);
+
+	dev->irq_enabled = false;
+	client = nvxx_client(&drm->client.base);
+	device = nvkm_device_find(client->device);
+
+	nouveau_drm_device_fini(dev);
+	drm_dev_put(dev);
+	nvkm_device_del(&device);
+}
+
+static void
+nouveau_drm_remove(struct pci_dev *pdev)
+{
+	struct drm_device *dev = pci_get_drvdata(pdev);
+	struct nouveau_drm *drm = nouveau_drm(dev);
+
+	/* revert our workaround */
+	if (drm->old_pm_cap)
+		pdev->pm_cap = drm->old_pm_cap;
+	nouveau_drm_device_remove(dev);
+	pci_disable_device(pdev);
+}
+
+static int
+nouveau_do_suspend(struct drm_device *dev, bool runtime)
+{
+	struct nouveau_drm *drm = nouveau_drm(dev);
+	int ret;
+
+	nouveau_svm_suspend(drm);
+	nouveau_dmem_suspend(drm);
+	nouveau_led_suspend(dev);
+
+	if (dev->mode_config.num_crtc) {
+		NV_DEBUG(drm, "suspending console...\n");
+		nouveau_fbcon_set_suspend(dev, 1);
+		NV_DEBUG(drm, "suspending display...\n");
+		ret = nouveau_display_suspend(dev, runtime);
+		if (ret)
+			return ret;
+	}
+
+	NV_DEBUG(drm, "evicting buffers...\n");
+	ttm_bo_evict_mm(&drm->ttm.bdev, TTM_PL_VRAM);
+
+	NV_DEBUG(drm, "waiting for kernel channels to go idle...\n");
+	if (drm->cechan) {
+		ret = nouveau_channel_idle(drm->cechan);
+		if (ret)
+			goto fail_display;
+	}
+
+	if (drm->channel) {
+		ret = nouveau_channel_idle(drm->channel);
+		if (ret)
+			goto fail_display;
+	}
+
+	NV_DEBUG(drm, "suspending fence...\n");
+	if (drm->fence && nouveau_fence(drm)->suspend) {
+		if (!nouveau_fence(drm)->suspend(drm)) {
+			ret = -ENOMEM;
+			goto fail_display;
+		}
+	}
+
+	NV_DEBUG(drm, "suspending object tree...\n");
+	ret = nvif_client_suspend(&drm->master.base);
+	if (ret)
+		goto fail_client;
+
+	return 0;
+
+fail_client:
+	if (drm->fence && nouveau_fence(drm)->resume)
+		nouveau_fence(drm)->resume(drm);
+
+fail_display:
+	if (dev->mode_config.num_crtc) {
+		NV_DEBUG(drm, "resuming display...\n");
+		nouveau_display_resume(dev, runtime);
+	}
+	return ret;
+}
+
+static int
+nouveau_do_resume(struct drm_device *dev, bool runtime)
+{
+	int ret = 0;
+	struct nouveau_drm *drm = nouveau_drm(dev);
+
+	NV_DEBUG(drm, "resuming object tree...\n");
+	ret = nvif_client_resume(&drm->master.base);
+	if (ret) {
+		NV_ERROR(drm, "Client resume failed with error: %d\n", ret);
+		return ret;
+	}
+
+	NV_DEBUG(drm, "resuming fence...\n");
+	if (drm->fence && nouveau_fence(drm)->resume)
+		nouveau_fence(drm)->resume(drm);
+
+	nouveau_run_vbios_init(dev);
+
+	if (dev->mode_config.num_crtc) {
+		NV_DEBUG(drm, "resuming display...\n");
+		nouveau_display_resume(dev, runtime);
+		NV_DEBUG(drm, "resuming console...\n");
+		nouveau_fbcon_set_suspend(dev, 0);
+	}
+
+	nouveau_led_resume(dev);
+	nouveau_dmem_resume(drm);
+	nouveau_svm_resume(drm);
+	return 0;
+}
+
+int
+nouveau_pmops_suspend(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
+
+	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF ||
+	    drm_dev->switch_power_state == DRM_SWITCH_POWER_DYNAMIC_OFF)
+		return 0;
+
+	ret = nouveau_do_suspend(drm_dev, false);
+	if (ret)
+		return ret;
+
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+	udelay(200);
+	return 0;
+}
+
+int
+nouveau_pmops_resume(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
+
+	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF ||
+	    drm_dev->switch_power_state == DRM_SWITCH_POWER_DYNAMIC_OFF)
+		return 0;
+
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+	ret = pci_enable_device(pdev);
+	if (ret)
+		return ret;
+	pci_set_master(pdev);
+
+	ret = nouveau_do_resume(drm_dev, false);
+
+	/* Monitors may have been connected / disconnected during suspend */
+	nouveau_display_hpd_resume(drm_dev);
+
+	return ret;
+}
+
+static int
+nouveau_pmops_freeze(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	return nouveau_do_suspend(drm_dev, false);
+}
+
+static int
+nouveau_pmops_thaw(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	return nouveau_do_resume(drm_dev, false);
+}
+
+bool
+nouveau_pmops_runtime(void)
+{
+	if (nouveau_runtime_pm == -1)
+		return nouveau_is_optimus() || nouveau_is_v1_dsm();
+	return nouveau_runtime_pm == 1;
+}
+
+static int
+nouveau_pmops_runtime_suspend(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
+
+	if (!nouveau_pmops_runtime()) {
+		pm_runtime_forbid(dev);
+		return -EBUSY;
+	}
+
+	nouveau_switcheroo_optimus_dsm();
+	ret = nouveau_do_suspend(drm_dev, true);
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_ignore_hotplug(pdev);
+	pci_set_power_state(pdev, PCI_D3cold);
+	drm_dev->switch_power_state = DRM_SWITCH_POWER_DYNAMIC_OFF;
+	return ret;
+}
+
+static int
+nouveau_pmops_runtime_resume(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	struct nouveau_drm *drm = nouveau_drm(drm_dev);
+	struct nvif_device *device = &nouveau_drm(drm_dev)->client.device;
+	int ret;
+
+	if (!nouveau_pmops_runtime()) {
+		pm_runtime_forbid(dev);
+		return -EBUSY;
+	}
+
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+	ret = pci_enable_device(pdev);
+	if (ret)
+		return ret;
+	pci_set_master(pdev);
+
+	ret = nouveau_do_resume(drm_dev, true);
+	if (ret) {
+		NV_ERROR(drm, "resume failed with: %d\n", ret);
+		return ret;
+	}
+
+	/* do magic */
+	nvif_mask(&device->object, 0x088488, (1 << 25), (1 << 25));
+	drm_dev->switch_power_state = DRM_SWITCH_POWER_ON;
+
+	/* Monitors may have been connected / disconnected during suspend */
+	nouveau_display_hpd_resume(drm_dev);
+
+	return ret;
+}
+
+static int
+nouveau_pmops_runtime_idle(struct device *dev)
+{
+	if (!nouveau_pmops_runtime()) {
+		pm_runtime_forbid(dev);
+		return -EBUSY;
+	}
+
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_autosuspend(dev);
+	/* we don't want the main rpm_idle to call suspend - we want to autosuspend */
+	return 1;
+}
+
+static int
+nouveau_drm_open(struct drm_device *dev, struct drm_file *fpriv)
+{
+	struct nouveau_drm *drm = nouveau_drm(dev);
+	struct nouveau_cli *cli;
+	char name[32], tmpname[TASK_COMM_LEN];
+	int ret;
+
+	/* need to bring up power immediately if opening device */
+	ret = pm_runtime_get_sync(dev->dev);
+	if (ret < 0 && ret != -EACCES) {
+		pm_runtime_put_autosuspend(dev->dev);
+		return ret;
+	}
+
+	get_task_comm(tmpname, current);
+	snprintf(name, sizeof(name), "%s[%d]", tmpname, pid_nr(fpriv->pid));
+
+	if (!(cli = kzalloc(sizeof(*cli), GFP_KERNEL))) {
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	ret = nouveau_cli_init(drm, name, cli);
+	if (ret)
+		goto done;
+
+	cli->base.super = false;
+
+	fpriv->driver_priv = cli;
+
+	mutex_lock(&drm->client.mutex);
+	list_add(&cli->head, &drm->clients);
+	mutex_unlock(&drm->client.mutex);
+
+done:
+	if (ret && cli) {
+		nouveau_cli_fini(cli);
+		kfree(cli);
+	}
+
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
+	return ret;
+}
+
+static void
+nouveau_drm_postclose(struct drm_device *dev, struct drm_file *fpriv)
+{
+	struct nouveau_cli *cli = nouveau_cli(fpriv);
+	struct nouveau_drm *drm = nouveau_drm(dev);
+
+	pm_runtime_get_sync(dev->dev);
+
+	mutex_lock(&cli->mutex);
+	if (cli->abi16)
+		nouveau_abi16_fini(cli->abi16);
+	mutex_unlock(&cli->mutex);
+
+	mutex_lock(&drm->client.mutex);
+	list_del(&cli->head);
+	mutex_unlock(&drm->client.mutex);
+
+	nouveau_cli_fini(cli);
+	kfree(cli);
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
+}
+
+static const struct drm_ioctl_desc
+nouveau_ioctls[] = {
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GETPARAM, nouveau_abi16_ioctl_getparam, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_SETPARAM, drm_invalid_op, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_CHANNEL_ALLOC, nouveau_abi16_ioctl_channel_alloc, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_CHANNEL_FREE, nouveau_abi16_ioctl_channel_free, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GROBJ_ALLOC, nouveau_abi16_ioctl_grobj_alloc, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_NOTIFIEROBJ_ALLOC, nouveau_abi16_ioctl_notifierobj_alloc, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GPUOBJ_FREE, nouveau_abi16_ioctl_gpuobj_free, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_SVM_INIT, nouveau_svmm_init, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_SVM_BIND, nouveau_svmm_bind, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_NEW, nouveau_gem_ioctl_new, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_PUSHBUF, nouveau_gem_ioctl_pushbuf, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_CPU_PREP, nouveau_gem_ioctl_cpu_prep, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_CPU_FINI, nouveau_gem_ioctl_cpu_fini, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_INFO, nouveau_gem_ioctl_info, DRM_RENDER_ALLOW),
+};
+
+long
+nouveau_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct drm_file *filp = file->private_data;
+	struct drm_device *dev = filp->minor->dev;
+	long ret;
+
+	ret = pm_runtime_get_sync(dev->dev);
+	if (ret < 0 && ret != -EACCES) {
+		pm_runtime_put_autosuspend(dev->dev);
+		return ret;
+	}
+
+	switch (_IOC_NR(cmd) - DRM_COMMAND_BASE) {
+	case DRM_NOUVEAU_NVIF:
+		ret = usif_ioctl(filp, (void __user *)arg, _IOC_SIZE(cmd));
+		break;
+	default:
+		ret = drm_ioctl(file, cmd, arg);
+		break;
+	}
+
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
+	return ret;
+}
+
+static const struct file_operations
+nouveau_driver_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_open,
+	.release = drm_release,
+	.unlocked_ioctl = nouveau_drm_ioctl,
+	.mmap = nouveau_ttm_mmap,
+	.poll = drm_poll,
+	.read = drm_read,
+#if defined(CONFIG_COMPAT)
+	.compat_ioctl = nouveau_compat_ioctl,
+#endif
+	.llseek = noop_llseek,
+};
+
+static struct drm_driver
+driver_stub = {
+	.driver_features =
+		DRIVER_GEM | DRIVER_MODESET | DRIVER_RENDER
+#if defined(CONFIG_NOUVEAU_LEGACY_CTX_SUPPORT)
+		| DRIVER_KMS_LEGACY_CONTEXT
+#endif
+		,
+
+	.open = nouveau_drm_open,
+	.postclose = nouveau_drm_postclose,
+	.lastclose = nouveau_vga_lastclose,
+
+#if defined(CONFIG_DEBUG_FS)
+	.debugfs_init = nouveau_drm_debugfs_init,
+#endif
+
+	.ioctls = nouveau_ioctls,
+	.num_ioctls = ARRAY_SIZE(nouveau_ioctls),
+	.fops = &nouveau_driver_fops,
+
+	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
+	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
+	.gem_prime_pin = nouveau_gem_prime_pin,
+	.gem_prime_unpin = nouveau_gem_prime_unpin,
+	.gem_prime_get_sg_table = nouveau_gem_prime_get_sg_table,
+	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table,
+	.gem_prime_vmap = nouveau_gem_prime_vmap,
+	.gem_prime_vunmap = nouveau_gem_prime_vunmap,
+
+	.gem_free_object_unlocked = nouveau_gem_object_del,
+	.gem_open_object = nouveau_gem_object_open,
+	.gem_close_object = nouveau_gem_object_close,
+
+	.dumb_create = nouveau_display_dumb_create,
+	.dumb_map_offset = nouveau_display_dumb_map_offset,
+
+	.name = DRIVER_NAME,
+	.desc = DRIVER_DESC,
+#ifdef GIT_REVISION
+	.date = GIT_REVISION,
+#else
+	.date = DRIVER_DATE,
+#endif
+	.major = DRIVER_MAJOR,
+	.minor = DRIVER_MINOR,
+	.patchlevel = DRIVER_PATCHLEVEL,
+};
+
+static struct pci_device_id
+nouveau_drm_pci_table[] = {
+	{
+		PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, PCI_ANY_ID),
+		.class = PCI_BASE_CLASS_DISPLAY << 16,
+		.class_mask  = 0xff << 16,
+	},
+	{
+		PCI_DEVICE(PCI_VENDOR_ID_NVIDIA_SGS, PCI_ANY_ID),
+		.class = PCI_BASE_CLASS_DISPLAY << 16,
+		.class_mask  = 0xff << 16,
+	},
+	{}
+};
+
+static void nouveau_display_options(void)
+{
+	DRM_DEBUG_DRIVER("Loading Nouveau with parameters:\n");
+
+	DRM_DEBUG_DRIVER("... tv_disable   : %d\n", nouveau_tv_disable);
+	DRM_DEBUG_DRIVER("... ignorelid    : %d\n", nouveau_ignorelid);
+	DRM_DEBUG_DRIVER("... duallink     : %d\n", nouveau_duallink);
+	DRM_DEBUG_DRIVER("... nofbaccel    : %d\n", nouveau_nofbaccel);
+	DRM_DEBUG_DRIVER("... config       : %s\n", nouveau_config);
+	DRM_DEBUG_DRIVER("... debug        : %s\n", nouveau_debug);
+	DRM_DEBUG_DRIVER("... noaccel      : %d\n", nouveau_noaccel);
+	DRM_DEBUG_DRIVER("... modeset      : %d\n", nouveau_modeset);
+	DRM_DEBUG_DRIVER("... runpm        : %d\n", nouveau_runtime_pm);
+	DRM_DEBUG_DRIVER("... vram_pushbuf : %d\n", nouveau_vram_pushbuf);
+	DRM_DEBUG_DRIVER("... hdmimhz      : %d\n", nouveau_hdmimhz);
+}
+
+static const struct dev_pm_ops nouveau_pm_ops = {
+	.suspend = nouveau_pmops_suspend,
+	.resume = nouveau_pmops_resume,
+	.freeze = nouveau_pmops_freeze,
+	.thaw = nouveau_pmops_thaw,
+	.poweroff = nouveau_pmops_freeze,
+	.restore = nouveau_pmops_resume,
+	.runtime_suspend = nouveau_pmops_runtime_suspend,
+	.runtime_resume = nouveau_pmops_runtime_resume,
+	.runtime_idle = nouveau_pmops_runtime_idle,
+};
+
+static struct pci_driver
+nouveau_drm_pci_driver = {
+	.name = "nouveau",
+	.id_table = nouveau_drm_pci_table,
+	.probe = nouveau_drm_probe,
+	.remove = nouveau_drm_remove,
+	.driver.pm = &nouveau_pm_ops,
+};
+
+struct drm_device *
+nouveau_platform_device_create(const struct nvkm_device_tegra_func *func,
+			       struct platform_device *pdev,
+			       struct nvkm_device **pdevice)
+{
+	struct drm_device *drm;
+	int err;
+
+	err = nvkm_device_tegra_new(func, pdev, nouveau_config, nouveau_debug,
+				    true, true, ~0ULL, pdevice);
+	if (err)
+		goto err_free;
+
+	drm = drm_dev_alloc(&driver_platform, &pdev->dev);
+	if (IS_ERR(drm)) {
+		err = PTR_ERR(drm);
+		goto err_free;
+	}
+
+	err = nouveau_drm_device_init(drm);
+	if (err)
+		goto err_put;
+
+	platform_set_drvdata(pdev, drm);
+
+	return drm;
+
+err_put:
+	drm_dev_put(drm);
+err_free:
+	nvkm_device_del(pdevice);
+
+	return ERR_PTR(err);
+}
+
+static int __init
+nouveau_drm_init(void)
+{
+	driver_pci = driver_stub;
+	driver_platform = driver_stub;
+
+	nouveau_display_options();
+
+	if (nouveau_modeset == -1) {
+		if (vgacon_text_force())
+			nouveau_modeset = 0;
+	}
+
+	if (!nouveau_modeset)
+		return 0;
+
+#ifdef CONFIG_NOUVEAU_PLATFORM_DRIVER
+	platform_driver_register(&nouveau_platform_driver);
+#endif
+
+	nouveau_register_dsm_handler();
+	nouveau_backlight_ctor();
+
+#ifdef CONFIG_PCI
+	return pci_register_driver(&nouveau_drm_pci_driver);
+#else
+	return 0;
+#endif
+}
+
+static void __exit
+nouveau_drm_exit(void)
+{
+	if (!nouveau_modeset)
+		return;
+
+#ifdef CONFIG_PCI
+	pci_unregister_driver(&nouveau_drm_pci_driver);
+#endif
+	nouveau_backlight_dtor();
+	nouveau_unregister_dsm_handler();
+
+#ifdef CONFIG_NOUVEAU_PLATFORM_DRIVER
+	platform_driver_unregister(&nouveau_platform_driver);
+#endif
+	if (IS_ENABLED(CONFIG_DRM_NOUVEAU_SVM))
+		mmu_notifier_synchronize();
+}
+
+module_init(nouveau_drm_init);
+module_exit(nouveau_drm_exit);
+
+MODULE_DEVICE_TABLE(pci, nouveau_drm_pci_table);
+MODULE_AUTHOR(DRIVER_AUTHOR);
+MODULE_DESCRIPTION(DRIVER_DESC);
+MODULE_LICENSE("GPL and additional rights");
