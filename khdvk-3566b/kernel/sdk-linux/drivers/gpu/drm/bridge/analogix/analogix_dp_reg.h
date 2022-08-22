@@ -1,0 +1,299 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Register definition file for Analogix DP core driver
+ *
+ * Copyright (C) 2012 Samsung Electronics Co., Ltd.
+ * Author: Jingoo Han <jg1.han@samsung.com>
+ */
+
+#ifndef _ANALOGIX_DP_REG_H
+#define _ANALOGIX_DP_REG_H
+
+#define ANALOGIX_DP_TX_SW_RESET			0x14
+#define ANALOGIX_DP_FUNC_EN_1			0x18
+#define ANALOGIX_DP_FUNC_EN_2			0x1C
+#define ANALOGIX_DP_VIDEO_CTL_1			0x20
+#define ANALOGIX_DP_VIDEO_CTL_2			0x24
+#define ANALOGIX_DP_VIDEO_CTL_3			0x28
+#define ANALOGIX_DP_VIDEO_CTL_4			0x2C
+
+#define ANALOGIX_DP_VIDEO_CTL_8			0x3C
+#define ANALOGIX_DP_VIDEO_CTL_10		0x44
+#define ANALOGIX_DP_TOTAL_LINE_CFG_L		0x48
+#define ANALOGIX_DP_TOTAL_LINE_CFG_H		0x4C
+#define ANALOGIX_DP_ACTIVE_LINE_CFG_L		0x50
+#define ANALOGIX_DP_ACTIVE_LINE_CFG_H		0x54
+#define ANALOGIX_DP_V_F_PORCH_CFG		0x58
+#define ANALOGIX_DP_V_SYNC_WIDTH_CFG		0x5C
+#define ANALOGIX_DP_V_B_PORCH_CFG		0x60
+#define ANALOGIX_DP_TOTAL_PIXEL_CFG_L		0x64
+#define ANALOGIX_DP_TOTAL_PIXEL_CFG_H		0x68
+#define ANALOGIX_DP_ACTIVE_PIXEL_CFG_L		0x6C
+#define ANALOGIX_DP_ACTIVE_PIXEL_CFG_H		0x70
+#define ANALOGIX_DP_H_F_PORCH_CFG_L		0x74
+#define ANALOGIX_DP_H_F_PORCH_CFG_H		0x78
+#define ANALOGIX_DP_H_SYNC_CFG_L		0x7C
+#define ANALOGIX_DP_H_SYNC_CFG_H		0x80
+#define ANALOGIX_DP_H_B_PORCH_CFG_L		0x84
+#define ANALOGIX_DP_H_B_PORCH_CFG_H		0x88
+
+#define ANALOGIX_DP_SPDIF_AUDIO_CTL_0		0xD8
+
+#define ANALOGIX_DP_PLL_REG_1			0xfc
+#define ANALOGIX_DP_PLL_REG_2			0x9e4
+#define ANALOGIX_DP_PLL_REG_3			0x9e8
+#define ANALOGIX_DP_PLL_REG_4			0x9ec
+#define ANALOGIX_DP_PLL_REG_5			0xa00
+
+#define ANALOIGX_DP_SSC_REG			0x104
+#define ANALOGIX_DP_BIAS			0x124
+#define ANALOGIX_DP_PD				0x12c
+
+#define ANALOGIX_DP_IF_TYPE			0x244
+#define ANALOGIX_DP_IF_PKT_DB1			0x254
+#define ANALOGIX_DP_IF_PKT_DB2			0x258
+#define ANALOGIX_DP_SPD_HB0			0x2F8
+#define ANALOGIX_DP_SPD_HB1			0x2FC
+#define ANALOGIX_DP_SPD_HB2			0x300
+#define ANALOGIX_DP_SPD_HB3			0x304
+#define ANALOGIX_DP_SPD_PB0			0x308
+#define ANALOGIX_DP_SPD_PB1			0x30C
+#define ANALOGIX_DP_SPD_PB2			0x310
+#define ANALOGIX_DP_SPD_PB3			0x314
+#define ANALOGIX_DP_PSR_FRAME_UPDATE_CTRL	0x318
+#define ANALOGIX_DP_VSC_SHADOW_DB0		0x31C
+#define ANALOGIX_DP_VSC_SHADOW_DB1		0x320
+
+#define ANALOGIX_DP_LANE_MAP			0x35C
+
+#define ANALOGIX_DP_ANALOG_CTL_1		0x370
+#define ANALOGIX_DP_ANALOG_CTL_2		0x374
+#define ANALOGIX_DP_ANALOG_CTL_3		0x378
+#define ANALOGIX_DP_PLL_FILTER_CTL_1		0x37C
+#define ANALOGIX_DP_TX_AMP_TUNING_CTL		0x380
+
+#define ANALOGIX_DP_AUX_HW_RETRY_CTL		0x390
+
+#define ANALOGIX_DP_COMMON_INT_STA_1		0x3C4
+#define ANALOGIX_DP_COMMON_INT_STA_2		0x3C8
+#define ANALOGIX_DP_COMMON_INT_STA_3		0x3CC
+#define ANALOGIX_DP_COMMON_INT_STA_4		0x3D0
+#define ANALOGIX_DP_INT_STA			0x3DC
+#define ANALOGIX_DP_COMMON_INT_MASK_1		0x3E0
+#define ANALOGIX_DP_COMMON_INT_MASK_2		0x3E4
+#define ANALOGIX_DP_COMMON_INT_MASK_3		0x3E8
+#define ANALOGIX_DP_COMMON_INT_MASK_4		0x3EC
+#define ANALOGIX_DP_INT_STA_MASK		0x3F8
+#define ANALOGIX_DP_INT_CTL			0x3FC
+
+#define ANALOGIX_DP_SYS_CTL_1			0x600
+#define ANALOGIX_DP_SYS_CTL_2			0x604
+#define ANALOGIX_DP_SYS_CTL_3			0x608
+#define ANALOGIX_DP_SYS_CTL_4			0x60C
+#define ANALOGIX_DP_AUD_CTL			0x618
+#define ANALOGIX_DP_PKT_SEND_CTL		0x640
+#define ANALOGIX_DP_HDCP_CTL			0x648
+
+#define ANALOGIX_DP_LINK_BW_SET			0x680
+#define ANALOGIX_DP_LANE_COUNT_SET		0x684
+#define ANALOGIX_DP_TRAINING_PTN_SET		0x688
+#define ANALOGIX_DP_LN0_LINK_TRAINING_CTL	0x68C
+#define ANALOGIX_DP_LN1_LINK_TRAINING_CTL	0x690
+#define ANALOGIX_DP_LN2_LINK_TRAINING_CTL	0x694
+#define ANALOGIX_DP_LN3_LINK_TRAINING_CTL	0x698
+
+#define ANALOGIX_DP_DEBUG_CTL			0x6C0
+#define ANALOGIX_DP_HPD_DEGLITCH_L		0x6C4
+#define ANALOGIX_DP_HPD_DEGLITCH_H		0x6C8
+#define ANALOGIX_DP_LINK_DEBUG_CTL		0x6E0
+
+#define ANALOGIX_DP_M_VID_0			0x700
+#define ANALOGIX_DP_M_VID_1			0x704
+#define ANALOGIX_DP_M_VID_2			0x708
+#define ANALOGIX_DP_N_VID_0			0x70C
+#define ANALOGIX_DP_N_VID_1			0x710
+#define ANALOGIX_DP_N_VID_2			0x714
+
+#define ANALOGIX_DP_PLL_CTL			0x71C
+#define ANALOGIX_DP_PHY_PD			0x720
+#define ANALOGIX_DP_PHY_TEST			0x724
+
+#define ANALOGIX_DP_VIDEO_FIFO_THRD		0x730
+#define ANALOGIX_DP_AUDIO_MARGIN		0x73C
+
+#define ANALOGIX_DP_M_VID_GEN_FILTER_TH		0x764
+#define ANALOGIX_DP_M_AUD_GEN_FILTER_TH		0x778
+#define ANALOGIX_DP_AUX_CH_STA			0x780
+#define ANALOGIX_DP_AUX_CH_DEFER_CTL		0x788
+#define ANALOGIX_DP_AUX_RX_COMM			0x78C
+#define ANALOGIX_DP_BUFFER_DATA_CTL		0x790
+#define ANALOGIX_DP_AUX_CH_CTL_1		0x794
+#define ANALOGIX_DP_AUX_ADDR_7_0		0x798
+#define ANALOGIX_DP_AUX_ADDR_15_8		0x79C
+#define ANALOGIX_DP_AUX_ADDR_19_16		0x7A0
+#define ANALOGIX_DP_AUX_CH_CTL_2		0x7A4
+
+#define ANALOGIX_DP_BUF_DATA_0			0x7C0
+
+#define ANALOGIX_DP_SOC_GENERAL_CTL		0x800
+#define ANALOGIX_DP_AUD_CHANNEL_CTL		0x834
+#define ANALOGIX_DP_CRC_CON			0x890
+#define ANALOGIX_DP_I2S_CTRL			0x9C8
+
+/* ANALOGIX_DP_TX_SW_RESET */
+#define RESET_DP_TX				(0x1 << 0)
+
+/* ANALOGIX_DP_FUNC_EN_1 */
+#define MASTER_VID_FUNC_EN_N			(0x1 << 7)
+#define RK_VID_CAP_FUNC_EN_N			(0x1 << 6)
+#define SLAVE_VID_FUNC_EN_N			(0x1 << 5)
+#define RK_VID_FIFO_FUNC_EN_N			(0x1 << 5)
+#define AUD_FIFO_FUNC_EN_N			(0x1 << 4)
+#define AUD_FUNC_EN_N				(0x1 << 3)
+#define HDCP_FUNC_EN_N				(0x1 << 2)
+#define CRC_FUNC_EN_N				(0x1 << 1)
+#define SW_FUNC_EN_N				(0x1 << 0)
+
+/* ANALOGIX_DP_FUNC_EN_2 */
+#define SSC_FUNC_EN_N				(0x1 << 7)
+#define AUX_FUNC_EN_N				(0x1 << 2)
+#define SERDES_FIFO_FUNC_EN_N			(0x1 << 1)
+#define LS_CLK_DOMAIN_FUNC_EN_N			(0x1 << 0)
+
+/* ANALOGIX_DP_VIDEO_CTL_1 */
+#define VIDEO_EN				(0x1 << 7)
+#define HDCP_VIDEO_MUTE				(0x1 << 6)
+
+/* ANALOGIX_DP_VIDEO_CTL_1 */
+#define IN_D_RANGE_MASK				(0x1 << 7)
+#define IN_D_RANGE_SHIFT			(7)
+#define IN_D_RANGE_CEA				(0x1 << 7)
+#define IN_D_RANGE_VESA				(0x0 << 7)
+#define IN_BPC_MASK				(0x7 << 4)
+#define IN_BPC_SHIFT				(4)
+#define IN_BPC_12_BITS				(0x3 << 4)
+#define IN_BPC_10_BITS				(0x2 << 4)
+#define IN_BPC_8_BITS				(0x1 << 4)
+#define IN_BPC_6_BITS				(0x0 << 4)
+#define IN_COLOR_F_MASK				(0x3 << 0)
+#define IN_COLOR_F_SHIFT			(0)
+#define IN_COLOR_F_YCBCR444			(0x2 << 0)
+#define IN_COLOR_F_YCBCR422			(0x1 << 0)
+#define IN_COLOR_F_RGB				(0x0 << 0)
+
+/* ANALOGIX_DP_VIDEO_CTL_3 */
+#define IN_YC_COEFFI_MASK			(0x1 << 7)
+#define IN_YC_COEFFI_SHIFT			(7)
+#define IN_YC_COEFFI_ITU709			(0x1 << 7)
+#define IN_YC_COEFFI_ITU601			(0x0 << 7)
+#define VID_CHK_UPDATE_TYPE_MASK		(0x1 << 4)
+#define VID_CHK_UPDATE_TYPE_SHIFT		(4)
+#define VID_CHK_UPDATE_TYPE_1			(0x1 << 4)
+#define VID_CHK_UPDATE_TYPE_0			(0x0 << 4)
+#define REUSE_SPD_EN				(0x1 << 3)
+
+/* ANALOGIX_DP_VIDEO_CTL_4 */
+#define BIST_EN					(0x1 << 3)
+#define BIST_WIDTH(x)				(((x) & 0x1) << 2)
+#define BIST_TYPE(x)				(((x) & 0x3) << 0)
+
+/* ANALOGIX_DP_VIDEO_CTL_8 */
+#define VID_HRES_TH(x)				(((x) & 0xf) << 4)
+#define VID_VRES_TH(x)				(((x) & 0xf) << 0)
+
+/* ANALOGIX_DP_VIDEO_CTL_10 */
+#define FORMAT_SEL				(0x1 << 4)
+#define INTERACE_SCAN_CFG			(0x1 << 2)
+#define VSYNC_POLARITY_CFG			(0x1 << 1)
+#define HSYNC_POLARITY_CFG			(0x1 << 0)
+
+/* ANALOGIX_DP_TOTAL_LINE_CFG_L */
+#define TOTAL_LINE_CFG_L(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_TOTAL_LINE_CFG_H */
+#define TOTAL_LINE_CFG_H(x)			(((x) & 0xf) << 0)
+
+/* ANALOGIX_DP_ACTIVE_LINE_CFG_L */
+#define ACTIVE_LINE_CFG_L(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_ACTIVE_LINE_CFG_H */
+#define ACTIVE_LINE_CFG_H(x)			(((x) & 0xf) << 0)
+
+/* ANALOGIX_DP_V_F_PORCH_CFG */
+#define V_F_PORCH_CFG(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_V_SYNC_WIDTH_CFG */
+#define V_SYNC_WIDTH_CFG(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_V_B_PORCH_CFG */
+#define V_B_PORCH_CFG(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_TOTAL_PIXEL_CFG_L */
+#define TOTAL_PIXEL_CFG_L(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_TOTAL_PIXEL_CFG_H */
+#define TOTAL_PIXEL_CFG_H(x)			(((x) & 0x3f) << 0)
+
+/* ANALOGIX_DP_ACTIVE_PIXEL_CFG_L */
+#define ACTIVE_PIXEL_CFG_L(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_ACTIVE_PIXEL_CFG_H */
+#define ACTIVE_PIXEL_CFG_H(x)			(((x) & 0x3f) << 0)
+
+/* ANALOGIX_DP_H_F_PORCH_CFG_L */
+#define H_F_PORCH_CFG_L(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_H_F_PORCH_CFG_H */
+#define H_F_PORCH_CFG_H(x)			(((x) & 0xf) << 0)
+
+/* ANALOGIX_DP_H_SYNC_CFG_L */
+#define H_SYNC_CFG_L(x)				(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_H_SYNC_CFG_H */
+#define H_SYNC_CFG_H(x)				(((x) & 0xf) << 0)
+
+/* ANALOGIX_DP_H_B_PORCH_CFG_L */
+#define H_B_PORCH_CFG_L(x)			(((x) & 0xff) << 0)
+
+/* ANALOGIX_DP_H_B_PORCH_CFG_H */
+#define H_B_PORCH_CFG_H(x)			(((x) & 0xf) << 0)
+
+/* ANALOGIX_DP_SPDIF_AUDIO_CTL_0 */
+#define AUD_SPDIF_EN				(0x1 << 7)
+
+/* ANALOGIX_DP_PLL_REG_1 */
+#define REF_CLK_24M				(0x1 << 0)
+#define REF_CLK_27M				(0x0 << 0)
+#define REF_CLK_MASK				(0x1 << 0)
+
+/* ANALOGIX_DP_PSR_FRAME_UPDATE_CTRL */
+#define PSR_FRAME_UP_TYPE_BURST			(0x1 << 0)
+#define PSR_FRAME_UP_TYPE_SINGLE		(0x0 << 0)
+#define PSR_CRC_SEL_HARDWARE			(0x1 << 1)
+#define PSR_CRC_SEL_MANUALLY			(0x0 << 1)
+
+/* ANALOGIX_DP_LANE_MAP */
+#define LANE3_MAP_LOGIC_LANE_0			(0x0 << 6)
+#define LANE3_MAP_LOGIC_LANE_1			(0x1 << 6)
+#define LANE3_MAP_LOGIC_LANE_2			(0x2 << 6)
+#define LANE3_MAP_LOGIC_LANE_3			(0x3 << 6)
+#define LANE2_MAP_LOGIC_LANE_0			(0x0 << 4)
+#define LANE2_MAP_LOGIC_LANE_1			(0x1 << 4)
+#define LANE2_MAP_LOGIC_LANE_2			(0x2 << 4)
+#define LANE2_MAP_LOGIC_LANE_3			(0x3 << 4)
+#define LANE1_MAP_LOGIC_LANE_0			(0x0 << 2)
+#define LANE1_MAP_LOGIC_LANE_1			(0x1 << 2)
+#define LANE1_MAP_LOGIC_LANE_2			(0x2 << 2)
+#define LANE1_MAP_LOGIC_LANE_3			(0x3 << 2)
+#define LANE0_MAP_LOGIC_LANE_0			(0x0 << 0)
+#define LANE0_MAP_LOGIC_LANE_1			(0x1 << 0)
+#define LANE0_MAP_LOGIC_LANE_2			(0x2 << 0)
+#define LANE0_MAP_LOGIC_LANE_3			(0x3 << 0)
+
+/* ANALOGIX_DP_ANALOG_CTL_1 */
+#define TX_TERMINAL_CTRL_50_OHM			(0x1 << 4)
+
+/* ANALOGIX_DP_ANALOG_CTL_2 */
+#define SEL_24M					(0x1 << 3)
+#define TX_DVDD_BIT_1_0625V			(0x4 << 0)
+
