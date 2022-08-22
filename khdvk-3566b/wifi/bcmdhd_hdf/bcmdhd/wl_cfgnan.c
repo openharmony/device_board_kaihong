@@ -4786,3 +4786,1779 @@ fail:
 	NAN_DBG_EXIT();
 	return ret;
 }
+
+int
+wl_cfgnan_subscribe_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_discover_cmd_data_t *cmd_data)
+{
+	int ret = BCME_OK;
+#ifdef WL_NAN_DISC_CACHE
+	nan_svc_info_t *svc_info;
+	uint8 upd_ranging_required;
+#endif /* WL_NAN_DISC_CACHE */
+#ifdef RTT_GEOFENCE_CONT
+#ifdef RTT_SUPPORT
+	dhd_pub_t *dhd = (struct dhd_pub *)(cfg->pub);
+	rtt_status_info_t *rtt_status = GET_RTTSTATE(dhd);
+#endif /* RTT_SUPPORT */
+#endif /* RTT_GEOFENCE_CONT */
+
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+
+	/*
+	 * proceed only if mandatory arguments are present - subscriber id,
+	 * service hash
+	 */
+	if ((!cmd_data->sub_id) || (!cmd_data->svc_hash.data) ||
+		(!cmd_data->svc_hash.dlen)) {
+		WL_ERR(("mandatory arguments are not present\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+	/* Check for ranging sessions if any */
+	if (cmd_data->svc_update) {
+#ifdef WL_NAN_DISC_CACHE
+		svc_info = wl_cfgnan_get_svc_inst(cfg, cmd_data->sub_id, 0);
+		if (svc_info) {
+			wl_cfgnan_clear_svc_from_all_ranging_inst(cfg, cmd_data->sub_id);
+			/* terminate ranging sessions for this svc, avoid clearing svc cache */
+			wl_cfgnan_terminate_all_obsolete_ranging_sessions(cfg);
+			WL_DBG(("Ranging sessions handled for svc update\n"));
+			upd_ranging_required = !!(cmd_data->sde_control_flag &
+					NAN_SDE_CF_RANGING_REQUIRED);
+			if ((svc_info->ranging_required ^ upd_ranging_required) ||
+					(svc_info->ingress_limit != cmd_data->ingress_limit) ||
+					(svc_info->egress_limit != cmd_data->egress_limit)) {
+				/* Clear cache info in Firmware */
+				ret = wl_cfgnan_clear_disc_cache(cfg, cmd_data->sub_id);
+				if (ret != BCME_OK) {
+					WL_ERR(("couldn't send clear cache to FW \n"));
+					goto fail;
+				}
+				/* Invalidate local cache info */
+				wl_cfgnan_remove_disc_result(cfg, cmd_data->sub_id);
+			}
+		}
+#endif /* WL_NAN_DISC_CACHE */
+	}
+
+#ifdef RTT_GEOFENCE_CONT
+#ifdef RTT_SUPPORT
+	/* Override ranging Indication */
+	if (rtt_status->geofence_cfg.geofence_cont) {
+		if (cmd_data->ranging_indication !=
+				NAN_RANGE_INDICATION_NONE) {
+			cmd_data->ranging_indication = NAN_RANGE_INDICATION_CONT;
+		}
+	}
+#endif /* RTT_SUPPORT */
+#endif /* RTT_GEOFENCE_CONT */
+	ret = wl_cfgnan_svc_handler(ndev, cfg, WL_NAN_CMD_SD_SUBSCRIBE, cmd_data);
+	if (ret < 0) {
+		WL_ERR(("%s: fail to handle svc, ret=%d\n", __FUNCTION__, ret));
+		goto fail;
+	}
+	WL_INFORM_MEM(("[NAN] Service subscribed for instance id:%d\n", cmd_data->sub_id));
+
+fail:
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+static int
+wl_cfgnan_cancel_handler(nan_discover_cmd_data_t *cmd_data,
+	uint16 cmd_id, void *p_buf, uint16 *nan_buf_size)
+{
+	s32 ret = BCME_OK;
+
+	NAN_DBG_ENTER();
+
+	if (p_buf != NULL) {
+		bcm_iov_batch_subcmd_t *sub_cmd = (bcm_iov_batch_subcmd_t*)(p_buf);
+		wl_nan_instance_id_t instance_id;
+
+		if (cmd_id == WL_NAN_CMD_SD_CANCEL_PUBLISH) {
+			instance_id = cmd_data->pub_id;
+		} else if (cmd_id == WL_NAN_CMD_SD_CANCEL_SUBSCRIBE) {
+			instance_id = cmd_data->sub_id;
+		}  else {
+			ret = BCME_USAGE_ERROR;
+			WL_ERR(("wrong command id = %u\n", cmd_id));
+			goto fail;
+		}
+
+		/* Fill the sub_command block */
+		sub_cmd->id = htod16(cmd_id);
+		sub_cmd->len = sizeof(sub_cmd->u.options) + sizeof(instance_id);
+		sub_cmd->u.options = htol32(BCM_XTLV_OPTION_ALIGN32);
+		ret = memcpy_s(sub_cmd->data, *nan_buf_size,
+				&instance_id, sizeof(instance_id));
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy instance id, ret = %d\n", ret));
+			goto fail;
+		}
+		/* adjust iov data len to the end of last data record */
+		*nan_buf_size -= (sub_cmd->len +
+				OFFSETOF(bcm_iov_batch_subcmd_t, u.options));
+		WL_INFORM_MEM(("[NAN] Service with instance id:%d cancelled\n", instance_id));
+	} else {
+		WL_ERR(("nan_iov_buf is NULL\n"));
+		ret = BCME_ERROR;
+		goto fail;
+	}
+
+fail:
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+int
+wl_cfgnan_cancel_pub_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_discover_cmd_data_t *cmd_data)
+{
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	s32 ret = BCME_OK;
+	uint16 nan_buf_size = NAN_IOCTL_BUF_SIZE;
+	uint8 resp_buf[NAN_IOCTL_BUF_SIZE];
+
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+
+	nan_buf = MALLOCZ(cfg->osh, nan_buf_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+
+	/* proceed only if mandatory argument is present - publisher id */
+	if (!cmd_data->pub_id) {
+		WL_ERR(("mandatory argument is not present\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+#ifdef WL_NAN_DISC_CACHE
+	wl_cfgnan_clear_svc_cache(cfg, cmd_data->pub_id);
+#endif /* WL_NAN_DISC_CACHE */
+	ret = wl_cfgnan_cancel_handler(cmd_data, WL_NAN_CMD_SD_CANCEL_PUBLISH,
+			&nan_buf->cmds[0], &nan_buf_size);
+	if (unlikely(ret)) {
+		WL_ERR(("cancel publish failed\n"));
+		goto fail;
+	}
+	nan_buf->is_set = true;
+	nan_buf->count++;
+
+	memset_s(resp_buf, sizeof(resp_buf), 0, sizeof(resp_buf));
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, nan_buf_size,
+			&(cmd_data->status),
+			(void*)resp_buf, NAN_IOCTL_BUF_SIZE);
+	if (unlikely(ret) || unlikely(cmd_data->status)) {
+		WL_ERR(("nan cancel publish failed ret = %d status = %d\n",
+			ret, cmd_data->status));
+		goto fail;
+	}
+	WL_DBG(("nan cancel publish successfull\n"));
+	wl_cfgnan_remove_inst_id(cfg, cmd_data->pub_id);
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, NAN_IOCTL_BUF_SIZE);
+	}
+
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+int
+wl_cfgnan_cancel_sub_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_discover_cmd_data_t *cmd_data)
+{
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	s32 ret = BCME_OK;
+	uint16 nan_buf_size = NAN_IOCTL_BUF_SIZE;
+	uint8 resp_buf[NAN_IOCTL_BUF_SIZE];
+
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+
+	nan_buf = MALLOCZ(cfg->osh, nan_buf_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+
+	/* proceed only if mandatory argument is present - subscriber id */
+	if (!cmd_data->sub_id) {
+		WL_ERR(("mandatory argument is not present\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+#ifdef WL_NAN_DISC_CACHE
+	/* terminate ranging sessions for this svc */
+	wl_cfgnan_clear_svc_from_all_ranging_inst(cfg, cmd_data->sub_id);
+	wl_cfgnan_terminate_all_obsolete_ranging_sessions(cfg);
+	/* clear svc cache for the service */
+	wl_cfgnan_clear_svc_cache(cfg, cmd_data->sub_id);
+	wl_cfgnan_remove_disc_result(cfg, cmd_data->sub_id);
+#endif /* WL_NAN_DISC_CACHE */
+
+	ret = wl_cfgnan_cancel_handler(cmd_data, WL_NAN_CMD_SD_CANCEL_SUBSCRIBE,
+			&nan_buf->cmds[0], &nan_buf_size);
+	if (unlikely(ret)) {
+		WL_ERR(("cancel subscribe failed\n"));
+		goto fail;
+	}
+	nan_buf->is_set = true;
+	nan_buf->count++;
+
+	memset_s(resp_buf, sizeof(resp_buf), 0, sizeof(resp_buf));
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, nan_buf_size,
+			&(cmd_data->status),
+			(void*)resp_buf, NAN_IOCTL_BUF_SIZE);
+	if (unlikely(ret) || unlikely(cmd_data->status)) {
+		WL_ERR(("nan cancel subscribe failed ret = %d status = %d\n",
+			ret, cmd_data->status));
+		goto fail;
+	}
+	WL_DBG(("subscribe cancel successfull\n"));
+	wl_cfgnan_remove_inst_id(cfg, cmd_data->sub_id);
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, NAN_IOCTL_BUF_SIZE);
+	}
+
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+int
+wl_cfgnan_transmit_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_discover_cmd_data_t *cmd_data)
+{
+	s32 ret = BCME_OK;
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	wl_nan_sd_transmit_t *sd_xmit = NULL;
+	bcm_iov_batch_subcmd_t *sub_cmd = NULL;
+	bool is_lcl_id = FALSE;
+	bool is_dest_id = FALSE;
+	bool is_dest_mac = FALSE;
+	uint16 buflen_avail;
+	uint8 *pxtlv;
+	uint16 nan_buf_size;
+	uint8 *resp_buf = NULL;
+	/* Considering fixed params */
+	uint16 data_size = WL_NAN_OBUF_DATA_OFFSET +
+		OFFSETOF(wl_nan_sd_transmit_t, opt_tlv);
+	data_size = ALIGN_SIZE(data_size, 4);
+	ret = wl_cfgnan_aligned_data_size_of_opt_disc_params(&data_size, cmd_data);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to get alligned size of optional params\n"));
+		goto fail;
+	}
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+	nan_buf_size = data_size;
+	nan_buf = MALLOCZ(cfg->osh, data_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	resp_buf = MALLOCZ(cfg->osh, data_size + NAN_IOVAR_NAME_SIZE);
+	if (!resp_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	/* nan transmit */
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+	/*
+	 * proceed only if mandatory arguments are present - subscriber id,
+	 * publisher id, mac address
+	 */
+	if ((!cmd_data->local_id) || (!cmd_data->remote_id) ||
+			ETHER_ISNULLADDR(&cmd_data->mac_addr.octet)) {
+		WL_ERR(("mandatory arguments are not present\n"));
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	sub_cmd = (bcm_iov_batch_subcmd_t*)(&nan_buf->cmds[0]);
+	sd_xmit = (wl_nan_sd_transmit_t *)(sub_cmd->data);
+
+	/* local instance id must be from 1 to 255, 0 is reserved */
+	if (cmd_data->local_id == NAN_ID_RESERVED) {
+		WL_ERR(("Invalid local instance id: %d\n", cmd_data->local_id));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+	sd_xmit->local_service_id = cmd_data->local_id;
+	is_lcl_id = TRUE;
+
+	/* remote instance id must be from 1 to 255, 0 is reserved */
+	if (cmd_data->remote_id == NAN_ID_RESERVED) {
+		WL_ERR(("Invalid remote instance id: %d\n", cmd_data->remote_id));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+	sd_xmit->requestor_service_id = cmd_data->remote_id;
+	is_dest_id = TRUE;
+
+	if (!ETHER_ISNULLADDR(&cmd_data->mac_addr.octet)) {
+		ret = memcpy_s(&sd_xmit->destination_addr, ETHER_ADDR_LEN,
+				&cmd_data->mac_addr, ETHER_ADDR_LEN);
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy dest mac address\n"));
+			goto fail;
+		}
+	} else {
+		WL_ERR(("Invalid ether addr provided\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+	is_dest_mac = TRUE;
+
+	if (cmd_data->priority) {
+		sd_xmit->priority = cmd_data->priority;
+	}
+	sd_xmit->token = cmd_data->token;
+
+	if (cmd_data->recv_ind_flag) {
+		/* BIT0 - If set, host wont rec event "txs"  */
+		if (CHECK_BIT(cmd_data->recv_ind_flag,
+				WL_NAN_EVENT_SUPPRESS_FOLLOWUP_RECEIVE_BIT)) {
+			sd_xmit->flags = WL_NAN_FUP_SUPR_EVT_TXS;
+		}
+	}
+	/* Optional parameters: fill the sub_command block with service descriptor attr */
+	sub_cmd->id = htod16(WL_NAN_CMD_SD_TRANSMIT);
+	sub_cmd->len = sizeof(sub_cmd->u.options) +
+		OFFSETOF(wl_nan_sd_transmit_t, opt_tlv);
+	sub_cmd->u.options = htol32(BCM_XTLV_OPTION_ALIGN32);
+	pxtlv = (uint8 *)&sd_xmit->opt_tlv;
+
+	nan_buf_size -= (sub_cmd->len +
+			OFFSETOF(bcm_iov_batch_subcmd_t, u.options));
+
+	buflen_avail = nan_buf_size;
+
+	if (cmd_data->svc_info.data && cmd_data->svc_info.dlen) {
+		bcm_xtlv_t *pxtlv_svc_info = (bcm_xtlv_t *)pxtlv;
+		ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+				WL_NAN_XTLV_SD_SVC_INFO, cmd_data->svc_info.dlen,
+				cmd_data->svc_info.data, BCM_XTLV_OPTION_ALIGN32);
+		if (unlikely(ret)) {
+			WL_ERR(("%s: fail to pack on bcm_pack_xtlv_entry, ret=%d\n",
+				__FUNCTION__, ret));
+			goto fail;
+		}
+
+		/* 0xFF is max length for svc_info */
+		if (pxtlv_svc_info->len > 0xFF) {
+			WL_ERR(("Invalid service info length %d\n",
+				(pxtlv_svc_info->len)));
+			ret = BCME_USAGE_ERROR;
+			goto fail;
+		}
+		sd_xmit->opt_len = (uint8)(pxtlv_svc_info->len);
+	}
+	if (cmd_data->sde_svc_info.data && cmd_data->sde_svc_info.dlen) {
+		WL_TRACE(("optional sdea svc_info present, pack it\n"));
+		ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+				WL_NAN_XTLV_SD_SDE_SVC_INFO, cmd_data->sde_svc_info.dlen,
+				cmd_data->sde_svc_info.data, BCM_XTLV_OPTION_ALIGN32);
+		if (unlikely(ret)) {
+			WL_ERR(("%s: fail to pack sdea svc info\n", __FUNCTION__));
+			goto fail;
+		}
+	}
+
+	/* Check if all mandatory params are provided */
+	if (is_lcl_id && is_dest_id && is_dest_mac) {
+		nan_buf->count++;
+		sub_cmd->len += (buflen_avail - nan_buf_size);
+	} else {
+		WL_ERR(("Missing parameters\n"));
+		ret = BCME_USAGE_ERROR;
+	}
+	nan_buf->is_set = TRUE;
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, data_size,
+			&(cmd_data->status), resp_buf, data_size + NAN_IOVAR_NAME_SIZE);
+	if (unlikely(ret) || unlikely(cmd_data->status)) {
+		WL_ERR(("nan transmit failed for token %d ret = %d status = %d\n",
+			sd_xmit->token, ret, cmd_data->status));
+		goto fail;
+	}
+	WL_INFORM_MEM(("nan transmit successful for token %d\n", sd_xmit->token));
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, data_size);
+	}
+	if (resp_buf) {
+		MFREE(cfg->osh, resp_buf, data_size + NAN_IOVAR_NAME_SIZE);
+	}
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+static int
+wl_cfgnan_get_capability(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_hal_capabilities_t *capabilities)
+{
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	s32 ret = BCME_OK;
+	uint16 nan_buf_size = NAN_IOCTL_BUF_SIZE;
+	wl_nan_fw_cap_t *fw_cap = NULL;
+	uint16 subcmd_len;
+	uint32 status;
+	bcm_iov_batch_subcmd_t *sub_cmd = NULL;
+	bcm_iov_batch_subcmd_t *sub_cmd_resp = NULL;
+	uint8 resp_buf[NAN_IOCTL_BUF_SIZE];
+	const bcm_xtlv_t *xtlv;
+	uint16 type = 0;
+	int len = 0;
+
+	NAN_DBG_ENTER();
+	nan_buf = MALLOCZ(cfg->osh, nan_buf_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+	sub_cmd = (bcm_iov_batch_subcmd_t*)(uint8 *)(&nan_buf->cmds[0]);
+
+	ret = wl_cfg_nan_check_cmd_len(nan_buf_size,
+			sizeof(*fw_cap), &subcmd_len);
+	if (unlikely(ret)) {
+		WL_ERR(("nan_sub_cmd check failed\n"));
+		goto fail;
+	}
+
+	fw_cap = (wl_nan_fw_cap_t *)sub_cmd->data;
+	sub_cmd->id = htod16(WL_NAN_CMD_GEN_FW_CAP);
+	sub_cmd->len = sizeof(sub_cmd->u.options) + sizeof(*fw_cap);
+	sub_cmd->u.options = htol32(BCM_XTLV_OPTION_ALIGN32);
+	nan_buf_size -= subcmd_len;
+	nan_buf->count = 1;
+
+	nan_buf->is_set = false;
+	memset(resp_buf, 0, sizeof(resp_buf));
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, nan_buf_size, &status,
+			(void*)resp_buf, NAN_IOCTL_BUF_SIZE);
+	if (unlikely(ret) || unlikely(status)) {
+		WL_ERR(("get nan fw cap failed ret %d status %d \n",
+				ret, status));
+		goto fail;
+	}
+
+	sub_cmd_resp = &((bcm_iov_batch_buf_t *)(resp_buf))->cmds[0];
+
+	/* check the response buff */
+	xtlv = ((const bcm_xtlv_t *)&sub_cmd_resp->data[0]);
+	if (!xtlv) {
+		ret = BCME_NOTFOUND;
+		WL_ERR(("xtlv not found: err = %d\n", ret));
+		goto fail;
+	}
+	bcm_xtlv_unpack_xtlv(xtlv, &type, (uint16*)&len, NULL, BCM_XTLV_OPTION_ALIGN32);
+	do
+	{
+		switch (type) {
+			case WL_NAN_XTLV_GEN_FW_CAP:
+				if (len > sizeof(wl_nan_fw_cap_t)) {
+					ret = BCME_BADARG;
+					goto fail;
+				}
+				GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+				fw_cap = (wl_nan_fw_cap_t*)xtlv->data;
+				GCC_DIAGNOSTIC_POP();
+				break;
+			default:
+				WL_ERR(("Unknown xtlv: id %u\n", type));
+				ret = BCME_ERROR;
+				break;
+		}
+		if (ret != BCME_OK) {
+			goto fail;
+		}
+	} while ((xtlv = bcm_next_xtlv(xtlv, &len, BCM_XTLV_OPTION_ALIGN32)));
+
+	memset(capabilities, 0, sizeof(nan_hal_capabilities_t));
+	capabilities->max_publishes = fw_cap->max_svc_publishes;
+	capabilities->max_subscribes = fw_cap->max_svc_subscribes;
+	capabilities->max_ndi_interfaces = fw_cap->max_lcl_ndi_interfaces;
+	capabilities->max_ndp_sessions = fw_cap->max_ndp_sessions;
+	capabilities->max_concurrent_nan_clusters = fw_cap->max_concurrent_nan_clusters;
+	capabilities->max_service_name_len = fw_cap->max_service_name_len;
+	capabilities->max_match_filter_len = fw_cap->max_match_filter_len;
+	capabilities->max_total_match_filter_len = fw_cap->max_total_match_filter_len;
+	capabilities->max_service_specific_info_len = fw_cap->max_service_specific_info_len;
+	capabilities->max_app_info_len = fw_cap->max_app_info_len;
+	capabilities->max_sdea_service_specific_info_len = fw_cap->max_sdea_svc_specific_info_len;
+	capabilities->max_queued_transmit_followup_msgs = fw_cap->max_queued_tx_followup_msgs;
+	capabilities->max_subscribe_address = fw_cap->max_subscribe_address;
+	capabilities->is_ndp_security_supported = fw_cap->is_ndp_security_supported;
+	capabilities->ndp_supported_bands = fw_cap->ndp_supported_bands;
+	capabilities->cipher_suites_supported = fw_cap->cipher_suites_supported_mask;
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, NAN_IOCTL_BUF_SIZE);
+	}
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+int
+wl_cfgnan_get_capablities_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_hal_capabilities_t *capabilities)
+{
+	s32 ret = BCME_OK;
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(ndev);
+
+	NAN_DBG_ENTER();
+
+	/* Do not query fw about nan if feature is not supported */
+	if (!FW_SUPPORTED(dhdp, nan)) {
+		WL_DBG(("NAN is not supported\n"));
+		return ret;
+	}
+
+	if (cfg->nan_init_state) {
+		ret = wl_cfgnan_get_capability(ndev, cfg, capabilities);
+		if (ret != BCME_OK) {
+			WL_ERR(("NAN init state: %d, failed to get capability from FW[%d]\n",
+					cfg->nan_init_state, ret));
+			goto exit;
+		}
+	} else {
+		/* Initialize NAN before sending iovar */
+		WL_ERR(("Initializing NAN\n"));
+		ret = wl_cfgnan_init(cfg);
+		if (ret != BCME_OK) {
+			WL_ERR(("failed to initialize NAN[%d]\n", ret));
+			goto fail;
+		}
+
+		ret = wl_cfgnan_get_capability(ndev, cfg, capabilities);
+		if (ret != BCME_OK) {
+			WL_ERR(("NAN init state: %d, failed to get capability from FW[%d]\n",
+					cfg->nan_init_state, ret));
+			goto exit;
+		}
+		WL_ERR(("De-Initializing NAN\n"));
+		ret = wl_cfgnan_deinit(cfg, dhdp->up);
+		if (ret != BCME_OK) {
+			WL_ERR(("failed to de-initialize NAN[%d]\n", ret));
+			goto fail;
+		}
+	}
+fail:
+	NAN_DBG_EXIT();
+	return ret;
+exit:
+	/* Keeping backward campatibility */
+	capabilities->max_concurrent_nan_clusters = MAX_CONCURRENT_NAN_CLUSTERS;
+	capabilities->max_publishes = MAX_PUBLISHES;
+	capabilities->max_subscribes = MAX_SUBSCRIBES;
+	capabilities->max_service_name_len = MAX_SVC_NAME_LEN;
+	capabilities->max_match_filter_len = MAX_MATCH_FILTER_LEN;
+	capabilities->max_total_match_filter_len = MAX_TOTAL_MATCH_FILTER_LEN;
+	capabilities->max_service_specific_info_len = NAN_MAX_SERVICE_SPECIFIC_INFO_LEN;
+	capabilities->max_ndi_interfaces = MAX_NDI_INTERFACES;
+	capabilities->max_ndp_sessions = MAX_NDP_SESSIONS;
+	capabilities->max_app_info_len = MAX_APP_INFO_LEN;
+	capabilities->max_queued_transmit_followup_msgs = MAX_QUEUED_TX_FOLLOUP_MSGS;
+	capabilities->max_sdea_service_specific_info_len = MAX_SDEA_SVC_INFO_LEN;
+	capabilities->max_subscribe_address = MAX_SUBSCRIBE_ADDRESS;
+	capabilities->cipher_suites_supported = WL_NAN_CIPHER_SUITE_SHARED_KEY_128_MASK;
+	capabilities->max_scid_len = MAX_SCID_LEN;
+	capabilities->is_ndp_security_supported = true;
+	capabilities->ndp_supported_bands = NDP_SUPPORTED_BANDS;
+	ret = BCME_OK;
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+bool wl_cfgnan_check_state(struct bcm_cfg80211 *cfg)
+{
+	return cfg->nan_enable;
+}
+
+int
+wl_cfgnan_init(struct bcm_cfg80211 *cfg)
+{
+	s32 ret = BCME_OK;
+	uint16 nan_buf_size = NAN_IOCTL_BUF_SIZE;
+	uint32 status;
+	uint8 resp_buf[NAN_IOCTL_BUF_SIZE];
+	uint8 buf[NAN_IOCTL_BUF_SIZE];
+	bcm_iov_batch_buf_t *nan_buf = (bcm_iov_batch_buf_t*)buf;
+
+	NAN_DBG_ENTER();
+	if (cfg->nan_init_state) {
+		WL_ERR(("nan initialized/nmi exists\n"));
+		return BCME_OK;
+	}
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+	ret = wl_cfgnan_init_handler(&nan_buf->cmds[0], &nan_buf_size, true);
+	if (unlikely(ret)) {
+		WL_ERR(("init handler sub_cmd set failed\n"));
+		goto fail;
+	}
+	nan_buf->count++;
+	nan_buf->is_set = true;
+
+	memset_s(resp_buf, sizeof(resp_buf), 0, sizeof(resp_buf));
+	ret = wl_cfgnan_execute_ioctl(bcmcfg_to_prmry_ndev(cfg), cfg,
+			nan_buf, nan_buf_size, &status,
+			(void*)resp_buf, NAN_IOCTL_BUF_SIZE);
+	if (unlikely(ret) || unlikely(status)) {
+		WL_ERR(("nan init handler failed ret %d status %d\n",
+				ret, status));
+		goto fail;
+	}
+
+#ifdef WL_NAN_DISC_CACHE
+	/* malloc for disc result */
+	cfg->nan_disc_cache = MALLOCZ(cfg->osh,
+			NAN_MAX_CACHE_DISC_RESULT * sizeof(nan_disc_result_cache));
+	if (!cfg->nan_disc_cache) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+#endif /* WL_NAN_DISC_CACHE */
+	cfg->nan_init_state = true;
+	return ret;
+fail:
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+void
+wl_cfgnan_deinit_cleanup(struct bcm_cfg80211 *cfg)
+{
+	uint8 i = 0;
+	cfg->nan_dp_count = 0;
+	cfg->nan_init_state = false;
+#ifdef WL_NAN_DISC_CACHE
+	if (cfg->nan_disc_cache) {
+		for (i = 0; i < NAN_MAX_CACHE_DISC_RESULT; i++) {
+			if (cfg->nan_disc_cache[i].tx_match_filter.data) {
+				MFREE(cfg->osh, cfg->nan_disc_cache[i].tx_match_filter.data,
+					cfg->nan_disc_cache[i].tx_match_filter.dlen);
+			}
+			if (cfg->nan_disc_cache[i].svc_info.data) {
+				MFREE(cfg->osh, cfg->nan_disc_cache[i].svc_info.data,
+					cfg->nan_disc_cache[i].svc_info.dlen);
+			}
+		}
+		MFREE(cfg->osh, cfg->nan_disc_cache,
+			NAN_MAX_CACHE_DISC_RESULT * sizeof(nan_disc_result_cache));
+		cfg->nan_disc_cache = NULL;
+	}
+	cfg->nan_disc_count = 0;
+	memset_s(cfg->svc_info, NAN_MAX_SVC_INST * sizeof(nan_svc_info_t),
+			0, NAN_MAX_SVC_INST * sizeof(nan_svc_info_t));
+	memset_s(cfg->nan_ranging_info, NAN_MAX_RANGING_INST * sizeof(nan_ranging_inst_t),
+			0, NAN_MAX_RANGING_INST * sizeof(nan_ranging_inst_t));
+#endif /* WL_NAN_DISC_CACHE */
+	return;
+}
+
+int
+wl_cfgnan_deinit(struct bcm_cfg80211 *cfg, uint8 busstate)
+{
+	s32 ret = BCME_OK;
+	uint16 nan_buf_size = NAN_IOCTL_BUF_SIZE;
+	uint32 status;
+	uint8 resp_buf[NAN_IOCTL_BUF_SIZE];
+	uint8 buf[NAN_IOCTL_BUF_SIZE];
+	bcm_iov_batch_buf_t *nan_buf = (bcm_iov_batch_buf_t*)buf;
+
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+
+	if (!cfg->nan_init_state) {
+		WL_ERR(("nan is not initialized/nmi doesnt exists\n"));
+		ret = BCME_OK;
+		goto fail;
+	}
+
+	if (busstate != DHD_BUS_DOWN) {
+		nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+		nan_buf->count = 0;
+		nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+
+		WL_DBG(("nan deinit\n"));
+		ret = wl_cfgnan_init_handler(&nan_buf->cmds[0], &nan_buf_size, false);
+		if (unlikely(ret)) {
+			WL_ERR(("deinit handler sub_cmd set failed\n"));
+		} else {
+			nan_buf->count++;
+			nan_buf->is_set = true;
+			memset_s(resp_buf, sizeof(resp_buf), 0, sizeof(resp_buf));
+			ret = wl_cfgnan_execute_ioctl(cfg->wdev->netdev, cfg,
+				nan_buf, nan_buf_size, &status,
+				(void*)resp_buf, NAN_IOCTL_BUF_SIZE);
+			if (unlikely(ret) || unlikely(status)) {
+				WL_ERR(("nan init handler failed ret %d status %d\n",
+					ret, status));
+			}
+		}
+	}
+	wl_cfgnan_deinit_cleanup(cfg);
+
+fail:
+	if (!cfg->nancfg.mac_rand && !ETHER_ISNULLADDR(cfg->nan_nmi_mac)) {
+		wl_release_vif_macaddr(cfg, cfg->nan_nmi_mac, WL_IF_TYPE_NAN_NMI);
+	}
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+static int
+wl_cfgnan_get_ndi_macaddr(struct bcm_cfg80211 *cfg, u8* mac_addr)
+{
+	int i = 0;
+	int ret = BCME_OK;
+	bool rand_mac = cfg->nancfg.mac_rand;
+	BCM_REFERENCE(i);
+
+	if (rand_mac) {
+		/* ensure nmi != ndi */
+		do {
+			RANDOM_BYTES(mac_addr, ETHER_ADDR_LEN);
+			/* restore mcast and local admin bits to 0 and 1 */
+			ETHER_SET_UNICAST(mac_addr);
+			ETHER_SET_LOCALADDR(mac_addr);
+			i++;
+			if (i == NAN_RAND_MAC_RETRIES) {
+				break;
+			}
+		} while (eacmp(cfg->nan_nmi_mac, mac_addr) == 0);
+
+		if (i == NAN_RAND_MAC_RETRIES) {
+			if (eacmp(cfg->nan_nmi_mac, mac_addr) == 0) {
+				WL_ERR(("\nCouldn't generate rand NDI which != NMI\n"));
+				ret = BCME_NORESOURCE;
+				goto fail;
+			}
+		}
+	} else {
+		if (wl_get_vif_macaddr(cfg, WL_IF_TYPE_NAN,
+			mac_addr) != BCME_OK) {
+			ret = -EINVAL;
+			WL_ERR(("Failed to get mac addr for NDI\n"));
+			goto fail;
+		}
+	}
+
+fail:
+	return ret;
+}
+
+int
+wl_cfgnan_data_path_iface_create_delete_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, char *ifname, uint16 type, uint8 busstate)
+{
+	u8 mac_addr[ETH_ALEN];
+	s32 ret = BCME_OK;
+	s32 idx;
+	struct wireless_dev *wdev;
+	NAN_DBG_ENTER();
+
+	if (busstate != DHD_BUS_DOWN) {
+		if (type == NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE) {
+			if ((idx = wl_cfgnan_get_ndi_idx(cfg)) < 0) {
+				WL_ERR(("No free idx for NAN NDI\n"));
+				ret = BCME_NORESOURCE;
+				goto fail;
+			}
+
+			ret = wl_cfgnan_get_ndi_macaddr(cfg, mac_addr);
+			if (ret != BCME_OK) {
+				WL_ERR(("Couldn't get mac addr for NDI ret %d\n", ret));
+				goto fail;
+			}
+			wdev = wl_cfg80211_add_if(cfg, ndev, WL_IF_TYPE_NAN,
+				ifname, mac_addr);
+			if (!wdev) {
+				ret = -ENODEV;
+				WL_ERR(("Failed to create NDI iface = %s, wdev is NULL\n", ifname));
+				goto fail;
+			}
+			/* Store the iface name to pub data so that it can be used
+			 * during NAN enable
+			 */
+			wl_cfgnan_add_ndi_data(cfg, idx, ifname);
+			cfg->nancfg.ndi[idx].created = true;
+			/* Store nan ndev */
+			cfg->nancfg.ndi[idx].nan_ndev = wdev_to_ndev(wdev);
+
+		} else if (type == NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE) {
+			ret = wl_cfg80211_del_if(cfg, ndev, NULL, ifname);
+			if (ret == BCME_OK) {
+				if (wl_cfgnan_del_ndi_data(cfg, ifname) < 0) {
+					WL_ERR(("Failed to find matching data for ndi:%s\n",
+					ifname));
+				}
+			} else if (ret == -ENODEV) {
+				WL_INFORM(("Already deleted: %s\n", ifname));
+				ret = BCME_OK;
+			} else if (ret != BCME_OK) {
+				WL_ERR(("failed to delete NDI[%d]\n", ret));
+			}
+		}
+	} else {
+		ret = -ENODEV;
+		WL_ERR(("Bus is already down, no dev found to remove, ret = %d\n", ret));
+	}
+fail:
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+/*
+ * Return data peer from peer list
+ * for peer_addr
+ * NULL if not found
+ */
+nan_ndp_peer_t *
+wl_cfgnan_data_get_peer(struct bcm_cfg80211 *cfg,
+	struct ether_addr *peer_addr)
+{
+	uint8 i;
+	nan_ndp_peer_t* peer = cfg->nancfg.nan_ndp_peer_info;
+
+	if (!peer) {
+		WL_ERR(("wl_cfgnan_data_get_peer: nan_ndp_peer_info is NULL\n"));
+		goto exit;
+	}
+	for (i = 0; i < cfg->nancfg.max_ndp_count; i++) {
+		if (peer[i].peer_dp_state != NAN_PEER_DP_NOT_CONNECTED &&
+			(!memcmp(peer_addr, &peer[i].peer_addr, ETHER_ADDR_LEN))) {
+			return &peer[i];
+		}
+	}
+
+exit:
+	return NULL;
+}
+
+/*
+ * Returns True if
+ * datapath exists for nan cfg
+ * for any peer
+ */
+bool
+wl_cfgnan_data_dp_exists(struct bcm_cfg80211 *cfg)
+{
+	bool ret = FALSE;
+	uint8 i;
+	nan_ndp_peer_t* peer = NULL;
+
+	if ((cfg->nan_init_state == FALSE) ||
+		(cfg->nan_enable == FALSE)) {
+		goto exit;
+	}
+
+	if (!cfg->nancfg.nan_ndp_peer_info) {
+		goto exit;
+	}
+
+	peer = cfg->nancfg.nan_ndp_peer_info;
+	for (i = 0; i < cfg->nancfg.max_ndp_count; i++) {
+		if (peer[i].peer_dp_state != NAN_PEER_DP_NOT_CONNECTED) {
+			ret = TRUE;
+			break;
+		}
+	}
+
+exit:
+	return ret;
+}
+
+/*
+ * Returns True if
+ * datapath exists for nan cfg
+ * for given peer
+ */
+bool
+wl_cfgnan_data_dp_exists_with_peer(struct bcm_cfg80211 *cfg,
+		struct ether_addr *peer_addr)
+{
+	bool ret = FALSE;
+	nan_ndp_peer_t* peer = NULL;
+
+	if ((cfg->nan_init_state == FALSE) ||
+		(cfg->nan_enable == FALSE)) {
+		goto exit;
+	}
+
+	/* check for peer exist */
+	peer = wl_cfgnan_data_get_peer(cfg, peer_addr);
+	if (peer) {
+		ret = TRUE;
+	}
+
+exit:
+	return ret;
+}
+
+/*
+ * As of now API only available
+ * for setting state to CONNECTED
+ * if applicable
+ */
+void
+wl_cfgnan_data_set_peer_dp_state(struct bcm_cfg80211 *cfg,
+		struct ether_addr *peer_addr, nan_peer_dp_state_t state)
+{
+	nan_ndp_peer_t* peer = NULL;
+	/* check for peer exist */
+	peer = wl_cfgnan_data_get_peer(cfg, peer_addr);
+	if (!peer) {
+		goto end;
+	}
+	peer->peer_dp_state = state;
+end:
+	return;
+}
+
+/* Adds peer to nan data peer list */
+void
+wl_cfgnan_data_add_peer(struct bcm_cfg80211 *cfg,
+		struct ether_addr *peer_addr)
+{
+	uint8 i;
+	nan_ndp_peer_t* peer = NULL;
+	/* check for peer exist */
+	peer = wl_cfgnan_data_get_peer(cfg, peer_addr);
+	if (peer) {
+		peer->dp_count++;
+		goto end;
+	}
+	peer = cfg->nancfg.nan_ndp_peer_info;
+	for (i = 0; i < cfg->nancfg.max_ndp_count; i++) {
+		if (peer[i].peer_dp_state == NAN_PEER_DP_NOT_CONNECTED) {
+			break;
+		}
+	}
+	if (i == NAN_MAX_NDP_PEER) {
+		WL_DBG(("DP Peer list full, Droopping add peer req\n"));
+		goto end;
+	}
+	/* Add peer to list */
+	memcpy(&peer[i].peer_addr, peer_addr, ETHER_ADDR_LEN);
+	peer[i].dp_count = 1;
+	peer[i].peer_dp_state = NAN_PEER_DP_CONNECTING;
+
+end:
+	return;
+}
+
+/* Removes nan data peer from peer list */
+void
+wl_cfgnan_data_remove_peer(struct bcm_cfg80211 *cfg,
+		struct ether_addr *peer_addr)
+{
+	nan_ndp_peer_t* peer = NULL;
+	/* check for peer exist */
+	peer = wl_cfgnan_data_get_peer(cfg, peer_addr);
+	if (!peer) {
+		WL_DBG(("DP Peer not present in list, "
+			"Droopping remove peer req\n"));
+		goto end;
+	}
+	peer->dp_count--;
+	if (peer->dp_count == 0) {
+		/* No more NDPs, delete entry */
+		memset(peer, 0, sizeof(nan_ndp_peer_t));
+	} else {
+		/* Set peer dp state to connected if any ndp still exits */
+		peer->peer_dp_state = NAN_PEER_DP_CONNECTED;
+	}
+end:
+	return;
+}
+
+int
+wl_cfgnan_data_path_request_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_datapath_cmd_data_t *cmd_data,
+	uint8 *ndp_instance_id)
+{
+	s32 ret = BCME_OK;
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	wl_nan_dp_req_t *datareq = NULL;
+	bcm_iov_batch_subcmd_t *sub_cmd = NULL;
+	uint16 buflen_avail;
+	uint8 *pxtlv;
+	struct wireless_dev *wdev;
+	uint16 nan_buf_size;
+	uint8 *resp_buf = NULL;
+	/* Considering fixed params */
+	uint16 data_size = WL_NAN_OBUF_DATA_OFFSET +
+		OFFSETOF(wl_nan_dp_req_t, tlv_params);
+	data_size = ALIGN_SIZE(data_size, 4);
+
+	ret = wl_cfgnan_aligned_data_size_of_opt_dp_params(&data_size, cmd_data);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to get alligned size of optional params\n"));
+		goto fail;
+	}
+
+	nan_buf_size = data_size;
+	NAN_DBG_ENTER();
+
+	mutex_lock(&cfg->if_sync);
+	NAN_MUTEX_LOCK();
+#ifdef WL_IFACE_MGMT
+	if ((ret = wl_cfg80211_handle_if_role_conflict(cfg, WL_IF_TYPE_NAN)) < 0) {
+		WL_ERR(("Conflicting iface found to be active\n"));
+		ret = BCME_UNSUPPORTED;
+		goto fail;
+	}
+#endif /* WL_IFACE_MGMT */
+
+#ifdef RTT_SUPPORT
+	/* cancel any ongoing RTT session with peer
+	* as we donot support DP and RNG to same peer
+	*/
+	wl_cfgnan_clear_peer_ranging(cfg, &cmd_data->mac_addr,
+		RTT_GEO_SUSPN_HOST_NDP_TRIGGER);
+#endif /* RTT_SUPPORT */
+
+	nan_buf = MALLOCZ(cfg->osh, data_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	resp_buf = MALLOCZ(cfg->osh, data_size + NAN_IOVAR_NAME_SIZE);
+	if (!resp_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	ret = wl_cfgnan_set_nan_avail(bcmcfg_to_prmry_ndev(cfg),
+			cfg, &cmd_data->avail_params, WL_AVAIL_LOCAL);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to set avail value with type local\n"));
+		goto fail;
+	}
+
+	ret = wl_cfgnan_set_nan_avail(bcmcfg_to_prmry_ndev(cfg),
+			cfg, &cmd_data->avail_params, WL_AVAIL_NDC);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to set avail value with type ndc\n"));
+		goto fail;
+	}
+
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+
+	sub_cmd = (bcm_iov_batch_subcmd_t*)(&nan_buf->cmds[0]);
+	datareq = (wl_nan_dp_req_t *)(sub_cmd->data);
+
+	/* setting default data path type to unicast */
+	datareq->type = WL_NAN_DP_TYPE_UNICAST;
+
+	if (cmd_data->pub_id) {
+		datareq->pub_id = cmd_data->pub_id;
+	}
+
+	if (!ETHER_ISNULLADDR(&cmd_data->mac_addr.octet)) {
+		ret = memcpy_s(&datareq->peer_mac, ETHER_ADDR_LEN,
+				&cmd_data->mac_addr, ETHER_ADDR_LEN);
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy ether addr provided\n"));
+			goto fail;
+		}
+	} else {
+		WL_ERR(("Invalid ether addr provided\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+	/* Retrieve mac from given iface name */
+	wdev = wl_cfg80211_get_wdev_from_ifname(cfg,
+		(char *)cmd_data->ndp_iface);
+	if (!wdev || ETHER_ISNULLADDR(wdev->netdev->dev_addr)) {
+		ret = -EINVAL;
+		WL_ERR(("Failed to retrieve wdev/dev addr for ndp_iface = %s\n",
+			(char *)cmd_data->ndp_iface));
+		goto fail;
+	}
+
+	if (!ETHER_ISNULLADDR(wdev->netdev->dev_addr)) {
+		ret = memcpy_s(&datareq->ndi, ETHER_ADDR_LEN,
+				wdev->netdev->dev_addr, ETHER_ADDR_LEN);
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy ether addr provided\n"));
+			goto fail;
+		}
+		WL_TRACE(("%s: Retrieved ndi mac " MACDBG "\n",
+			__FUNCTION__, MAC2STRDBG(datareq->ndi.octet)));
+	} else {
+		WL_ERR(("Invalid NDI addr retrieved\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+	datareq->ndl_qos.min_slots = NAN_NDL_QOS_MIN_SLOT_NO_PREF;
+	datareq->ndl_qos.max_latency = NAN_NDL_QOS_MAX_LAT_NO_PREF;
+
+	/* Fill the sub_command block */
+	sub_cmd->id = htod16(WL_NAN_CMD_DATA_DATAREQ);
+	sub_cmd->len = sizeof(sub_cmd->u.options) +
+		OFFSETOF(wl_nan_dp_req_t, tlv_params);
+	sub_cmd->u.options = htol32(BCM_XTLV_OPTION_ALIGN32);
+	pxtlv = (uint8 *)&datareq->tlv_params;
+
+	nan_buf_size -= (sub_cmd->len +
+			OFFSETOF(bcm_iov_batch_subcmd_t, u.options));
+	buflen_avail = nan_buf_size;
+
+	if (cmd_data->svc_info.data && cmd_data->svc_info.dlen) {
+		ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+				WL_NAN_XTLV_SD_SVC_INFO, cmd_data->svc_info.dlen,
+				cmd_data->svc_info.data,
+				BCM_XTLV_OPTION_ALIGN32);
+		if (ret != BCME_OK) {
+			WL_ERR(("unable to process svc_spec_info: %d\n", ret));
+			goto fail;
+		}
+		datareq->flags |= WL_NAN_DP_FLAG_SVC_INFO;
+	}
+
+	/* Security elements */
+
+	if (cmd_data->csid) {
+		WL_TRACE(("Cipher suite type is present, pack it\n"));
+		ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+				WL_NAN_XTLV_CFG_SEC_CSID, sizeof(nan_sec_csid_e),
+				(uint8*)&cmd_data->csid, BCM_XTLV_OPTION_ALIGN32);
+		if (unlikely(ret)) {
+			WL_ERR(("%s: fail to pack on csid\n", __FUNCTION__));
+			goto fail;
+		}
+	}
+
+	if (cmd_data->ndp_cfg.security_cfg) {
+		if ((cmd_data->key_type == NAN_SECURITY_KEY_INPUT_PMK) ||
+			(cmd_data->key_type == NAN_SECURITY_KEY_INPUT_PASSPHRASE)) {
+			if (cmd_data->key.data && cmd_data->key.dlen) {
+				WL_TRACE(("optional pmk present, pack it\n"));
+				ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+					WL_NAN_XTLV_CFG_SEC_PMK, cmd_data->key.dlen,
+					cmd_data->key.data, BCM_XTLV_OPTION_ALIGN32);
+				if (unlikely(ret)) {
+					WL_ERR(("%s: fail to pack on WL_NAN_XTLV_CFG_SEC_PMK\n",
+						__FUNCTION__));
+					goto fail;
+				}
+			}
+		} else {
+			WL_ERR(("Invalid security key type\n"));
+			ret = BCME_BADARG;
+			goto fail;
+		}
+
+		if ((cmd_data->svc_hash.dlen == WL_NAN_SVC_HASH_LEN) &&
+				(cmd_data->svc_hash.data)) {
+			WL_TRACE(("svc hash present, pack it\n"));
+			ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+					WL_NAN_XTLV_CFG_SVC_HASH, WL_NAN_SVC_HASH_LEN,
+					cmd_data->svc_hash.data, BCM_XTLV_OPTION_ALIGN32);
+			if (ret != BCME_OK) {
+				WL_ERR(("%s: fail to pack WL_NAN_XTLV_CFG_SVC_HASH\n",
+						__FUNCTION__));
+				goto fail;
+			}
+		} else {
+#ifdef WL_NAN_DISC_CACHE
+			/* check in cache */
+			nan_disc_result_cache *cache;
+			cache = wl_cfgnan_get_disc_result(cfg,
+				datareq->pub_id, &datareq->peer_mac);
+			if (!cache) {
+				ret = BCME_ERROR;
+				WL_ERR(("invalid svc hash data or length = %d\n",
+					cmd_data->svc_hash.dlen));
+				goto fail;
+			}
+			WL_TRACE(("svc hash present, pack it\n"));
+			ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+					WL_NAN_XTLV_CFG_SVC_HASH, WL_NAN_SVC_HASH_LEN,
+					cache->svc_hash, BCM_XTLV_OPTION_ALIGN32);
+			if (ret != BCME_OK) {
+				WL_ERR(("%s: fail to pack WL_NAN_XTLV_CFG_SVC_HASH\n",
+						__FUNCTION__));
+				goto fail;
+			}
+#else
+			ret = BCME_ERROR;
+			WL_ERR(("invalid svc hash data or length = %d\n",
+					cmd_data->svc_hash.dlen));
+			goto fail;
+#endif /* WL_NAN_DISC_CACHE */
+		}
+		/* If the Data req is for secure data connection */
+		datareq->flags |= WL_NAN_DP_FLAG_SECURITY;
+	}
+
+	sub_cmd->len += (buflen_avail - nan_buf_size);
+	nan_buf->is_set = false;
+	nan_buf->count++;
+
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, data_size,
+			&(cmd_data->status), resp_buf, data_size + NAN_IOVAR_NAME_SIZE);
+	if (unlikely(ret) || unlikely(cmd_data->status)) {
+		WL_ERR(("nan data path request handler failed, ret = %d status %d\n",
+				ret, cmd_data->status));
+		goto fail;
+	}
+
+	/* check the response buff */
+	if (ret == BCME_OK) {
+		ret = process_resp_buf(resp_buf + WL_NAN_OBUF_DATA_OFFSET,
+				ndp_instance_id, WL_NAN_CMD_DATA_DATAREQ);
+		cmd_data->ndp_instance_id = *ndp_instance_id;
+	}
+	WL_INFORM_MEM(("[NAN] DP request successfull (ndp_id:%d)\n",
+		cmd_data->ndp_instance_id));
+	/* Add peer to data ndp peer list */
+	wl_cfgnan_data_add_peer(cfg, &datareq->peer_mac);
+
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, data_size);
+	}
+
+	if (resp_buf) {
+		MFREE(cfg->osh, resp_buf, data_size + NAN_IOVAR_NAME_SIZE);
+	}
+	NAN_MUTEX_UNLOCK();
+	mutex_unlock(&cfg->if_sync);
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+int
+wl_cfgnan_data_path_response_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_datapath_cmd_data_t *cmd_data)
+{
+	s32 ret = BCME_OK;
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	wl_nan_dp_resp_t *dataresp = NULL;
+	bcm_iov_batch_subcmd_t *sub_cmd = NULL;
+	uint16 buflen_avail;
+	uint8 *pxtlv;
+	struct wireless_dev *wdev;
+	uint16 nan_buf_size;
+	uint8 *resp_buf = NULL;
+
+	/* Considering fixed params */
+	uint16 data_size = WL_NAN_OBUF_DATA_OFFSET +
+		OFFSETOF(wl_nan_dp_resp_t, tlv_params);
+	data_size = ALIGN_SIZE(data_size, 4);
+	ret = wl_cfgnan_aligned_data_size_of_opt_dp_params(&data_size, cmd_data);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to get alligned size of optional params\n"));
+		goto fail;
+	}
+	nan_buf_size = data_size;
+
+	NAN_DBG_ENTER();
+
+	mutex_lock(&cfg->if_sync);
+	NAN_MUTEX_LOCK();
+#ifdef WL_IFACE_MGMT
+	if ((ret = wl_cfg80211_handle_if_role_conflict(cfg, WL_IF_TYPE_NAN)) < 0) {
+		WL_ERR(("Conflicting iface found to be active\n"));
+		ret = BCME_UNSUPPORTED;
+		goto fail;
+	}
+#endif /* WL_IFACE_MGMT */
+
+	nan_buf = MALLOCZ(cfg->osh, data_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	resp_buf = MALLOCZ(cfg->osh, data_size + NAN_IOVAR_NAME_SIZE);
+	if (!resp_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	ret = wl_cfgnan_set_nan_avail(bcmcfg_to_prmry_ndev(cfg),
+			cfg, &cmd_data->avail_params, WL_AVAIL_LOCAL);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to set avail value with type local\n"));
+		goto fail;
+	}
+
+	ret = wl_cfgnan_set_nan_avail(bcmcfg_to_prmry_ndev(cfg),
+			cfg, &cmd_data->avail_params, WL_AVAIL_NDC);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to set avail value with type ndc\n"));
+		goto fail;
+	}
+
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+
+	sub_cmd = (bcm_iov_batch_subcmd_t*)(&nan_buf->cmds[0]);
+	dataresp = (wl_nan_dp_resp_t *)(sub_cmd->data);
+
+	/* Setting default data path type to unicast */
+	dataresp->type = WL_NAN_DP_TYPE_UNICAST;
+	/* Changing status value as per fw convention */
+	dataresp->status = cmd_data->rsp_code ^= 1;
+	dataresp->reason_code = 0;
+
+	/* ndp instance id must be from 1 to 255, 0 is reserved */
+	if (cmd_data->ndp_instance_id < NAN_ID_MIN ||
+			cmd_data->ndp_instance_id > NAN_ID_MAX) {
+		WL_ERR(("Invalid ndp instance id: %d\n", cmd_data->ndp_instance_id));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+	dataresp->ndp_id = cmd_data->ndp_instance_id;
+
+	/* Retrieved initiator ndi from NanDataPathRequestInd */
+	if (!ETHER_ISNULLADDR(&cfg->initiator_ndi.octet)) {
+		ret = memcpy_s(&dataresp->mac_addr, ETHER_ADDR_LEN,
+				&cfg->initiator_ndi, ETHER_ADDR_LEN);
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy initiator ndi\n"));
+			goto fail;
+		}
+	} else {
+		WL_ERR(("Invalid ether addr retrieved\n"));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+	/* Interface is not mandatory, when it is a reject from framework */
+	if (dataresp->status != WL_NAN_DP_STATUS_REJECTED) {
+		/* Retrieve mac from given iface name */
+		wdev = wl_cfg80211_get_wdev_from_ifname(cfg,
+				(char *)cmd_data->ndp_iface);
+		if (!wdev || ETHER_ISNULLADDR(wdev->netdev->dev_addr)) {
+			ret = -EINVAL;
+			WL_ERR(("Failed to retrieve wdev/dev addr for ndp_iface = %s\n",
+				(char *)cmd_data->ndp_iface));
+			goto fail;
+		}
+
+		if (!ETHER_ISNULLADDR(wdev->netdev->dev_addr)) {
+			ret = memcpy_s(&dataresp->ndi, ETHER_ADDR_LEN,
+					wdev->netdev->dev_addr, ETHER_ADDR_LEN);
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to copy responder ndi\n"));
+				goto fail;
+			}
+			WL_TRACE(("%s: Retrieved ndi mac " MACDBG "\n",
+					__FUNCTION__, MAC2STRDBG(dataresp->ndi.octet)));
+		} else {
+			WL_ERR(("Invalid NDI addr retrieved\n"));
+			ret = BCME_BADARG;
+			goto fail;
+		}
+	}
+
+	dataresp->ndl_qos.min_slots = NAN_NDL_QOS_MIN_SLOT_NO_PREF;
+	dataresp->ndl_qos.max_latency = NAN_NDL_QOS_MAX_LAT_NO_PREF;
+
+	/* Fill the sub_command block */
+	sub_cmd->id = htod16(WL_NAN_CMD_DATA_DATARESP);
+	sub_cmd->len = sizeof(sub_cmd->u.options) +
+		OFFSETOF(wl_nan_dp_resp_t, tlv_params);
+	sub_cmd->u.options = htol32(BCM_XTLV_OPTION_ALIGN32);
+	pxtlv = (uint8 *)&dataresp->tlv_params;
+
+	nan_buf_size -= (sub_cmd->len +
+			OFFSETOF(bcm_iov_batch_subcmd_t, u.options));
+	buflen_avail = nan_buf_size;
+
+	if (cmd_data->svc_info.data && cmd_data->svc_info.dlen) {
+		ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+				WL_NAN_XTLV_SD_SVC_INFO, cmd_data->svc_info.dlen,
+				cmd_data->svc_info.data,
+				BCM_XTLV_OPTION_ALIGN32);
+		if (ret != BCME_OK) {
+			WL_ERR(("unable to process svc_spec_info: %d\n", ret));
+			goto fail;
+		}
+		dataresp->flags |= WL_NAN_DP_FLAG_SVC_INFO;
+	}
+
+	/* Security elements */
+	if (cmd_data->csid) {
+		WL_TRACE(("Cipher suite type is present, pack it\n"));
+		ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+				WL_NAN_XTLV_CFG_SEC_CSID, sizeof(nan_sec_csid_e),
+				(uint8*)&cmd_data->csid, BCM_XTLV_OPTION_ALIGN32);
+		if (unlikely(ret)) {
+			WL_ERR(("%s: fail to pack csid\n", __FUNCTION__));
+			goto fail;
+		}
+	}
+
+	if (cmd_data->ndp_cfg.security_cfg) {
+		if ((cmd_data->key_type == NAN_SECURITY_KEY_INPUT_PMK) ||
+			(cmd_data->key_type == NAN_SECURITY_KEY_INPUT_PASSPHRASE)) {
+			if (cmd_data->key.data && cmd_data->key.dlen) {
+				WL_TRACE(("optional pmk present, pack it\n"));
+				ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+					WL_NAN_XTLV_CFG_SEC_PMK, cmd_data->key.dlen,
+					cmd_data->key.data, BCM_XTLV_OPTION_ALIGN32);
+				if (unlikely(ret)) {
+					WL_ERR(("%s: fail to pack WL_NAN_XTLV_CFG_SEC_PMK\n",
+						__FUNCTION__));
+					goto fail;
+				}
+			}
+		} else {
+			WL_ERR(("Invalid security key type\n"));
+			ret = BCME_BADARG;
+			goto fail;
+		}
+
+		if ((cmd_data->svc_hash.dlen == WL_NAN_SVC_HASH_LEN) &&
+				(cmd_data->svc_hash.data)) {
+			WL_TRACE(("svc hash present, pack it\n"));
+			ret = bcm_pack_xtlv_entry(&pxtlv, &nan_buf_size,
+					WL_NAN_XTLV_CFG_SVC_HASH, WL_NAN_SVC_HASH_LEN,
+					cmd_data->svc_hash.data,
+					BCM_XTLV_OPTION_ALIGN32);
+			if (ret != BCME_OK) {
+				WL_ERR(("%s: fail to pack WL_NAN_XTLV_CFG_SVC_HASH\n",
+						__FUNCTION__));
+				goto fail;
+			}
+		}
+		/* If the Data resp is for secure data connection */
+		dataresp->flags |= WL_NAN_DP_FLAG_SECURITY;
+	}
+
+	sub_cmd->len += (buflen_avail - nan_buf_size);
+
+	nan_buf->is_set = false;
+	nan_buf->count++;
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, data_size,
+			&(cmd_data->status), resp_buf, data_size + NAN_IOVAR_NAME_SIZE);
+	if (unlikely(ret) || unlikely(cmd_data->status)) {
+		WL_ERR(("nan data path response handler failed, error = %d, status %d\n",
+				ret, cmd_data->status));
+		goto fail;
+	}
+
+	WL_INFORM_MEM(("[NAN] DP response successfull (ndp_id:%d)\n", dataresp->ndp_id));
+
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, data_size);
+	}
+
+	if (resp_buf) {
+		MFREE(cfg->osh, resp_buf, data_size + NAN_IOVAR_NAME_SIZE);
+	}
+	NAN_MUTEX_UNLOCK();
+	mutex_unlock(&cfg->if_sync);
+
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+int wl_cfgnan_data_path_end_handler(struct net_device *ndev,
+	struct bcm_cfg80211 *cfg, nan_data_path_id ndp_instance_id,
+	int *status)
+{
+	bcm_iov_batch_buf_t *nan_buf = NULL;
+	wl_nan_dp_end_t *dataend = NULL;
+	bcm_iov_batch_subcmd_t *sub_cmd = NULL;
+	s32 ret = BCME_OK;
+	uint16 nan_buf_size = NAN_IOCTL_BUF_SIZE;
+	uint8 resp_buf[NAN_IOCTL_BUF_SIZE];
+
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(ndev);
+
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+
+	if (!dhdp->up) {
+		WL_ERR(("bus is already down, hence blocking nan dp end\n"));
+		ret = BCME_OK;
+		goto fail;
+	}
+
+	if (!cfg->nan_enable) {
+		WL_ERR(("nan is not enabled, nan dp end blocked\n"));
+		ret = BCME_OK;
+		goto fail;
+	}
+
+	/* ndp instance id must be from 1 to 255, 0 is reserved */
+	if (ndp_instance_id < NAN_ID_MIN ||
+		ndp_instance_id > NAN_ID_MAX) {
+		WL_ERR(("Invalid ndp instance id: %d\n", ndp_instance_id));
+		ret = BCME_BADARG;
+		goto fail;
+	}
+
+	nan_buf = MALLOCZ(cfg->osh, nan_buf_size);
+	if (!nan_buf) {
+		WL_ERR(("%s: memory allocation failed\n", __func__));
+		ret = BCME_NOMEM;
+		goto fail;
+	}
+
+	nan_buf->version = htol16(WL_NAN_IOV_BATCH_VERSION);
+	nan_buf->count = 0;
+	nan_buf_size -= OFFSETOF(bcm_iov_batch_buf_t, cmds[0]);
+
+	sub_cmd = (bcm_iov_batch_subcmd_t*)(&nan_buf->cmds[0]);
+	dataend = (wl_nan_dp_end_t *)(sub_cmd->data);
+
+	/* Fill sub_cmd block */
+	sub_cmd->id = htod16(WL_NAN_CMD_DATA_DATAEND);
+	sub_cmd->len = sizeof(sub_cmd->u.options) +
+		sizeof(*dataend);
+	sub_cmd->u.options = htol32(BCM_XTLV_OPTION_ALIGN32);
+
+	dataend->lndp_id = ndp_instance_id;
+
+	/*
+	 * Currently fw requires ndp_id and reason to end the data path
+	 * But wifi_nan.h takes ndp_instances_count and ndp_id.
+	 * Will keep reason = accept always.
+	 */
+
+	dataend->status = 1;
+
+	nan_buf->is_set = true;
+	nan_buf->count++;
+
+	nan_buf_size -= (sub_cmd->len +
+			OFFSETOF(bcm_iov_batch_subcmd_t, u.options));
+	memset_s(resp_buf, sizeof(resp_buf), 0, sizeof(resp_buf));
+	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, nan_buf_size,
+			status, (void*)resp_buf, NAN_IOCTL_BUF_SIZE);
+	if (unlikely(ret) || unlikely(*status)) {
+		WL_ERR(("nan data path end handler failed, error = %d status %d\n",
+			ret, *status));
+		goto fail;
+	}
+	WL_INFORM_MEM(("[NAN] DP end successfull (ndp_id:%d)\n",
+		dataend->lndp_id));
+fail:
+	if (nan_buf) {
+		MFREE(cfg->osh, nan_buf, NAN_IOCTL_BUF_SIZE);
+	}
+
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+#ifdef WL_NAN_DISC_CACHE
+int wl_cfgnan_sec_info_handler(struct bcm_cfg80211 *cfg,
+		nan_datapath_sec_info_cmd_data_t *cmd_data, nan_hal_resp_t *nan_req_resp)
+{
+	s32 ret = BCME_NOTFOUND;
+	/* check in cache */
+	nan_disc_result_cache *disc_cache = NULL;
+	nan_svc_info_t *svc_info = NULL;
+
+	NAN_DBG_ENTER();
+	NAN_MUTEX_LOCK();
+
+	if (!cfg->nan_init_state) {
+		WL_ERR(("nan is not initialized/nmi doesnt exists\n"));
+		ret = BCME_NOTENABLED;
+		goto fail;
+	}
+
+	/* datapath request context */
+	if (cmd_data->pub_id && !ETHER_ISNULLADDR(&cmd_data->mac_addr)) {
+		disc_cache = wl_cfgnan_get_disc_result(cfg,
+			cmd_data->pub_id, &cmd_data->mac_addr);
+		WL_DBG(("datapath request: PUB ID: = %d\n",
+			cmd_data->pub_id));
+		if (disc_cache) {
+			(void)memcpy_s(nan_req_resp->svc_hash, WL_NAN_SVC_HASH_LEN,
+					disc_cache->svc_hash, WL_NAN_SVC_HASH_LEN);
+			ret = BCME_OK;
+		} else {
+			WL_ERR(("disc_cache is NULL\n"));
+			goto fail;
+		}
+	}
+
+	/* datapath response context */
+	if (cmd_data->ndp_instance_id) {
+		WL_DBG(("datapath response: NDP ID: = %d\n",
+			cmd_data->ndp_instance_id));
+		svc_info = wl_cfgnan_get_svc_inst(cfg, 0, cmd_data->ndp_instance_id);
+		/* Note: svc_info will not be present in OOB cases
+		* In such case send NMI alone and let HAL handle if
+		* svc_hash is mandatory
+		*/
+		if (svc_info) {
+			WL_DBG(("svc hash present, pack it\n"));
+			(void)memcpy_s(nan_req_resp->svc_hash, WL_NAN_SVC_HASH_LEN,
+					svc_info->svc_hash, WL_NAN_SVC_HASH_LEN);
+		} else {
+			WL_INFORM_MEM(("svc_info not present..assuming OOB DP\n"));
+		}
+		/* Always send NMI */
+		(void)memcpy_s(nan_req_resp->pub_nmi, ETHER_ADDR_LEN,
+				cfg->nan_nmi_mac, ETHER_ADDR_LEN);
+		ret = BCME_OK;
+	}
+fail:
+	NAN_MUTEX_UNLOCK();
+	NAN_DBG_EXIT();
+	return ret;
+}
+
+static s32 wl_nan_cache_to_event_data(nan_disc_result_cache *cache,
+	nan_event_data_t *nan_event_data, osl_t *osh)
+{
+	s32 ret = BCME_OK;
+	NAN_DBG_ENTER();
+
+	nan_event_data->pub_id = cache->pub_id;
+	nan_event_data->sub_id = cache->sub_id;
+	nan_event_data->publish_rssi = cache->publish_rssi;
+	nan_event_data->peer_cipher_suite = cache->peer_cipher_suite;
+	ret = memcpy_s(&nan_event_data->remote_nmi, ETHER_ADDR_LEN,
+			&cache->peer, ETHER_ADDR_LEN);
+	if (ret != BCME_OK) {
+		WL_ERR(("Failed to copy cached peer nan nmi\n"));
+		goto fail;
+	}
+
+	if (cache->svc_info.dlen && cache->svc_info.data) {
+		nan_event_data->svc_info.dlen = cache->svc_info.dlen;
+		nan_event_data->svc_info.data =
+			MALLOCZ(osh, nan_event_data->svc_info.dlen);
+		if (!nan_event_data->svc_info.data) {
+			WL_ERR(("%s: memory allocation failed\n", __FUNCTION__));
+			nan_event_data->svc_info.dlen = 0;
+			ret = -ENOMEM;
+			goto fail;
+		}
+		ret = memcpy_s(nan_event_data->svc_info.data, nan_event_data->svc_info.dlen,
+			cache->svc_info.data, cache->svc_info.dlen);
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy cached svc info data\n"));
+			goto fail;
+		}
+	}
+	if (cache->tx_match_filter.dlen && cache->tx_match_filter.data) {
+		nan_event_data->tx_match_filter.dlen = cache->tx_match_filter.dlen;
+		nan_event_data->tx_match_filter.data =
+			MALLOCZ(osh, nan_event_data->tx_match_filter.dlen);
+		if (!nan_event_data->tx_match_filter.data) {
+			WL_ERR(("%s: memory allocation failed\n", __FUNCTION__));
+			nan_event_data->tx_match_filter.dlen = 0;
+			ret = -ENOMEM;
+			goto fail;
+		}
+		ret = memcpy_s(nan_event_data->tx_match_filter.data,
+				nan_event_data->tx_match_filter.dlen,
+				cache->tx_match_filter.data, cache->tx_match_filter.dlen);
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy cached tx match filter data\n"));
+			goto fail;
+		}
+	}
+fail:
+	NAN_DBG_EXIT();
+	return ret;
+}
+#endif /* WL_NAN_DISC_CACHE */
+
+/* API to cancel the ranging with peer
+* For geofence initiator, suspend ranging.
+* for directed RTT initiator , report fail result, cancel ranging
+* and clear ranging instance
+* For responder, cancel ranging and clear ranging instance
+*/
+#ifdef RTT_SUPPORT
+static s32
+wl_cfgnan_clear_peer_ranging(struct bcm_cfg80211 *cfg,
+	struct ether_addr *peer, int reason)
+{
+	uint32 status = 0;
+	nan_ranging_inst_t *rng_inst = NULL;
+	int err = BCME_OK;
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
+
+	rng_inst = wl_cfgnan_check_for_ranging(cfg, peer);
+	if (rng_inst) {
+		if (rng_inst->range_type == RTT_TYPE_NAN_GEOFENCE) {
+			err = wl_cfgnan_suspend_geofence_rng_session(ndev,
+				peer, reason, 0);
+		} else {
+			if (rng_inst->range_type == RTT_TYPE_NAN_DIRECTED) {
+				dhd_rtt_handle_nan_rtt_session_end(dhdp,
+					peer);
+			}
+			/* responder */
+			err = wl_cfgnan_cancel_ranging(ndev, cfg,
+				rng_inst->range_id,
+				NAN_RNG_TERM_FLAG_IMMEDIATE, &status);
+			bzero(rng_inst, sizeof(*rng_inst));
+		}
+	}
+
+	if (err) {
+		WL_ERR(("Failed to stop ranging with peer %d\n", err));
+	}
+
+	return err;
+}
+#endif /* RTT_SUPPORT */
