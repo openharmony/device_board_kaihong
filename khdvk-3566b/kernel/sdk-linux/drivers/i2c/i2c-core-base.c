@@ -2403,3 +2403,96 @@ i2c_new_scanned_device(struct i2c_adapter *adap,
 
 	if (addr_list[i] == I2C_CLIENT_END) {
 		dev_dbg(&adap->dev, "Probing failed, no device found\n");
+		return ERR_PTR(-ENODEV);
+	}
+
+	info->addr = addr_list[i];
+	return i2c_new_client_device(adap, info);
+}
+EXPORT_SYMBOL_GPL(i2c_new_scanned_device);
+
+struct i2c_adapter *i2c_get_adapter(int nr)
+{
+	struct i2c_adapter *adapter;
+
+	mutex_lock(&core_lock);
+	adapter = idr_find(&i2c_adapter_idr, nr);
+	if (!adapter)
+		goto exit;
+
+	if (try_module_get(adapter->owner))
+		get_device(&adapter->dev);
+	else
+		adapter = NULL;
+
+ exit:
+	mutex_unlock(&core_lock);
+	return adapter;
+}
+EXPORT_SYMBOL(i2c_get_adapter);
+
+void i2c_put_adapter(struct i2c_adapter *adap)
+{
+	if (!adap)
+		return;
+
+	put_device(&adap->dev);
+	module_put(adap->owner);
+}
+EXPORT_SYMBOL(i2c_put_adapter);
+
+/**
+ * i2c_get_dma_safe_msg_buf() - get a DMA safe buffer for the given i2c_msg
+ * @msg: the message to be checked
+ * @threshold: the minimum number of bytes for which using DMA makes sense.
+ *	       Should at least be 1.
+ *
+ * Return: NULL if a DMA safe buffer was not obtained. Use msg->buf with PIO.
+ *	   Or a valid pointer to be used with DMA. After use, release it by
+ *	   calling i2c_put_dma_safe_msg_buf().
+ *
+ * This function must only be called from process context!
+ */
+u8 *i2c_get_dma_safe_msg_buf(struct i2c_msg *msg, unsigned int threshold)
+{
+	/* also skip 0-length msgs for bogus thresholds of 0 */
+	if (!threshold)
+		pr_debug("DMA buffer for addr=0x%02x with length 0 is bogus\n",
+			 msg->addr);
+	if (msg->len < threshold || msg->len == 0)
+		return NULL;
+
+	if (msg->flags & I2C_M_DMA_SAFE)
+		return msg->buf;
+
+	pr_debug("using bounce buffer for addr=0x%02x, len=%d\n",
+		 msg->addr, msg->len);
+
+	if (msg->flags & I2C_M_RD)
+		return kzalloc(msg->len, GFP_KERNEL);
+	else
+		return kmemdup(msg->buf, msg->len, GFP_KERNEL);
+}
+EXPORT_SYMBOL_GPL(i2c_get_dma_safe_msg_buf);
+
+/**
+ * i2c_put_dma_safe_msg_buf - release DMA safe buffer and sync with i2c_msg
+ * @buf: the buffer obtained from i2c_get_dma_safe_msg_buf(). May be NULL.
+ * @msg: the message which the buffer corresponds to
+ * @xferred: bool saying if the message was transferred
+ */
+void i2c_put_dma_safe_msg_buf(u8 *buf, struct i2c_msg *msg, bool xferred)
+{
+	if (!buf || buf == msg->buf)
+		return;
+
+	if (xferred && msg->flags & I2C_M_RD)
+		memcpy(msg->buf, buf, msg->len);
+
+	kfree(buf);
+}
+EXPORT_SYMBOL_GPL(i2c_put_dma_safe_msg_buf);
+
+MODULE_AUTHOR("Simon G. Vogl <simon@tk.uni-linz.ac.at>");
+MODULE_DESCRIPTION("I2C-Bus main module");
+MODULE_LICENSE("GPL");
