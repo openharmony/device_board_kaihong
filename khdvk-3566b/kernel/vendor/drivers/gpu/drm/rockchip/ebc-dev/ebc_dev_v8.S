@@ -49558,3 +49558,1943 @@ __exitcall_ebc_exit:
 	.string	"properties"
 .LASF520:
 	.string	"s_subtype"
+.LASF70:
+	.string	"func"
+.LASF1138:
+	.string	"perf_event_context"
+.LASF2998:
+	.string	"ebc_auto_task"
+.LASF93:
+	.string	"printk_delay_msec"
+.LASF2696:
+	.string	"mmap_pages_allocated"
+.LASF986:
+	.string	"tlbflush_unmap_batch"
+.LASF2170:
+	.string	"power_group_name"
+.LASF776:
+	.string	"clock_event_device"
+.LASF1196:
+	.string	"m_count"
+.LASF2161:
+	.string	"hypervisor_kobj"
+.LASF602:
+	.string	"rcu_read_unlock_special"
+.LASF940:
+	.string	"siginfo"
+.LASF993:
+	.string	"read_bytes"
+.LASF320:
+	.string	"__hyp_text_end"
+.LASF1989:
+	.string	"fsverity_operations"
+.LASF1088:
+	.string	"wake_q_node"
+.LASF1114:
+	.string	"request_key_auth"
+.LASF1951:
+	.string	"destroy_inode"
+.LASF2960:
+	.string	"is_busy_now"
+.LASF57:
+	.string	"irq_hw_number_t"
+.LASF2364:
+	.string	"sysfs_dev_block_kobj"
+.LASF552:
+	.string	"upid"
+.LASF1096:
+	.string	"completion"
+.LASF1497:
+	.string	"NR_GPU_HEAP"
+.LASF858:
+	.string	"PCPU_FC_AUTO"
+.LASF1904:
+	.string	"fl_break_time"
+.LASF1201:
+	.string	"UTASK_SSTEP_ACK"
+.LASF76:
+	.string	"__con_initcall_end"
+.LASF1143:
+	.string	"active_uprobe"
+.LASF3002:
+	.string	"ebc_poweroff_wq"
+.LASF1969:
+	.string	"show_options"
+.LASF2140:
+	.string	"uevent_helper"
+.LASF3045:
+	.string	"lut_buffer_phy"
+.LASF109:
+	.string	"mmap_supported_flags"
+.LASF50:
+	.string	"sector_t"
+.LASF1215:
+	.string	"bp_hardening_cb_t"
+.LASF1806:
+	.string	"bd_dev"
+.LASF1845:
+	.string	"permission"
+.LASF1514:
+	.string	"node_spanned_pages"
+.LASF918:
+	.string	"_utime"
+.LASF2246:
+	.string	"pm_subsys_data"
+.LASF2347:
+	.string	"device_type"
+.LASF1153:
+	.string	"thread_union"
+.LASF1809:
+	.string	"bd_super"
+.LASF2706:
+	.string	"usermodehelper_table"
+.LASF159:
+	.string	"taint_flag"
+.LASF1976:
+	.string	"get_dquots"
+.LASF2400:
+	.string	"unmap_page"
+.LASF825:
+	.string	"system_unbound_wq"
+.LASF514:
+	.string	"s_uuid"
+.LASF1664:
+	.string	"destroy_dquot"
+.LASF1676:
+	.string	"d_ino_hardlimit"
+.LASF1874:
+	.string	"fsverity_info"
+.LASF2038:
+	.string	"nr_leaves_on_tree"
+.LASF1709:
+	.string	"quota_on"
+.LASF2456:
+	.string	"of_root"
+.LASF1293:
+	.string	"vm_operations_struct"
+.LASF2388:
+	.string	"hwirq_max"
+.LASF2196:
+	.string	"runtime_idle"
+.LASF1890:
+	.string	"fl_next"
+.LASF2524:
+	.string	"unprepare_recovery"
+.LASF438:
+	.string	"i_state"
+.LASF591:
+	.string	"sched_class"
+.LASF1968:
+	.string	"umount_end"
+.LASF689:
+	.string	"pi_waiters"
+.LASF2655:
+	.string	"PGSCAN_DIRECT"
+.LASF1254:
+	.string	"pt_frag_refcount"
+.LASF1846:
+	.string	"permission2"
+.LASF1703:
+	.string	"i_ino_timelimit"
+.LASF225:
+	.string	"cnts"
+.LASF2238:
+	.string	"RPM_SUSPENDED"
+.LASF695:
+	.string	"reclaim_state"
+.LASF3276:
+	.string	"/home/lyx/rk3566-11-eink/kernel"
+.LASF137:
+	.string	"vendor_panic_cb"
+.LASF3069:
+	.string	"ebc_vdd_power_timeout"
+.LASF3130:
+	.string	"ebc_get_4pix_wf"
+.LASF2796:
+	.string	"num_symtab"
+.LASF1596:
+	.string	"cpu_scale"
+.LASF2643:
+	.string	"PGSCAN_SKIP_MOVABLE"
+.LASF1953:
+	.string	"write_inode"
+.LASF412:
+	.string	"d_fsdata"
+.LASF2239:
+	.string	"RPM_SUSPENDING"
+.LASF2610:
+	.string	"mmap_rnd_bits_max"
+.LASF1229:
+	.string	"nrpages"
+.LASF843:
+	.string	"_refcount"
+.LASF463:
+	.string	"i_crypt_info"
+.LASF1869:
+	.string	"flc_flock"
+.LASF2774:
+	.string	"module_alloc_base"
+.LASF1749:
+	.string	"core_kallsyms"
+.LASF3242:
+	.string	"memcpy"
+.LASF2398:
+	.string	"get_sgtable"
+.LASF3129:
+	.string	"xor_val"
+.LASF2153:
+	.string	"envp_idx"
+.LASF462:
+	.string	"i_fsnotify_marks"
+.LASF2013:
+	.string	"state_add_uevent_sent"
+.LASF2666:
+	.string	"OOM_KILL"
+.LASF442:
+	.string	"i_hash"
+.LASF3101:
+	.string	"gray_old"
+.LASF67:
+	.string	"hlist_node"
+.LASF3249:
+	.string	"sprintf"
+.LASF1906:
+	.string	"fl_ops"
+.LASF1713:
+	.string	"quota_sync"
+.LASF2705:
+	.string	"debug_guardpage_ops"
+.LASF2671:
+	.string	"COMPACTISOLATED"
+.LASF3220:
+	.string	"of_property_read_variable_u32_array"
+.LASF325:
+	.string	"__inittext_begin"
+.LASF1393:
+	.string	"writer"
+.LASF761:
+	.string	"arch_timer_read_counter"
+.LASF269:
+	.string	"ftr_bits"
+.LASF625:
+	.string	"sched_remote_wakeup"
+.LASF2177:
+	.string	"resume"
+.LASF688:
+	.string	"wake_q"
+.LASF2673:
+	.string	"COMPACTFAIL"
+.LASF693:
+	.string	"bio_list"
+.LASF1662:
+	.string	"write_dquot"
+.LASF2650:
+	.string	"PGLAZYFREED"
+.LASF1346:
+	.string	"ioctx_lock"
+.LASF308:
+	.string	"current_stack_pointer"
+.LASF2832:
+	.string	"NR_KMALLOC_TYPES"
+.LASF1206:
+	.string	"dup_xol_addr"
+.LASF2472:
+	.string	"DOMAIN_BUS_WAKEUP"
+.LASF1220:
+	.string	"arm64_el2_vector_last_slot"
+.LASF3271:
+	.string	"queue_work_on"
+.LASF2333:
+	.string	"online"
+.LASF2195:
+	.string	"runtime_resume"
+.LASF1205:
+	.string	"dup_xol_work"
+.LASF3151:
+	.string	"ebc_pmic_read_temp"
+.LASF2873:
+	.string	"EPD_FULL_GC16"
+.LASF3013:
+	.string	"dev_attr_ebc_state"
+.LASF2159:
+	.string	"kernel_kobj"
+.LASF2585:
+	.string	"funcs"
+.LASF2994:
+	.string	"overlay_enable"
+.LASF1105:
+	.string	"securebits"
+.LASF2710:
+	.string	"Elf64_Off"
+.LASF1325:
+	.string	"total_vm"
+.LASF620:
+	.string	"jobctl"
+.LASF2871:
+	.string	"EPD_AUTO"
+.LASF329:
+	.string	"__entry_tramp_text_start"
+.LASF847:
+	.string	"node_list"
+.LASF2469:
+	.string	"DOMAIN_BUS_NEXUS"
+.LASF2036:
+	.string	"sysctl_mount_point"
+.LASF2990:
+	.string	"auto_buffer_work"
+.LASF266:
+	.string	"user_mask"
+.LASF2740:
+	.string	"kernel_param"
+.LASF2279:
+	.string	"deferred_resume"
+.LASF1675:
+	.string	"d_spc_softlimit"
+.LASF53:
+	.string	"gfp_t"
+.LASF335:
+	.string	"bps_disabled"
+.LASF903:
+	.string	"seccomp_filter"
+.LASF777:
+	.string	"timer_unstable_counter_workaround"
+.LASF651:
+	.string	"stime"
+.LASF1227:
+	.string	"i_mmap"
+.LASF1150:
+	.string	"phys_addr"
+.LASF395:
+	.string	"d_lru"
+.LASF2406:
+	.string	"sync_single_for_device"
+.LASF1120:
+	.string	"signal_struct"
+.LASF797:
+	.string	"WORK_STRUCT_COLOR_BITS"
+.LASF716:
+	.string	"perf_event_mutex"
+.LASF1128:
+	.string	"nr_batch_requests"
+.LASF1457:
+	.string	"NR_PAGETABLE"
+.LASF1726:
+	.string	"crcs"
+.LASF2681:
+	.string	"UNEVICTABLE_PGMLOCKED"
+.LASF834:
+	.string	"pgdval_t"
+.LASF2912:
+	.string	"page_link"
+.LASF1857:
+	.string	"setattr"
+.LASF933:
+	.string	"_pad"
+.LASF1288:
+	.string	"f_mapping"
+.LASF2174:
+	.string	"prepare"
+.LASF2136:
+	.string	"bin_attrs"
+.LASF2922:
+	.string	"HYPERVISOR_shared_info"
+.LASF680:
+	.string	"sas_ss_flags"
+.LASF1278:
+	.string	"f_mode"
+.LASF1427:
+	.string	"ki_complete"
+.LASF3028:
+	.string	"ebc_tcon_pdev"
+.LASF1753:
+	.string	"percpu"
+.LASF581:
+	.string	"wakee_flips"
+.LASF1865:
+	.string	"set_acl"
+.LASF2058:
+	.string	"keys"
+.LASF298:
+	.string	"__irqentry_text_start"
+.LASF561:
+	.string	"overflowuid"
+.LASF827:
+	.string	"system_power_efficient_wq"
+.LASF2199:
+	.string	"driver"
+.LASF1542:
+	.string	"ZONE_NORMAL"
+.LASF3116:
+	.string	"image_new_data"
+.LASF423:
+	.string	"i_op"
+.LASF1684:
+	.string	"d_rt_spc_hardlimit"
+.LASF2973:
+	.string	"ebc_task"
+.LASF2124:
+	.string	"kobj_ns_type_operations"
+.LASF1390:
+	.string	"percpu_rw_semaphore"
+.LASF594:
+	.string	"boost_period"
+.LASF2454:
+	.string	"of_node_ktype"
+.LASF666:
+	.string	"cred"
+.LASF240:
+	.string	"jump_entry"
+.LASF2609:
+	.string	"mmap_rnd_bits_min"
+.LASF1441:
+	.string	"migratetype_names"
+.LASF1181:
+	.string	"list_lru_node"
+.LASF391:
+	.string	"age_limit"
+.LASF2878:
+	.string	"EPD_PART_GC16"
+.LASF236:
+	.string	"spinlock_t"
+.LASF2127:
+	.string	"netlink_ns"
+.LASF360:
+	.string	"wait_queue_head"
+.LASF789:
+	.string	"work_func_t"
+.LASF2220:
+	.string	"fwnode"
+.LASF1797:
+	.string	"is_dirty_writeback"
+.LASF301:
+	.string	"__softirqentry_text_end"
+.LASF1760:
+	.string	"trace_bprintk_fmt_start"
+.LASF663:
+	.string	"cpu_timers"
+.LASF2946:
+	.string	"disable"
+.LASF1298:
+	.string	"huge_fault"
+.LASF2006:
+	.string	"kstatfs"
+.LASF3154:
+	.string	"ebc_pmic_power_off"
+.LASF2632:
+	.string	"PGPGOUTCLEAN"
+.LASF578:
+	.string	"ptrace"
+.LASF2301:
+	.string	"max_time"
+.LASF1591:
+	.string	"package_id"
+.LASF103:
+	.string	"iterate"
+.LASF1182:
+	.string	"memcg_lrus"
+.LASF1833:
+	.string	"i_dentry"
+.LASF2126:
+	.string	"grab_current_ns"
+.LASF3043:
+	.string	"fb_size"
+.LASF881:
+	.string	"offset"
+.LASF1264:
+	.string	"altmap"
+.LASF1872:
+	.string	"fsnotify_mark_connector"
+.LASF939:
+	.string	"_sigsys"
+.LASF3088:
+	.string	"ebc_lut_update"
+.LASF1919:
+	.string	"lm_setup"
+.LASF424:
+	.string	"i_sb"
+.LASF345:
+	.string	"fpsimd_cpu"
+.LASF2788:
+	.string	"MODULE_STATE_UNFORMED"
+.LASF193:
+	.string	"expires"
+.LASF1378:
+	.string	"rcuwait"
+.LASF327:
+	.string	"__mmuoff_data_start"
+.LASF657:
+	.string	"nivcsw"
+.LASF2495:
+	.string	"i2c_adapter"
+.LASF1370:
+	.string	"fe_reserved64"
+.LASF2376:
+	.string	"DL_DEV_UNBINDING"
+.LASF352:
+	.string	"signal_minsigstksz"
+.LASF748:
+	.string	"thread"
+.LASF2346:
+	.string	"subsys_private"
+.LASF2559:
+	.string	"idmap_pg_dir"
+.LASF2516:
+	.string	"i2c_bus_recovery_info"
+.LASF3046:
+	.string	"lut_buffer_size"
+.LASF481:
+	.string	"s_dev"
+.LASF343:
+	.string	"fpsimd_state"
+.LASF1660:
+	.string	"get_next_id"
+.LASF237:
+	.string	"rwlock_t"
+.LASF3275:
+	.string	"drivers/gpu/drm/rockchip/ebc-dev/ebc_dev.c"
+.LASF838:
+	.string	"pgprot"
+.LASF17:
+	.string	"false"
+.LASF1972:
+	.string	"show_path"
+.LASF1250:
+	.string	"_compound_pad_1"
+.LASF1251:
+	.string	"_compound_pad_2"
+.LASF548:
+	.string	"PIDTYPE_TGID"
+.LASF1913:
+	.string	"lm_get_owner"
+.LASF2899:
+	.string	"drvpar"
+.LASF2629:
+	.string	"vm_event_item"
+.LASF2568:
+	.string	"kthreadd_task"
+.LASF1803:
+	.string	"swap_info_struct"
+.LASF87:
+	.string	"__icache_flags"
+.LASF147:
+	.string	"crash_kexec_post_notifiers"
+.LASF3139:
+	.string	"eink_mode"
+.LASF1695:
+	.string	"rt_spc_warnlimit"
+.LASF1188:
+	.string	"exceptional"
+.LASF1993:
+	.string	"fi_flags"
+.LASF1577:
+	.string	"blocking_notifier_head"
+.LASF2345:
+	.string	"coredump"
+.LASF2890:
+	.string	"EPD_FULL_EINK"
+.LASF277:
+	.string	"_data"
+.LASF1531:
+	.string	"vm_stat"
+.LASF555:
+	.string	"tasks"
+.LASF911:
+	.string	"_pid"
+.LASF1154:
+	.string	"init_stack"
+.LASF1223:
+	.string	"address_space"
+.LASF1214:
+	.string	"mm_context_t"
+.LASF1309:
+	.string	"startup"
+.LASF1416:
+	.string	"sysctl_nr_open"
+.LASF81:
+	.string	"reset_devices"
+.LASF2976:
+	.string	"auto_image_bg"
+.LASF444:
+	.string	"i_wb"
+.LASF2084:
+	.string	"idr_next"
+.LASF3111:
+	.string	"frame_count_data"
+.LASF2951:
+	.string	"frame_start"
+.LASF1248:
+	.string	"compound_order"
+.LASF1252:
+	.string	"deferred_list"
+.LASF951:
+	.string	"locked_shm"
+.LASF1083:
+	.string	"inactive_timer"
+.LASF924:
+	.string	"_pkey"
+.LASF288:
+	.string	"_end"
+.LASF475:
+	.string	"d_dname"
+.LASF1728:
+	.string	"param_lock"
+.LASF970:
+	.string	"vm_page_prot"
+.LASF178:
+	.string	"timespec64"
+.LASF550:
+	.string	"PIDTYPE_SID"
+.LASF2403:
+	.string	"map_resource"
+.LASF473:
+	.string	"d_prune"
+.LASF82:
+	.string	"rodata_enabled"
+.LASF2065:
+	.string	"printed"
+.LASF315:
+	.string	"__hibernate_exit_text_start"
+.LASF2189:
+	.string	"resume_noirq"
+.LASF1548:
+	.string	"lowmem_reserve"
+.LASF842:
+	.string	"page"
+.LASF1671:
+	.string	"get_inode_usage"
+.LASF2417:
+	.string	"device_node"
+.LASF589:
+	.string	"normal_prio"
+.LASF1286:
+	.string	"f_ep_links"
+.LASF3120:
+	.string	"image_fb_tmp"
+.LASF2292:
+	.string	"last_busy"
+.LASF1835:
+	.string	"i_pipe"
+.LASF872:
+	.string	"base"
+.LASF1224:
+	.string	"host"
+.LASF184:
+	.string	"uaddr"
+.LASF3267:
+	.string	"ebc_remove_from_dsp_buf_list"
+.LASF659:
+	.string	"real_start_time"
+.LASF28:
+	.string	"__kernel_time_t"
+.LASF1990:
+	.string	"unicode_map"
+.LASF2565:
+	.string	"MEMREMAP_WC"
+.LASF2442:
+	.string	"graph_get_remote_endpoint"
+.LASF1565:
+	.string	"contiguous"
+.LASF1328:
+	.string	"exec_vm"
+.LASF2564:
+	.string	"MEMREMAP_WT"
+.LASF2720:
+	.string	"st_name"
+.LASF227:
+	.string	"wait_lock"
+.LASF1807:
+	.string	"bd_openers"
+.LASF699:
+	.string	"last_siginfo"
+.LASF1950:
+	.string	"alloc_inode"
+.LASF2831:
+	.string	"KMALLOC_RECLAIM"
+.LASF407:
+	.string	"d_iname"
+.LASF2223:
+	.string	"devres_head"
+.LASF425:
+	.string	"i_mapping"
+.LASF2889:
+	.string	"EPD_PART_EINK"
+.LASF3244:
+	.string	"misc_register"
+.LASF720:
+	.string	"rseq_sig"
+.LASF3173:
+	.string	"platform_set_drvdata"
+.LASF340:
+	.string	"cpu_context"
+.LASF2313:
+	.string	"dev_pm_domain"
+.LASF1511:
+	.string	"nr_zones"
+.LASF3196:
+	.string	"is_source"
+.LASF1373:
+	.string	"migrate_mode"
+.LASF2686:
+	.string	"SWAP_RA_HIT"
+.LASF614:
+	.string	"vmacache"
+.LASF1443:
+	.string	"free_area"
+.LASF1521:
+	.string	"kswapd_failures"
+.LASF2186:
+	.string	"poweroff_late"
+.LASF874:
+	.string	"is_soft"
+.LASF175:
+	.string	"timezone"
+.LASF403:
+	.string	"d_hash"
+.LASF1073:
+	.string	"dl_bw"
+.LASF3166:
+	.string	"limit"
+.LASF2143:
+	.string	"kobj"
+.LASF3250:
+	.string	"kstrtouint"
+.LASF113:
+	.string	"fsync"
+.LASF1991:
+	.string	"mtd_info"
+.LASF420:
+	.string	"i_flags"
+.LASF2887:
+	.string	"EPD_RESUME"
+.LASF3239:
+	.string	"sscanf"
+.LASF3235:
+	.string	"ebc_empty_buf_get"
+.LASF1472:
+	.string	"NR_ISOLATED_ANON"
+.LASF3044:
+	.string	"ebc_lut_table_init"
+.LASF1211:
+	.string	"uprobes_state"
+.LASF1551:
+	.string	"cma_alloc"
+.LASF848:
+	.string	"rb_node"
+.LASF611:
+	.string	"pushable_tasks"
+.LASF3121:
+	.string	"image_bg_tmp"
+.LASF2200:
+	.string	"platform_data"
+.LASF1394:
+	.string	"readers_block"
+.LASF674:
+	.string	"sighand"
+.LASF104:
+	.string	"iterate_shared"
+.LASF2133:
+	.string	"is_visible"
+.LASF673:
+	.string	"signal"
+.LASF2119:
+	.string	"released"
+.LASF2615:
+	.string	"sysctl_max_map_count"
+.LASF1663:
+	.string	"alloc_dquot"
+.LASF2171:
+	.string	"pm_message"
+.LASF522:
+	.string	"cleancache_poolid"
+.LASF844:
+	.string	"mem_cgroup"
+.LASF1013:
+	.string	"last_update_time"
+.LASF1135:
+	.string	"robust_list_head"
+.LASF3233:
+	.string	"init_timer_key"
+.LASF1478:
+	.string	"NR_ANON_MAPPED"
+.LASF380:
+	.string	"count"
+.LASF554:
+	.string	"level"
+.LASF529:
+	.string	"s_user_ns"
+.LASF1723:
+	.string	"srcversion"
+.LASF856:
+	.string	"pcpu_unit_offsets"
+.LASF3142:
+	.string	"dma_sync_single_for_device"
+.LASF2952:
+	.string	"dsp_end_callback"
+.LASF458:
+	.string	"i_data"
+.LASF2005:
+	.string	"poll_event"
+.LASF2554:
+	.string	"softirq_to_name"
+.LASF65:
+	.string	"hlist_head"
+.LASF503:
+	.string	"s_encoding_flags"
+.LASF1051:
+	.string	"runnable_weight"
+.LASF2444:
+	.string	"graph_parse_endpoint"
+.LASF1399:
+	.string	"uuid_null"
+.LASF1329:
+	.string	"stack_vm"
+.LASF2274:
+	.string	"usage_count"
+.LASF2075:
+	.string	"show"
+.LASF3010:
+	.string	"dev_attr_pmic_temp"
+.LASF7:
+	.string	"unsigned char"
+.LASF1967:
+	.string	"umount_begin"
+.LASF1213:
+	.string	"vdso"
+.LASF1313:
+	.string	"mmap_legacy_base"
+.LASF2662:
+	.string	"PAGEOUTRUN"
+.LASF980:
+	.string	"task_rss_stat"
+.LASF1139:
+	.string	"pipe_inode_info"
+.LASF2980:
+	.string	"ebc_power_status"
+.LASF958:
+	.string	"ratelimit"
+.LASF2486:
+	.string	"word"
+.LASF2011:
+	.string	"state_initialized"
+.LASF846:
+	.string	"prio_list"
+.LASF2540:
+	.string	"nmi_contexts"
+.LASF2144:
+	.string	"uevent_ops"
+.LASF543:
+	.string	"rename_lock"
+.LASF3073:
+	.string	"__out"
+.LASF678:
+	.string	"sas_ss_sp"
+.LASF1450:
+	.string	"NR_ZONE_INACTIVE_ANON"
+.LASF726:
+	.string	"nr_dirtied"
+.LASF3183:
+	.string	"dev_get_drvdata"
+.LASF2393:
+	.string	"linear_revmap"
+.LASF332:
+	.string	"arm64_dma_phys_limit"
+.LASF1448:
+	.string	"NR_FREE_PAGES"
+.LASF519:
+	.string	"s_vfs_rename_mutex"
+.LASF2182:
+	.string	"suspend_late"
+.LASF2263:
+	.string	"wakeup"
+.LASF710:
+	.string	"cg_list"
+.LASF1818:
+	.string	"bd_partno"
+.LASF1939:
+	.string	"alloc_mnt_data"
+.LASF1825:
+	.string	"bd_list"
+.LASF2262:
+	.string	"driver_flags"
+.LASF1195:
+	.string	"rw_semaphore"
+.LASF2183:
+	.string	"resume_early"
+.LASF1932:
+	.string	"fa_rcu"
+.LASF1864:
+	.string	"tmpfile"
+.LASF1771:
+	.string	"info"
+.LASF154:
+	.string	"SYSTEM_HALT"
+.LASF1861:
+	.string	"fiemap"
+.LASF2429:
+	.string	"waiters"
+.LASF2702:
+	.string	"sysctl_memory_failure_early_kill"
+.LASF2758:
+	.string	"param_ops_bool_enable_only"
+.LASF3126:
+	.string	"power_status"
+.LASF306:
+	.string	"__start_opd"
+.LASF3247:
+	.string	"of_find_i2c_device_by_node"
+.LASF153:
+	.string	"SYSTEM_RUNNING"
+.LASF2848:
+	.string	"WF_TYPE_GLR16"
+.LASF944:
+	.string	"_sifields"
+.LASF2022:
+	.string	"page_symlink_inode_operations"
+.LASF733:
+	.string	"memcg_in_oom"
+.LASF477:
+	.string	"d_manage"
+.LASF1131:
+	.string	"icq_hint"
+.LASF1992:
+	.string	"fiemap_extent_info"
+.LASF2908:
+	.string	"DMA_TO_DEVICE"
+.LASF2727:
+	.string	"elf64_shdr"
+.LASF297:
+	.string	"__end_rodata"
+.LASF768:
+	.string	"match_type"
+.LASF2745:
+	.string	"elem"
+.LASF890:
+	.string	"nr_retries"
+.LASF2656:
+	.string	"PGSCAN_DIRECT_THROTTLE"
+.LASF910:
+	.string	"sigval_t"
+.LASF1931:
+	.string	"fa_file"
+.LASF2996:
+	.string	"panel"
+.LASF2430:
+	.string	"irq_data"
+.LASF3080:
+	.string	"old_buffer_temp"
+.LASF2703:
+	.string	"sysctl_memory_failure_recovery"
+.LASF2690:
+	.string	"vm_event_states"
+.LASF404:
+	.string	"d_parent"
+.LASF2066:
+	.string	"missed"
+.LASF149:
+	.string	"root_mountflags"
+.LASF1974:
+	.string	"quota_read"
+.LASF2723:
+	.string	"st_shndx"
+.LASF2397:
+	.string	"free"
+.LASF3050:
+	.string	"pmic_vcom_write"
+.LASF2131:
+	.string	"attribute"
+.LASF446:
+	.string	"i_wb_frn_avg_time"
+.LASF2654:
+	.string	"PGSCAN_KSWAPD"
+.LASF1827:
+	.string	"bd_fsfreeze_count"
+.LASF192:
+	.string	"type"
+.LASF163:
+	.string	"taint_flags"
+.LASF1345:
+	.string	"membarrier_state"
+.LASF3133:
+	.string	"pre_image_addr"
+.LASF2176:
+	.string	"suspend"
+.LASF1740:
+	.string	"init"
+.LASF1119:
+	.string	"files_struct"
+.LASF102:
+	.string	"write_iter"
+.LASF497:
+	.string	"s_security"
+.LASF654:
+	.string	"max_state"
+.LASF527:
+	.string	"s_dio_done_wq"
+.LASF2665:
+	.string	"DROP_SLAB"
+.LASF920:
+	.string	"_dummy_bnd"
+.LASF679:
+	.string	"sas_ss_size"
+.LASF2466:
+	.string	"DOMAIN_BUS_WIRED"
+.LASF1047:
+	.string	"nr_wakeups_passive"
+.LASF1935:
+	.string	"file_system_type"
+.LASF2021:
+	.string	"generic_ro_fops"
+.LASF1163:
+	.string	"mtime"
+.LASF1354:
+	.string	"vm_fault"
+.LASF1380:
+	.string	"RCU_SYNC"
+.LASF1554:
+	.string	"spanned_pages"
+.LASF2150:
+	.string	"kobj_uevent_env"
+.LASF2095:
+	.string	"deactivate_waitq"
+.LASF1008:
+	.string	"inv_weight"
+.LASF1952:
+	.string	"dirty_inode"
+.LASF1567:
+	.string	"vm_numa_stat"
+.LASF1510:
+	.string	"node_zonelists"
+.LASF539:
+	.string	"path"
+.LASF2725:
+	.string	"st_size"
+.LASF188:
+	.string	"rmtp"
+.LASF2424:
+	.string	"platform_notify_remove"
+.LASF1025:
+	.string	"wait_sum"
+.LASF1755:
+	.string	"num_tracepoints"
+.LASF617:
+	.string	"exit_code"
+.LASF1054:
+	.string	"exec_start"
+.LASF3272:
+	.string	"printk"
+.LASF2379:
+	.string	"consumers"
+.LASF2096:
+	.string	"kernfs_elem_symlink"
+.LASF1179:
+	.string	"nr_items"
+.LASF2503:
+	.string	"userspace_clients_lock"
+.LASF884:
+	.string	"clock_was_set_seq"
+.LASF1284:
+	.string	"f_version"
+.LASF140:
+	.string	"panic_timeout"
+.LASF1197:
+	.string	"arch_uprobe_task"
+.LASF456:
+	.string	"i_fop"
+.LASF1851:
+	.string	"unlink"
+.LASF2715:
+	.string	"d_ptr"
+.LASF3052:
+	.string	"pmic_temp_read"
+.LASF1650:
+	.string	"dqstats"
+.LASF1017:
+	.string	"period_contrib"
+.LASF603:
+	.string	"rcu_node_entry"
+.LASF1666:
+	.string	"release_dquot"
+.LASF1412:
+	.string	"max_files"
+.LASF1104:
+	.string	"fsgid"
+.LASF2338:
+	.string	"need_parent_lock"
+.LASF1383:
+	.string	"rcu_sync"
+.LASF2611:
+	.string	"mmap_rnd_bits"
+.LASF2459:
+	.string	"of_stdout"
+.LASF974:
+	.string	"vm_ops"
+.LASF2928:
+	.string	"ebc_panel"
+.LASF1300:
+	.string	"pagesize"
+.LASF483:
+	.string	"s_blocksize"
+.LASF975:
+	.string	"vm_pgoff"
+.LASF2299:
+	.string	"timer"
+.LASF2460:
+	.string	"devtree_lock"
+.LASF3063:
+	.string	"__ret"
+.LASF1862:
+	.string	"update_time"
+.LASF1977:
+	.string	"bdev_try_to_free_page"
+.LASF1576:
+	.string	"priority"
+.LASF930:
+	.string	"_call_addr"
+.LASF819:
+	.string	"WORK_BUSY_RUNNING"
+.LASF2050:
+	.string	"check"
+.LASF1414:
+	.string	"nr_inodes"
+.LASF2502:
+	.string	"dev_released"
+.LASF2054:
+	.string	"expiry"
+.LASF569:
+	.string	"optimistic_spin_queue"
+.LASF2957:
+	.string	"ebc_buffer_size"
+.LASF3251:
+	.string	"ebc_pmic_set_vcom"
+.LASF2639:
+	.string	"ALLOCSTALL_NORMAL"
+.LASF3105:
+	.string	"data_buf_tmp"
+.LASF323:
+	.string	"__initdata_begin"
+.LASF2902:
+	.string	"pmic_pm_resume"
+.LASF224:
+	.string	"__lstate"
+.LASF2156:
+	.string	"uevent"
+.LASF381:
+	.string	"lock_count"
+.LASF148:
+	.string	"panic_cpu"
+.LASF831:
+	.string	"refcount_t"
+.LASF694:
+	.string	"plug"
+.LASF1363:
+	.string	"__cap_empty_set"
+.LASF1342:
+	.string	"saved_auxv"
+.LASF1745:
+	.string	"num_bugs"
+.LASF1647:
+	.string	"qf_ops"
+.LASF2340:
+	.string	"mod_name"
+.LASF2436:
+	.string	"property_read_string_array"
+.LASF719:
+	.string	"rseq_len"
+.LASF2463:
+	.string	"param"
+.LASF2779:
+	.string	"module_attribute"
+.LASF1315:
+	.string	"highest_vm_end"
+.LASF243:
+	.string	"pollfd"
+.LASF1044:
+	.string	"nr_wakeups_remote"
+.LASF372:
+	.string	"cpu_bit_bitmap"
+.LASF1624:
+	.string	"dq_data_lock"
+.LASF2716:
+	.string	"d_tag"
+.LASF750:
+	.string	"llist_node"
+.LASF1622:
+	.string	"projid"
+.LASF1148:
+	.string	"pages"
+.LASF1185:
+	.string	"memcg_aware"
+.LASF1068:
+	.string	"back"
+.LASF2323:
+	.string	"dev_name"
+.LASF1361:
+	.string	"kernel_cap_struct"
+.LASF2738:
+	.string	"_DYNAMIC"
+.LASF999:
+	.string	"rseq_cs"
+.LASF2434:
+	.string	"property_present"
+.LASF895:
+	.string	"softirq_expires_next"
+.LASF1592:
+	.string	"llc_id"
+.LASF1848:
+	.string	"readlink"
+.LASF2497:
+	.string	"algo_data"
+.LASF1509:
+	.string	"node_zones"
+.LASF3011:
+	.string	"dev_attr_pmic_vcom"
+.LASF1557:
+	.string	"initialized"
+.LASF1815:
+	.string	"bd_holder_disks"
+.LASF62:
+	.string	"list_head"
+.LASF1528:
+	.string	"lru_lock"
+.LASF2764:
+	.string	"mod_plt_sec"
+.LASF634:
+	.string	"tgid"
+.LASF2892:
+	.string	"epd_mode"
+.LASF1136:
+	.string	"compat_robust_list_head"
+.LASF913:
+	.string	"_tid"
+.LASF537:
+	.string	"s_inode_wblist_lock"
+.LASF2002:
+	.string	"from"
+.LASF1812:
+	.string	"bd_holder"
+.LASF1333:
+	.string	"end_code"
+.LASF1011:
+	.string	"ewma"
+.LASF221:
+	.string	"qspinlock"
+.LASF89:
+	.string	"linux_banner_ptr"
+.LASF1489:
+	.string	"NR_VMSCAN_WRITE"
+.LASF2799:
+	.string	"insn"
+.LASF1997:
+	.string	"filldir_t"
+.LASF1900:
+	.string	"fl_file"
+.LASF1216:
+	.string	"bp_hardening_data"
+.LASF1080:
+	.string	"dl_non_contending"
+.LASF2523:
+	.string	"prepare_recovery"
+.LASF1998:
+	.string	"dir_context"
+.LASF2538:
+	.string	"irq_stat"
+.LASF2644:
+	.string	"PGFREE"
+.LASF2586:
+	.string	"tracepoint_ptr_t"
+.LASF739:
+	.string	"utask"
+.LASF1469:
+	.string	"NR_UNEVICTABLE"
+.LASF1049:
+	.string	"sched_entity"
+.LASF1674:
+	.string	"d_spc_hardlimit"
+.LASF2736:
+	.string	"sh_addralign"
+.LASF771:
+	.string	"read_cntv_tval_el0"
+.LASF0:
+	.string	"long unsigned int"
+.LASF1029:
+	.string	"sleep_max"
+.LASF319:
+	.string	"__hyp_text_start"
+.LASF1312:
+	.string	"mmap_base"
+.LASF697:
+	.string	"io_context"
+.LASF209:
+	.string	"compat_elf_hwcap2"
+.LASF2507:
+	.string	"host_notify_domain"
+.LASF814:
+	.string	"WORK_OFFQ_POOL_NONE"
+.LASF1731:
+	.string	"gpl_syms"
+.LASF2103:
+	.string	"seq_show"
+.LASF764:
+	.string	"ate_match_dt"
+.LASF3181:
+	.string	"of_node_put"
+.LASF1358:
+	.string	"cow_page"
+.LASF1590:
+	.string	"core_id"
+.LASF2487:
+	.string	"block"
+.LASF2689:
+	.string	"vm_event_state"
+.LASF1702:
+	.string	"i_spc_timelimit"
+.LASF1145:
+	.string	"return_instances"
+.LASF2018:
+	.string	"blockdev_superblock"
+.LASF2197:
+	.string	"device"
+.LASF2750:
+	.string	"param_ops_ushort"
+.LASF523:
+	.string	"s_shrink"
+.LASF1523:
+	.string	"kcompactd_classzone_idx"
+.LASF3171:
+	.string	"kmalloc_index"
+.LASF867:
+	.string	"hrtimer_restart"
+.LASF2605:
+	.string	"totalram_pages"
+.LASF2484:
+	.string	"i2c_smbus_data"
+.LASF2984:
+	.string	"curr_dsp_buf"
+.LASF1066:
+	.string	"time_slice"
+.LASF2419:
+	.string	"full_name"
+.LASF2115:
+	.string	"kernfs_open_file"
+.LASF865:
+	.string	"node"
+.LASF1810:
+	.string	"bd_mutex"
+.LASF1377:
+	.string	"MIGRATE_SYNC_NO_COPY"
+.LASF2303:
+	.string	"start_prevent_time"
+.LASF2667:
+	.string	"PGMIGRATE_SUCCESS"
+.LASF798:
+	.string	"WORK_STRUCT_PENDING"
+.LASF631:
+	.string	"no_cgroup_migration"
+.LASF284:
+	.string	"_sinittext"
+.LASF2653:
+	.string	"PGSTEAL_DIRECT"
+.LASF371:
+	.string	"cpu_all_bits"
+.LASF2063:
+	.string	"interval"
+.LASF2721:
+	.string	"st_info"
+.LASF2216:
+	.string	"cma_area"
+.LASF588:
+	.string	"static_prio"
+.LASF2836:
+	.string	"wake_lock"
+.LASF2268:
+	.string	"may_skip_resume"
+.LASF2992:
+	.string	"is_deep_sleep"
+.LASF1172:
+	.string	"shrinker"
+.LASF1079:
+	.string	"dl_yielded"
+.LASF1636:
+	.string	"dqi_format"
+.LASF2670:
+	.string	"COMPACTFREE_SCANNED"
+.LASF2614:
+	.string	"mmap_rnd_compat_bits"
+.LASF592:
+	.string	"last_sleep_ts"
+.LASF451:
+	.string	"i_version"
+.LASF655:
+	.string	"prev_cputime"
+.LASF2205:
+	.string	"msi_domain"
+.LASF2014:
+	.string	"state_remove_uevent_sent"
+.LASF1436:
+	.string	"ia_size"
+.LASF886:
+	.string	"in_hrtirq"
+.LASF500:
+	.string	"s_master_keys"
+.LASF765:
+	.string	"ate_match_local_cap_id"
+.LASF2451:
+	.string	"property"
+.LASF3047:
+	.string	"ebc_sysfs_init"
+.LASF989:
+	.string	"wchar"
+.LASF313:
+	.string	"__exception_text_start"
+.LASF2423:
+	.string	"platform_notify"
+.LASF61:
+	.string	"kernel_symbol"
+.LASF2920:
+	.string	"dma_virt_ops"
+.LASF2296:
+	.string	"subsys_data"
+.LASF2718:
+	.string	"Elf64_Dyn"
+.LASF2353:
+	.string	"compatible"
+.LASF173:
+	.string	"tv_sec"
+.LASF39:
+	.string	"pid_t"
+.LASF77:
+	.string	"__security_initcall_start"
+.LASF1052:
+	.string	"run_node"
+.LASF793:
+	.string	"WORK_STRUCT_DELAYED_BIT"
+.LASF1036:
+	.string	"nr_failed_migrations_affine"
+.LASF3186:
+	.string	"IS_ERR"
+.LASF3017:
+	.string	"__addressable_ebc_init1878"
+.LASF859:
+	.string	"PCPU_FC_EMBED"
+.LASF2094:
+	.string	"supers"
+.LASF809:
+	.string	"WORK_OFFQ_CANCELING"
+.LASF2091:
+	.string	"last_ino"
+.LASF690:
+	.string	"pi_top_task"
+.LASF803:
+	.string	"WORK_NR_COLORS"
+.LASF3124:
+	.string	"refresh_new_image2"
+.LASF525:
+	.string	"s_fsnotify_inode_refs"
+.LASF413:
+	.string	"d_child"
+.LASF1999:
+	.string	"actor"
+.LASF1207:
+	.string	"uprobe"
+.LASF526:
+	.string	"s_readonly_remount"
+.LASF3212:
+	.string	"kasan_check_write"
+.LASF375:
+	.string	"hlist_bl_node"
+.LASF2722:
+	.string	"st_other"
+.LASF1947:
+	.string	"i_mutex_key"
+.LASF2008:
+	.string	"kset"
+.LASF875:
+	.string	"hrtimer_clock_base"
+.LASF1055:
+	.string	"vruntime"
+.LASF2276:
+	.string	"disable_depth"
+.LASF429:
+	.string	"i_size"
+.LASF1071:
+	.string	"dl_deadline"
+.LASF562:
+	.string	"overflowgid"
+.LASF815:
+	.string	"WORK_STRUCT_FLAG_MASK"
+.LASF1269:
+	.string	"units"
+.LASF3227:
+	.string	"epd_lut_from_mem_init"
+.LASF309:
+	.string	"__nosave_begin"
+.LASF162:
+	.string	"module"
+.LASF2645:
+	.string	"PGACTIVATE"
+.LASF2070:
+	.string	"ngroups"
+.LASF1656:
+	.string	"free_file_info"
+.LASF1203:
+	.string	"autask"
+.LASF2536:
+	.string	"ipi_irqs"
+.LASF565:
+	.string	"user_namespace"
+.LASF2754:
+	.string	"param_ops_ulong"
+.LASF3203:
+	.string	"get_current"
+.LASF231:
+	.string	"raw_spinlock"
+.LASF1516:
+	.string	"kswapd_wait"
+.LASF2285:
+	.string	"timer_autosuspends"
+.LASF2880:
+	.string	"EPD_PART_GLR16"
+.LASF2676:
+	.string	"KCOMPACTD_MIGRATE_SCANNED"
+.LASF1406:
+	.string	"__rcu_head"
+.LASF1750:
+	.string	"sect_attrs"
+.LASF2756:
+	.string	"param_ops_charp"
+.LASF1710:
+	.string	"quota_off"
+.LASF349:
+	.string	"fault_address"
+.LASF1604:
+	.string	"dq_inuse"
+.LASF3097:
+	.string	"direct_mode_data_change_part"
+.LASF1639:
+	.string	"dqi_flags"
+.LASF2651:
+	.string	"PGREFILL"
+.LASF2760:
+	.string	"param_ops_bint"
+.LASF3236:
+	.string	"ebc_add_to_dsp_buf_list"
+.LASF3241:
+	.string	"kfree"
+.LASF1800:
+	.string	"swap_deactivate"
+.LASF2936:
+	.string	"gdck_sta"
+.LASF1141:
+	.string	"request_queue"
+.LASF1474:
+	.string	"WORKINGSET_REFAULT"
+.LASF1638:
+	.string	"dqi_dirty_list"
+.LASF229:
+	.string	"prove_locking"
+.LASF2789:
+	.string	"mod_tree_node"
+.LASF2583:
+	.string	"regfunc"
+.LASF241:
+	.string	"code"
+.LASF652:
+	.string	"gtime"
+.LASF570:
+	.string	"debug_locks"
+.LASF1781:
+	.string	"readpage"
+.LASF2669:
+	.string	"COMPACTMIGRATE_SCANNED"
+.LASF393:
+	.string	"dummy"
+.LASF2382:
+	.string	"need_for_probe"
+.LASF219:
+	.string	"locked_pending"
+.LASF1177:
+	.string	"nr_deferred"
+.LASF1875:
+	.string	"fown_struct"
+.LASF1985:
+	.string	"perm"
+.LASF712:
+	.string	"compat_robust_list"
+.LASF2955:
+	.string	"ebc_buffer_phy"
+.LASF2475:
+	.string	"unmap"
+.LASF2009:
+	.string	"ktype"
+.LASF382:
+	.string	"lockref"
+.LASF2254:
+	.string	"in_dpm_list"
+.LASF1821:
+	.string	"bd_invalidated"
+.LASF1094:
+	.string	"mm_struct"
+.LASF1429:
+	.string	"ki_hint"
+.LASF418:
+	.string	"i_uid"
+.LASF85:
+	.string	"alternatives_applied"
+.LASF595:
+	.string	"boost_expires"
+.LASF2907:
+	.string	"DMA_BIDIRECTIONAL"
+.LASF3260:
+	.string	"__arch_copy_to_user"
+.LASF235:
+	.string	"spinlock"
+.LASF767:
+	.string	"arch_timer_erratum_workaround"
+.LASF553:
+	.string	"pid_namespace"
+.LASF931:
+	.string	"_syscall"
+.LASF2767:
+	.string	"mod_arch_specific"
+.LASF2530:
+	.string	"max_write_len"
+.LASF469:
+	.string	"d_compare"
+.LASF969:
+	.string	"vm_mm"
+.LASF3081:
+	.string	"need_refresh"
+.LASF2818:
+	.string	"platform_bus_type"
+.LASF3098:
+	.string	"data_buf"
+.LASF3037:
+	.string	"ulogo_buf"
+.LASF1635:
+	.string	"mem_dqinfo"
+.LASF18:
+	.string	"true"
+.LASF453:
+	.string	"i_count"
+.LASF868:
+	.string	"HRTIMER_NORESTART"
+.LASF367:
+	.string	"__cpu_online_mask"
+.LASF1822:
+	.string	"bd_disk"
+.LASF813:
+	.string	"WORK_OFFQ_POOL_BITS"
+.LASF1903:
+	.string	"fl_fasync"
+.LASF3136:
+	.string	"update_mode"
+.LASF2934:
+	.string	"direct_mode"
+.LASF2409:
+	.string	"cache_sync"
+.LASF433:
+	.string	"i_lock"
+.LASF2971:
+	.string	"ebc_dsp_buf_status"
+.LASF405:
+	.string	"d_name"
+.LASF731:
+	.string	"trace"
+.LASF2149:
+	.string	"get_ownership"
+.LASF2682:
+	.string	"UNEVICTABLE_PGMUNLOCKED"
+.LASF194:
+	.string	"ufds"
+.LASF1348:
+	.string	"exe_file"
+.LASF1170:
+	.string	"nr_scanned"
+.LASF644:
+	.string	"pid_links"
+.LASF1204:
+	.string	"vaddr"
+.LASF2288:
+	.string	"request"
+.LASF1508:
+	.string	"pglist_data"
+.LASF1772:
+	.string	"rw_hint"
+.LASF2548:
+	.string	"IRQ_POLL_SOFTIRQ"
+.LASF1064:
+	.string	"timeout"
+.LASF670:
+	.string	"last_switch_time"
+.LASF563:
+	.string	"fs_overflowuid"
+.LASF2923:
+	.string	"start_info"
+.LASF2691:
+	.string	"vm_zone_stat"
+.LASF2826:
+	.string	"init_thread_union"
+.LASF1672:
+	.string	"qc_dqblk"
+.LASF2118:
+	.string	"mmapped"
+.LASF2275:
+	.string	"child_count"
+.LASF1940:
+	.string	"kill_sb"
+.LASF409:
+	.string	"d_op"
+.LASF2515:
+	.string	"unlock_bus"
+.LASF1374:
+	.string	"MIGRATE_ASYNC"
+.LASF355:
+	.string	"__sched_text_end"
+.LASF436:
+	.string	"i_write_hint"
+.LASF1112:
+	.string	"process_keyring"
+.LASF2579:
+	.string	"page_ext_operations"
+.LASF2661:
+	.string	"KSWAPD_HIGH_WMARK_HIT_QUICKLY"
+.LASF3048:
+	.string	"ebc_state_read"
+.LASF3248:
+	.string	"__stack_chk_fail"
+.LASF2905:
+	.string	"pmic_set_vcom"
+.LASF2697:
+	.string	"stack_guard_gap"
+.LASF3195:
+	.string	"bytes"
+.LASF1736:
+	.string	"gpl_future_crcs"
+.LASF1022:
+	.string	"wait_start"
+.LASF1445:
+	.string	"nr_free"
+.LASF271:
+	.string	"cpu_hwcaps"
+.LASF387:
+	.string	"slash_name"
+.LASF124:
+	.string	"show_fdinfo"
+.LASF2800:
+	.string	"fixup"
+.LASF383:
+	.string	"hash"
+.LASF1244:
+	.string	"freelist"
+.LASF1841:
+	.string	"posix_acl"
+.LASF244:
+	.string	"static_key_mod"
+.LASF167:
+	.string	"bug_addr_disp"
+.LASF1641:
+	.string	"dqi_igrace"
+.LASF2191:
+	.string	"thaw_noirq"
+.LASF967:
+	.string	"vm_rb"
+.LASF3021:
+	.string	"kernel_read_file_str"
+.LASF566:
+	.string	"init_user_ns"
+.LASF2445:
+	.string	"add_links"
+.LASF2172:
+	.string	"pm_message_t"
+.LASF2925:
+	.string	"xen_dma_ops"
+.LASF1442:
+	.string	"page_group_by_mobility_disabled"
+.LASF2371:
+	.string	"secondary"
+.LASF2369:
+	.string	"segment_boundary_mask"
+.LASF1465:
+	.string	"NR_INACTIVE_ANON"
+.LASF245:
+	.string	"static_key"
+.LASF965:
+	.string	"vm_next"
+.LASF2331:
+	.string	"remove"
+.LASF492:
+	.string	"s_magic"
+.LASF1081:
+	.string	"dl_overrun"
+.LASF2396:
+	.string	"alloc"
+.LASF294:
+	.string	"__entry_text_start"
+.LASF749:
+	.string	"sys_tz"
+.LASF2389:
+	.string	"revmap_direct_max_irq"
+.LASF780:
+	.string	"jiffies_64"
+.LASF2059:
+	.string	"payload"
+.LASF1387:
+	.string	"cb_state"
+.LASF2917:
+	.string	"orig_nents"
+.LASF3062:
+	.string	"buf_addr"
+.LASF410:
+	.string	"d_sb"
+.LASF667:
+	.string	"comm"
+.LASF293:
+	.string	"__kprobes_text_end"
+.LASF2302:
+	.string	"last_time"
+.LASF547:
+	.string	"PIDTYPE_PID"
+.LASF981:
+	.string	"events"
+.LASF2230:
+	.string	"offline"
+.LASF1863:
+	.string	"atomic_open"
+.LASF1571:
+	.string	"_zonerefs"
+.LASF142:
+	.string	"panic_on_unrecovered_nmi"
+.LASF1233:
+	.string	"private_lock"
+.LASF431:
+	.string	"i_mtime"
+.LASF2602:
+	.string	"dev_page_fault_t"
+.LASF3091:
+	.string	"ebc_auto_tast_function"
+.LASF24:
+	.string	"__kernel_gid32_t"
+.LASF1459:
+	.string	"NR_BOUNCE"
+.LASF1282:
+	.string	"f_cred"
+.LASF2786:
+	.string	"MODULE_STATE_COMING"
+.LASF2229:
+	.string	"offline_disabled"
+.LASF3179:
+	.string	"of_property_read_u32_array"
+.LASF2474:
+	.string	"select"
+.LASF88:
+	.string	"linux_banner"
+.LASF2385:
+	.string	"host_data"
+.LASF2759:
+	.string	"param_ops_invbool"
+.LASF2514:
+	.string	"trylock_bus"
+.LASF108:
+	.string	"mmap"
+.LASF281:
+	.string	"__bss_stop"
+.LASF1897:
+	.string	"fl_pid"
+.LASF2717:
+	.string	"d_un"
+.LASF1350:
+	.string	"async_put_work"
+.LASF2114:
+	.string	"kernfs_syscall_ops"
+.LASF2981:
+	.string	"ebc_last_display"
+.LASF1855:
+	.string	"mknod"
+.LASF151:
+	.string	"SYSTEM_BOOTING"
+.LASF1598:
+	.string	"max_freq_scale"
+.LASF2918:
+	.string	"dma_direct_ops"
+.LASF2250:
+	.string	"dev_pm_info"
+.LASF27:
+	.string	"__kernel_loff_t"
+.LASF2314:
+	.string	"detach"
+.LASF117:
+	.string	"get_unmapped_area"
+.LASF1261:
+	.string	"dev_pagemap"
+.LASF2646:
+	.string	"PGDEACTIVATE"
+.LASF3104:
+	.string	"buffer_old_tmp"
+.LASF1782:
+	.string	"writepages"
+.LASF1021:
+	.string	"sched_statistics"
+.LASF135:
+	.string	"head"
+.LASF1504:
+	.string	"reclaim_stat"
+.LASF2839:
+	.string	"epd_lut_type"
+.LASF2539:
+	.string	"nmi_ctx"
+.LASF1142:
+	.string	"uprobe_task"
+.LASF1801:
+	.string	"writeback_control"
+.LASF1902:
+	.string	"fl_end"
+.LASF3264:
+	.string	"ebc_find_buf_by_phy_addr"
+.LASF1949:
+	.string	"super_operations"
+.LASF392:
+	.string	"want_pages"
+.LASF2944:
+	.string	"regmap_base"
+.LASF336:
+	.string	"wps_disabled"
+.LASF2402:
+	.string	"unmap_sg"
+.LASF2858:
+	.string	"buf_dsp"
+.LASF2860:
+	.string	"buf_error"
+.LASF1020:
+	.string	"util_avg"
+.LASF756:
+	.string	"task"
+.LASF596:
+	.string	"sched_task_group"
+.LASF2841:
+	.string	"WF_TYPE_GRAY16"
+.LASF2185:
+	.string	"thaw_early"
+.LASF675:
+	.string	"blocked"
+.LASF426:
+	.string	"i_security"
+.LASF2642:
+	.string	"PGSCAN_SKIP_NORMAL"
+.LASF2916:
+	.string	"nents"
+.LASF754:
+	.string	"__smp_cross_call"
+.LASF2768:
+	.string	"core"
+.LASF1813:
+	.string	"bd_holders"
+.LASF3095:
+	.string	"reset_and_flip"
+.LASF2945:
+	.string	"enable"
+.LASF953:
+	.string	"pipe_bufs"
+.LASF3200:
+	.string	"to_user"
+.LASF2122:
+	.string	"KOBJ_NS_TYPE_NET"
