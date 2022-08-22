@@ -1127,3 +1127,379 @@ struct dwc2_hsotg {
 			unsigned port_reset_change:1;
 			unsigned port_enable_change:1;
 			unsigned port_suspend_change:1;
+			unsigned port_over_current_change:1;
+			unsigned port_l1_change:1;
+			unsigned reserved:25;
+		} b;
+	} flags;
+
+	struct list_head non_periodic_sched_inactive;
+	struct list_head non_periodic_sched_waiting;
+	struct list_head non_periodic_sched_active;
+	struct list_head *non_periodic_qh_ptr;
+	struct list_head periodic_sched_inactive;
+	struct list_head periodic_sched_ready;
+	struct list_head periodic_sched_assigned;
+	struct list_head periodic_sched_queued;
+	struct list_head split_order;
+	u16 periodic_usecs;
+	unsigned long hs_periodic_bitmap[
+		DIV_ROUND_UP(DWC2_HS_SCHEDULE_US, BITS_PER_LONG)];
+	u16 periodic_qh_count;
+	bool bus_suspended;
+	bool new_connection;
+
+	u16 last_frame_num;
+
+#ifdef CONFIG_USB_DWC2_TRACK_MISSED_SOFS
+#define FRAME_NUM_ARRAY_SIZE 1000
+	u16 *frame_num_array;
+	u16 *last_frame_num_array;
+	int frame_num_idx;
+	int dumped_frame_num_array;
+#endif
+
+	struct list_head free_hc_list;
+	int periodic_channels;
+	int non_periodic_channels;
+	int available_host_channels;
+	struct dwc2_host_chan *hc_ptr_array[MAX_EPS_CHANNELS];
+	u8 *status_buf;
+	dma_addr_t status_buf_dma;
+#define DWC2_HCD_STATUS_BUF_SIZE 64
+
+	struct delayed_work start_work;
+	struct delayed_work reset_work;
+	struct work_struct phy_reset_work;
+	u8 otg_port;
+	u32 *frame_list;
+	dma_addr_t frame_list_dma;
+	u32 frame_list_sz;
+	struct kmem_cache *desc_gen_cache;
+	struct kmem_cache *desc_hsisoc_cache;
+	struct kmem_cache *unaligned_cache;
+#define DWC2_KMEM_UNALIGNED_BUF_SIZE 1024
+
+#endif /* CONFIG_USB_DWC2_HOST || CONFIG_USB_DWC2_DUAL_ROLE */
+
+#if IS_ENABLED(CONFIG_USB_DWC2_PERIPHERAL) || \
+	IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
+	/* Gadget structures */
+	struct usb_gadget_driver *driver;
+	int fifo_mem;
+	unsigned int dedicated_fifos:1;
+	unsigned char num_of_eps;
+	u32 fifo_map;
+
+	struct usb_request *ep0_reply;
+	struct usb_request *ctrl_req;
+	void *ep0_buff;
+	void *ctrl_buff;
+	enum dwc2_ep0_state ep0_state;
+	unsigned delayed_status : 1;
+	u8 test_mode;
+
+	dma_addr_t setup_desc_dma[2];
+	struct dwc2_dma_desc *setup_desc[2];
+	dma_addr_t ctrl_in_desc_dma;
+	struct dwc2_dma_desc *ctrl_in_desc;
+	dma_addr_t ctrl_out_desc_dma;
+	struct dwc2_dma_desc *ctrl_out_desc;
+
+	struct usb_gadget gadget;
+	unsigned int enabled:1;
+	unsigned int connected:1;
+	unsigned int remote_wakeup_allowed:1;
+	struct dwc2_hsotg_ep *eps_in[MAX_EPS_CHANNELS];
+	struct dwc2_hsotg_ep *eps_out[MAX_EPS_CHANNELS];
+#endif /* CONFIG_USB_DWC2_PERIPHERAL || CONFIG_USB_DWC2_DUAL_ROLE */
+};
+
+/* Normal architectures just use readl/write */
+static inline u32 dwc2_readl(struct dwc2_hsotg *hsotg, u32 offset)
+{
+	u32 val;
+
+	val = readl(hsotg->regs + offset);
+	if (hsotg->needs_byte_swap)
+		return swab32(val);
+	else
+		return val;
+}
+
+static inline void dwc2_writel(struct dwc2_hsotg *hsotg, u32 value, u32 offset)
+{
+	if (hsotg->needs_byte_swap)
+		writel(swab32(value), hsotg->regs + offset);
+	else
+		writel(value, hsotg->regs + offset);
+
+#ifdef DWC2_LOG_WRITES
+	pr_info("info:: wrote %08x to %p\n", value, hsotg->regs + offset);
+#endif
+}
+
+static inline void dwc2_readl_rep(struct dwc2_hsotg *hsotg, u32 offset,
+				  void *buffer, unsigned int count)
+{
+	if (count) {
+		u32 *buf = buffer;
+
+		do {
+			u32 x = dwc2_readl(hsotg, offset);
+			*buf++ = x;
+		} while (--count);
+	}
+}
+
+static inline void dwc2_writel_rep(struct dwc2_hsotg *hsotg, u32 offset,
+				   const void *buffer, unsigned int count)
+{
+	if (count) {
+		const u32 *buf = buffer;
+
+		do {
+			dwc2_writel(hsotg, *buf++, offset);
+		} while (--count);
+	}
+}
+
+/* Reasons for halting a host channel */
+enum dwc2_halt_status {
+	DWC2_HC_XFER_NO_HALT_STATUS,
+	DWC2_HC_XFER_COMPLETE,
+	DWC2_HC_XFER_URB_COMPLETE,
+	DWC2_HC_XFER_ACK,
+	DWC2_HC_XFER_NAK,
+	DWC2_HC_XFER_NYET,
+	DWC2_HC_XFER_STALL,
+	DWC2_HC_XFER_XACT_ERR,
+	DWC2_HC_XFER_FRAME_OVERRUN,
+	DWC2_HC_XFER_BABBLE_ERR,
+	DWC2_HC_XFER_DATA_TOGGLE_ERR,
+	DWC2_HC_XFER_AHB_ERR,
+	DWC2_HC_XFER_PERIODIC_INCOMPLETE,
+	DWC2_HC_XFER_URB_DEQUEUE,
+};
+
+/* Core version information */
+static inline bool dwc2_is_iot(struct dwc2_hsotg *hsotg)
+{
+	return (hsotg->hw_params.snpsid & 0xfff00000) == 0x55300000;
+}
+
+static inline bool dwc2_is_fs_iot(struct dwc2_hsotg *hsotg)
+{
+	return (hsotg->hw_params.snpsid & 0xffff0000) == 0x55310000;
+}
+
+static inline bool dwc2_is_hs_iot(struct dwc2_hsotg *hsotg)
+{
+	return (hsotg->hw_params.snpsid & 0xffff0000) == 0x55320000;
+}
+
+/*
+ * The following functions support initialization of the core driver component
+ * and the DWC_otg controller
+ */
+int dwc2_core_reset(struct dwc2_hsotg *hsotg, bool skip_wait);
+int dwc2_enter_partial_power_down(struct dwc2_hsotg *hsotg);
+int dwc2_exit_partial_power_down(struct dwc2_hsotg *hsotg, bool restore);
+int dwc2_enter_hibernation(struct dwc2_hsotg *hsotg, int is_host);
+int dwc2_exit_hibernation(struct dwc2_hsotg *hsotg, int rem_wakeup,
+		int reset, int is_host);
+void dwc2_init_fs_ls_pclk_sel(struct dwc2_hsotg *hsotg);
+int dwc2_phy_init(struct dwc2_hsotg *hsotg, bool select_phy);
+
+void dwc2_force_mode(struct dwc2_hsotg *hsotg, bool host);
+void dwc2_force_dr_mode(struct dwc2_hsotg *hsotg);
+
+bool dwc2_is_controller_alive(struct dwc2_hsotg *hsotg);
+
+int dwc2_check_core_version(struct dwc2_hsotg *hsotg);
+
+/*
+ * Common core Functions.
+ * The following functions support managing the DWC_otg controller in either
+ * device or host mode.
+ */
+void dwc2_read_packet(struct dwc2_hsotg *hsotg, u8 *dest, u16 bytes);
+void dwc2_flush_tx_fifo(struct dwc2_hsotg *hsotg, const int num);
+void dwc2_flush_rx_fifo(struct dwc2_hsotg *hsotg);
+
+void dwc2_enable_global_interrupts(struct dwc2_hsotg *hcd);
+void dwc2_disable_global_interrupts(struct dwc2_hsotg *hcd);
+
+void dwc2_hib_restore_common(struct dwc2_hsotg *hsotg, int rem_wakeup,
+			     int is_host);
+int dwc2_backup_global_registers(struct dwc2_hsotg *hsotg);
+int dwc2_restore_global_registers(struct dwc2_hsotg *hsotg);
+
+void dwc2_enable_acg(struct dwc2_hsotg *hsotg);
+
+/* This function should be called on every hardware interrupt. */
+irqreturn_t dwc2_handle_common_intr(int irq, void *dev);
+
+/* The device ID match table */
+extern const struct of_device_id dwc2_of_match_table[];
+
+int dwc2_lowlevel_hw_enable(struct dwc2_hsotg *hsotg);
+int dwc2_lowlevel_hw_disable(struct dwc2_hsotg *hsotg);
+
+int dwc2_lowlevel_phy_enable(struct dwc2_hsotg *hsotg);
+int dwc2_lowlevel_phy_disable(struct dwc2_hsotg *hsotg);
+
+/* Common polling functions */
+int dwc2_hsotg_wait_bit_set(struct dwc2_hsotg *hs_otg, u32 reg, u32 bit,
+			    u32 timeout);
+int dwc2_hsotg_wait_bit_clear(struct dwc2_hsotg *hs_otg, u32 reg, u32 bit,
+			      u32 timeout);
+/* Parameters */
+int dwc2_get_hwparams(struct dwc2_hsotg *hsotg);
+int dwc2_init_params(struct dwc2_hsotg *hsotg);
+
+/*
+ * The following functions check the controller's OTG operation mode
+ * capability (GHWCFG2.OTG_MODE).
+ *
+ * These functions can be used before the internal hsotg->hw_params
+ * are read in and cached so they always read directly from the
+ * GHWCFG2 register.
+ */
+unsigned int dwc2_op_mode(struct dwc2_hsotg *hsotg);
+bool dwc2_hw_is_otg(struct dwc2_hsotg *hsotg);
+bool dwc2_hw_is_host(struct dwc2_hsotg *hsotg);
+bool dwc2_hw_is_device(struct dwc2_hsotg *hsotg);
+
+/*
+ * Returns the mode of operation, host or device
+ */
+static inline int dwc2_is_host_mode(struct dwc2_hsotg *hsotg)
+{
+	return (dwc2_readl(hsotg, GINTSTS) & GINTSTS_CURMODE_HOST) != 0;
+}
+
+static inline int dwc2_is_device_mode(struct dwc2_hsotg *hsotg)
+{
+	return (dwc2_readl(hsotg, GINTSTS) & GINTSTS_CURMODE_HOST) == 0;
+}
+
+int dwc2_drd_init(struct dwc2_hsotg *hsotg);
+void dwc2_drd_suspend(struct dwc2_hsotg *hsotg);
+void dwc2_drd_resume(struct dwc2_hsotg *hsotg);
+void dwc2_drd_exit(struct dwc2_hsotg *hsotg);
+
+/*
+ * Dump core registers and SPRAM
+ */
+void dwc2_dump_dev_registers(struct dwc2_hsotg *hsotg);
+void dwc2_dump_host_registers(struct dwc2_hsotg *hsotg);
+void dwc2_dump_global_registers(struct dwc2_hsotg *hsotg);
+
+/* Gadget defines */
+#if IS_ENABLED(CONFIG_USB_DWC2_PERIPHERAL) || \
+	IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
+int dwc2_hsotg_remove(struct dwc2_hsotg *hsotg);
+int dwc2_hsotg_suspend(struct dwc2_hsotg *dwc2);
+int dwc2_hsotg_resume(struct dwc2_hsotg *dwc2);
+int dwc2_gadget_init(struct dwc2_hsotg *hsotg);
+void dwc2_hsotg_core_init_disconnected(struct dwc2_hsotg *dwc2,
+				       bool reset);
+void dwc2_hsotg_core_disconnect(struct dwc2_hsotg *hsotg);
+void dwc2_hsotg_core_connect(struct dwc2_hsotg *hsotg);
+void dwc2_hsotg_disconnect(struct dwc2_hsotg *dwc2);
+int dwc2_hsotg_set_test_mode(struct dwc2_hsotg *hsotg, int testmode);
+#define dwc2_is_device_connected(hsotg) (hsotg->connected)
+int dwc2_backup_device_registers(struct dwc2_hsotg *hsotg);
+int dwc2_restore_device_registers(struct dwc2_hsotg *hsotg, int remote_wakeup);
+int dwc2_gadget_enter_hibernation(struct dwc2_hsotg *hsotg);
+int dwc2_gadget_exit_hibernation(struct dwc2_hsotg *hsotg,
+				 int rem_wakeup, int reset);
+int dwc2_hsotg_tx_fifo_count(struct dwc2_hsotg *hsotg);
+int dwc2_hsotg_tx_fifo_total_depth(struct dwc2_hsotg *hsotg);
+int dwc2_hsotg_tx_fifo_average_depth(struct dwc2_hsotg *hsotg);
+void dwc2_gadget_init_lpm(struct dwc2_hsotg *hsotg);
+void dwc2_gadget_program_ref_clk(struct dwc2_hsotg *hsotg);
+#else
+static inline int dwc2_hsotg_remove(struct dwc2_hsotg *dwc2)
+{ return 0; }
+static inline int dwc2_hsotg_suspend(struct dwc2_hsotg *dwc2)
+{ return 0; }
+static inline int dwc2_hsotg_resume(struct dwc2_hsotg *dwc2)
+{ return 0; }
+static inline int dwc2_gadget_init(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline void dwc2_hsotg_core_init_disconnected(struct dwc2_hsotg *dwc2,
+						     bool reset) {}
+static inline void dwc2_hsotg_core_disconnect(struct dwc2_hsotg *hsotg) {}
+static inline void dwc2_hsotg_core_connect(struct dwc2_hsotg *hsotg) {}
+static inline void dwc2_hsotg_disconnect(struct dwc2_hsotg *dwc2) {}
+static inline int dwc2_hsotg_set_test_mode(struct dwc2_hsotg *hsotg,
+					   int testmode)
+{ return 0; }
+#define dwc2_is_device_connected(hsotg) (0)
+static inline int dwc2_backup_device_registers(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_restore_device_registers(struct dwc2_hsotg *hsotg,
+						int remote_wakeup)
+{ return 0; }
+static inline int dwc2_gadget_enter_hibernation(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_gadget_exit_hibernation(struct dwc2_hsotg *hsotg,
+					       int rem_wakeup, int reset)
+{ return 0; }
+static inline int dwc2_hsotg_tx_fifo_count(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_hsotg_tx_fifo_total_depth(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_hsotg_tx_fifo_average_depth(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline void dwc2_gadget_init_lpm(struct dwc2_hsotg *hsotg) {}
+static inline void dwc2_gadget_program_ref_clk(struct dwc2_hsotg *hsotg) {}
+#endif
+
+#if IS_ENABLED(CONFIG_USB_DWC2_HOST) || IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
+int dwc2_hcd_get_frame_number(struct dwc2_hsotg *hsotg);
+int dwc2_hcd_get_future_frame_number(struct dwc2_hsotg *hsotg, int us);
+void dwc2_hcd_connect(struct dwc2_hsotg *hsotg);
+void dwc2_hcd_disconnect(struct dwc2_hsotg *hsotg, bool force);
+void dwc2_hcd_start(struct dwc2_hsotg *hsotg);
+int dwc2_core_init(struct dwc2_hsotg *hsotg, bool initial_setup);
+int dwc2_backup_host_registers(struct dwc2_hsotg *hsotg);
+int dwc2_restore_host_registers(struct dwc2_hsotg *hsotg);
+int dwc2_host_enter_hibernation(struct dwc2_hsotg *hsotg);
+int dwc2_host_exit_hibernation(struct dwc2_hsotg *hsotg,
+			       int rem_wakeup, int reset);
+bool dwc2_host_can_poweroff_phy(struct dwc2_hsotg *dwc2);
+static inline void dwc2_host_schedule_phy_reset(struct dwc2_hsotg *hsotg)
+{ schedule_work(&hsotg->phy_reset_work); }
+#else
+static inline int dwc2_hcd_get_frame_number(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_hcd_get_future_frame_number(struct dwc2_hsotg *hsotg,
+						   int us)
+{ return 0; }
+static inline void dwc2_hcd_connect(struct dwc2_hsotg *hsotg) {}
+static inline void dwc2_hcd_disconnect(struct dwc2_hsotg *hsotg, bool force) {}
+static inline void dwc2_hcd_start(struct dwc2_hsotg *hsotg) {}
+static inline void dwc2_hcd_remove(struct dwc2_hsotg *hsotg) {}
+static inline int dwc2_core_init(struct dwc2_hsotg *hsotg, bool initial_setup)
+{ return 0; }
+static inline int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_backup_host_registers(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_restore_host_registers(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_host_enter_hibernation(struct dwc2_hsotg *hsotg)
+{ return 0; }
+static inline int dwc2_host_exit_hibernation(struct dwc2_hsotg *hsotg,
+					     int rem_wakeup, int reset)
+{ return 0; }
+static inline bool dwc2_host_can_poweroff_phy(struct dwc2_hsotg *dwc2)
+{ return false; }
+static inline void dwc2_host_schedule_phy_reset(struct dwc2_hsotg *hsotg) {}
+
+#endif
+
+#endif /* __DWC2_CORE_H__ */
