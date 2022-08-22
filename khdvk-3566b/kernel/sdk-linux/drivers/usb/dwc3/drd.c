@@ -438,3 +438,247 @@ static int dwc3_drd_notifier(struct notifier_block *nb,
 	struct dwc3 *dwc = container_of(nb, struct dwc3, edev_nb);
 
 #if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+	if (extcon_get_state(dwc->edev, EXTCON_USB))
+		dwc->desired_role_sw_mode = USB_DR_MODE_PERIPHERAL;
+	else if (extcon_get_state(dwc->edev, EXTCON_USB_HOST))
+		dwc->desired_role_sw_mode = USB_DR_MODE_HOST;
+	else
+		dwc->desired_role_sw_mode = USB_DR_MODE_UNKNOWN;
+#endif
+
+	dwc3_set_mode(dwc, event ?
+		      DWC3_GCTL_PRTCAP_HOST :
+		      DWC3_GCTL_PRTCAP_DEVICE);
+
+	return NOTIFY_DONE;
+}
+
+static struct extcon_dev *dwc3_get_extcon(struct dwc3 *dwc)
+{
+	struct device *dev = dwc->dev;
+	struct device_node *np_phy;
+	struct extcon_dev *edev = NULL;
+	const char *name;
+
+	if (device_property_read_bool(dev, "extcon"))
+		return extcon_get_edev_by_phandle(dev, 0);
+
+	/*
+	 * Device tree platforms should get extcon via phandle.
+	 * On ACPI platforms, we get the name from a device property.
+	 * This device property is for kernel internal use only and
+	 * is expected to be set by the glue code.
+	 */
+	if (device_property_read_string(dev, "linux,extcon-name", &name) == 0) {
+		edev = extcon_get_extcon_dev(name);
+		if (!edev)
+			return ERR_PTR(-EPROBE_DEFER);
+
+		return edev;
+	}
+
+	/*
+	 * Try to get an extcon device from the USB PHY controller's "port"
+	 * node. Check if it has the "port" node first, to avoid printing the
+	 * error message from underlying code, as it's a valid case: extcon
+	 * device (and "port" node) may be missing in case of "usb-role-switch"
+	 * or OTG mode.
+	 */
+	np_phy = of_parse_phandle(dev->of_node, "phys", 0);
+	if (of_graph_is_present(np_phy)) {
+		struct device_node *np_conn;
+
+		np_conn = of_graph_get_remote_node(np_phy, -1, -1);
+		if (np_conn)
+			edev = extcon_find_edev_by_node(np_conn);
+		of_node_put(np_conn);
+	}
+	of_node_put(np_phy);
+
+	return edev;
+}
+
+#if IS_ENABLED(CONFIG_USB_ROLE_SWITCH)
+#define ROLE_SWITCH 1
+static int dwc3_usb_role_switch_set(struct usb_role_switch *sw,
+				    enum usb_role role)
+{
+	struct dwc3 *dwc = usb_role_switch_get_drvdata(sw);
+	u32 mode;
+
+#if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+	dwc->desired_role_sw_mode = role;
+#endif
+
+	switch (role) {
+	case USB_ROLE_HOST:
+		mode = DWC3_GCTL_PRTCAP_HOST;
+		break;
+	case USB_ROLE_DEVICE:
+		mode = DWC3_GCTL_PRTCAP_DEVICE;
+		break;
+	default:
+		if (dwc->role_switch_default_mode == USB_DR_MODE_HOST)
+			mode = DWC3_GCTL_PRTCAP_HOST;
+		else
+			mode = DWC3_GCTL_PRTCAP_DEVICE;
+		break;
+	}
+
+	dwc3_set_mode(dwc, mode);
+	return 0;
+}
+
+static enum usb_role dwc3_usb_role_switch_get(struct usb_role_switch *sw)
+{
+	struct dwc3 *dwc = usb_role_switch_get_drvdata(sw);
+	unsigned long flags;
+	enum usb_role role;
+
+	spin_lock_irqsave(&dwc->lock, flags);
+	switch (dwc->current_dr_role) {
+	case DWC3_GCTL_PRTCAP_HOST:
+		role = USB_ROLE_HOST;
+		break;
+	case DWC3_GCTL_PRTCAP_DEVICE:
+		role = USB_ROLE_DEVICE;
+		break;
+	case DWC3_GCTL_PRTCAP_OTG:
+		role = dwc->current_otg_role;
+		break;
+	default:
+		if (dwc->role_switch_default_mode == USB_DR_MODE_HOST)
+			role = USB_ROLE_HOST;
+		else
+			role = USB_ROLE_DEVICE;
+		break;
+	}
+	spin_unlock_irqrestore(&dwc->lock, flags);
+	return role;
+}
+
+static int dwc3_setup_role_switch(struct dwc3 *dwc)
+{
+	struct usb_role_switch_desc dwc3_role_switch = {NULL};
+	const char *str;
+	u32 mode;
+	int ret;
+
+	ret = device_property_read_string(dwc->dev, "role-switch-default-mode",
+					  &str);
+	if (ret >= 0  && !strncmp(str, "host", strlen("host"))) {
+		dwc->role_switch_default_mode = USB_DR_MODE_HOST;
+		mode = DWC3_GCTL_PRTCAP_HOST;
+	} else {
+		dwc->role_switch_default_mode = USB_DR_MODE_PERIPHERAL;
+		mode = DWC3_GCTL_PRTCAP_DEVICE;
+	}
+
+	dwc3_role_switch.fwnode = dev_fwnode(dwc->dev);
+	dwc3_role_switch.set = dwc3_usb_role_switch_set;
+	dwc3_role_switch.get = dwc3_usb_role_switch_get;
+	dwc3_role_switch.driver_data = dwc;
+	dwc->role_sw = usb_role_switch_register(dwc->dev, &dwc3_role_switch);
+	if (IS_ERR(dwc->role_sw))
+		return PTR_ERR(dwc->role_sw);
+
+	dwc3_set_mode(dwc, mode);
+	return 0;
+}
+#else
+#define ROLE_SWITCH 0
+#define dwc3_setup_role_switch(x) 0
+#endif
+
+int dwc3_drd_init(struct dwc3 *dwc)
+{
+	int ret, irq;
+
+	dwc->edev = dwc3_get_extcon(dwc);
+	if (IS_ERR(dwc->edev))
+		return PTR_ERR(dwc->edev);
+
+	if (ROLE_SWITCH &&
+	    device_property_read_bool(dwc->dev, "usb-role-switch")) {
+		ret = dwc3_setup_role_switch(dwc);
+		if (ret < 0)
+			return ret;
+	} else if (dwc->edev) {
+		dwc->edev_nb.notifier_call = dwc3_drd_notifier;
+		ret = extcon_register_notifier(dwc->edev, EXTCON_USB_HOST,
+					       &dwc->edev_nb);
+		if (ret < 0) {
+			dev_err(dwc->dev, "couldn't register cable notifier\n");
+			return ret;
+		}
+
+		dwc3_drd_update(dwc);
+	} else {
+		dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_OTG);
+		dwc->current_dr_role = DWC3_GCTL_PRTCAP_OTG;
+
+		/* use OTG block to get ID event */
+		irq = dwc3_otg_get_irq(dwc);
+		if (irq < 0)
+			return irq;
+
+		dwc->otg_irq = irq;
+
+		/* disable all OTG IRQs */
+		dwc3_otg_disable_events(dwc, DWC3_OTG_ALL_EVENTS);
+		/* clear all events */
+		dwc3_otg_clear_events(dwc);
+
+		ret = request_threaded_irq(dwc->otg_irq, dwc3_otg_irq,
+					   dwc3_otg_thread_irq,
+					   IRQF_SHARED, "dwc3-otg", dwc);
+		if (ret) {
+			dev_err(dwc->dev, "failed to request irq #%d --> %d\n",
+				dwc->otg_irq, ret);
+			ret = -ENODEV;
+			return ret;
+		}
+
+		dwc3_otg_init(dwc);
+		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_OTG);
+	}
+
+	return 0;
+}
+
+void dwc3_drd_exit(struct dwc3 *dwc)
+{
+	unsigned long flags;
+
+	if (dwc->role_sw)
+		usb_role_switch_unregister(dwc->role_sw);
+
+	if (dwc->edev)
+		extcon_unregister_notifier(dwc->edev, EXTCON_USB_HOST,
+					   &dwc->edev_nb);
+
+	cancel_work_sync(&dwc->drd_work);
+
+	/* debug user might have changed role, clean based on current role */
+	switch (dwc->current_dr_role) {
+	case DWC3_GCTL_PRTCAP_HOST:
+		dwc3_host_exit(dwc);
+		break;
+	case DWC3_GCTL_PRTCAP_DEVICE:
+		dwc3_gadget_exit(dwc);
+		dwc3_event_buffers_cleanup(dwc);
+		break;
+	case DWC3_GCTL_PRTCAP_OTG:
+		dwc3_otg_exit(dwc);
+		spin_lock_irqsave(&dwc->lock, flags);
+		dwc->desired_otg_role = DWC3_OTG_ROLE_IDLE;
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		dwc3_otg_update(dwc, 1);
+		break;
+	default:
+		break;
+	}
+
+	if (dwc->otg_irq)
+		free_irq(dwc->otg_irq, dwc);
+}
