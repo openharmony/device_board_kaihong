@@ -109,7 +109,7 @@ cp -arfpL $BORAD_DIR/kernel/config/*.dts*   $KERNEL_BUILD_ROOT_DIR/kernel/arch/a
 
 
 #拷贝kernel patch 删减
-cp -arfp $BORAD_DIR/kernel/sdk-linux/*  $KERNEL_BUILD_ROOT_DIR/kernel/
+cp -arfp $BORAD_DIR/kernel/sdk_linux/*  $KERNEL_BUILD_ROOT_DIR/kernel/
 cp -arfp $BORAD_DIR/kernel/vendor  $KERNEL_BUILD_ROOT_DIR/kernel/
 
 cp -arfpL $BORAD_DIR/kernel/make-boot.sh  $KERNEL_BUILD_ROOT_DIR/../../khdvk_3566b/packages/phone
