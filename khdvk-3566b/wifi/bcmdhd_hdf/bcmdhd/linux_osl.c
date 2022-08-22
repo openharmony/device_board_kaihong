@@ -1916,3 +1916,222 @@ timer_cb_compat(struct timer_list *tl)
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0) */
 
+osl_timer_t *
+osl_timer_init(osl_t *osh, const char *name, void (*fn)(void *arg), void *arg)
+{
+	osl_timer_t *t;
+	BCM_REFERENCE(fn);
+	if ((t = MALLOCZ(NULL, sizeof(osl_timer_t))) == NULL) {
+		printk(KERN_ERR "osl_timer_init: out of memory, malloced %d bytes\n",
+			(int)sizeof(osl_timer_t));
+		return (NULL);
+	}
+	bzero(t, sizeof(osl_timer_t));
+	if ((t->timer = MALLOCZ(NULL, sizeof(struct timer_list))) == NULL) {
+		printf("osl_timer_init: malloc failed\n");
+		MFREE(NULL, t, sizeof(osl_timer_t));
+		return (NULL);
+	}
+	t->set = TRUE;
+
+	init_timer_compat(t->timer, (linux_timer_fn)fn, arg);
+
+	return (t);
+}
+
+void
+osl_timer_add(osl_t *osh, osl_timer_t *t, uint32 ms, bool periodic)
+{
+	if (t == NULL) {
+		printf("%s: Timer handle is NULL\n", __FUNCTION__);
+		return;
+	}
+	ASSERT(!t->set);
+
+	t->set = TRUE;
+	if (periodic) {
+		printf("Periodic timers are not supported by Linux timer apis\n");
+	}
+	timer_expires(t->timer) = jiffies + ms*HZ/1000;
+
+	add_timer(t->timer);
+
+	return;
+}
+
+void
+osl_timer_update(osl_t *osh, osl_timer_t *t, uint32 ms, bool periodic)
+{
+	if (t == NULL) {
+		printf("%s: Timer handle is NULL\n", __FUNCTION__);
+		return;
+	}
+	if (periodic) {
+		printf("Periodic timers are not supported by Linux timer apis\n");
+	}
+	t->set = TRUE;
+	timer_expires(t->timer) = jiffies + ms*HZ/1000;
+
+	mod_timer(t->timer, timer_expires(t->timer));
+
+	return;
+}
+
+/*
+ * Return TRUE if timer successfully deleted, FALSE if still pending
+ */
+bool
+osl_timer_del(osl_t *osh, osl_timer_t *t)
+{
+	if (t == NULL) {
+		printf("%s: Timer handle is NULL\n", __FUNCTION__);
+		return (FALSE);
+	}
+	if (t->set) {
+		t->set = FALSE;
+		if (t->timer) {
+			del_timer(t->timer);
+			MFREE(NULL, t->timer, sizeof(struct timer_list));
+		}
+		MFREE(NULL, t, sizeof(osl_timer_t));
+	}
+	return (TRUE);
+}
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
+int
+kernel_read_compat(struct file *file, loff_t offset, char *addr, unsigned long count)
+{
+	return (int)kernel_read(file, addr, (size_t)count, &offset);
+}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)) */
+
+void *
+osl_spin_lock_init(osl_t *osh)
+{
+	/* Adding 4 bytes since the sizeof(spinlock_t) could be 0 */
+	/* if CONFIG_SMP and CONFIG_DEBUG_SPINLOCK are not defined */
+	/* and this results in kernel asserts in internal builds */
+	spinlock_t * lock = MALLOC(osh, sizeof(spinlock_t) + 4);
+	if (lock)
+		spin_lock_init(lock);
+	return ((void *)lock);
+}
+
+void
+osl_spin_lock_deinit(osl_t *osh, void *lock)
+{
+	if (lock)
+		MFREE(osh, lock, sizeof(spinlock_t) + 4);
+}
+
+unsigned long
+osl_spin_lock(void *lock)
+{
+	unsigned long flags = 0;
+
+	if (lock)
+		spin_lock_irqsave((spinlock_t *)lock, flags);
+
+	return flags;
+}
+
+void
+osl_spin_unlock(void *lock, unsigned long flags)
+{
+	if (lock)
+		spin_unlock_irqrestore((spinlock_t *)lock, flags);
+}
+
+#ifdef USE_DMA_LOCK
+static void
+osl_dma_lock(osl_t *osh)
+{
+	if (likely(in_irq() || irqs_disabled())) {
+		spin_lock(&osh->dma_lock);
+	} else {
+		spin_lock_bh(&osh->dma_lock);
+		osh->dma_lock_bh = TRUE;
+	}
+}
+
+static void
+osl_dma_unlock(osl_t *osh)
+{
+	if (unlikely(osh->dma_lock_bh)) {
+		osh->dma_lock_bh = FALSE;
+		spin_unlock_bh(&osh->dma_lock);
+	} else {
+		spin_unlock(&osh->dma_lock);
+	}
+}
+
+static void
+osl_dma_lock_init(osl_t *osh)
+{
+	spin_lock_init(&osh->dma_lock);
+	osh->dma_lock_bh = FALSE;
+}
+#endif /* USE_DMA_LOCK */
+
+void
+osl_do_gettimeofday(struct osl_timespec *ts)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	struct timespec64 curtime;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+	struct timespec curtime;
+#else
+	struct timeval curtime;
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	ktime_get_real_ts64(&curtime);
+	ts->tv_nsec = curtime.tv_nsec;
+	ts->tv_usec	= curtime.tv_nsec / 1000;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+	getnstimeofday(&curtime);
+	ts->tv_nsec = curtime.tv_nsec;
+	ts->tv_usec = curtime.tv_nsec / 1000;
+#else
+	do_gettimeofday(&curtime);
+	ts->tv_usec = curtime.tv_usec;
+	ts->tv_nsec = curtime.tv_usec * 1000;
+#endif
+	ts->tv_sec = curtime.tv_sec;
+}
+
+uint32
+osl_do_gettimediff(struct osl_timespec *cur_ts, struct osl_timespec *old_ts)
+{
+	uint32 diff_s, diff_us, total_diff_us;
+	bool pgc_g = FALSE;
+
+	diff_s = (uint32)cur_ts->tv_sec - (uint32)old_ts->tv_sec;
+	pgc_g = (cur_ts->tv_usec > old_ts->tv_usec) ? TRUE : FALSE;
+	diff_us = pgc_g ? (cur_ts->tv_usec - old_ts->tv_usec) : (old_ts->tv_usec - cur_ts->tv_usec);
+	total_diff_us = pgc_g ? (diff_s * 1000000 + diff_us) : (diff_s * 1000000 - diff_us);
+	return total_diff_us;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)
+void
+osl_get_monotonic_boottime(struct osl_timespec *ts)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	struct timespec64 curtime;
+#else
+	struct timespec curtime;
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	curtime = ktime_to_timespec64(ktime_get_boottime());
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+	curtime = ktime_to_timespec(ktime_get_boottime());
+#else
+	get_monotonic_boottime(&curtime);
+#endif
+	ts->tv_sec = curtime.tv_sec;
+	ts->tv_nsec = curtime.tv_nsec;
+	ts->tv_usec = curtime.tv_nsec / 1000;
+}
+#endif
