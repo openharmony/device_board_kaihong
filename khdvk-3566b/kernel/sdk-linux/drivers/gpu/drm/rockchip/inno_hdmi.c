@@ -497,3 +497,439 @@ static void inno_hdmi_encoder_enable(struct drm_encoder *encoder)
 
 	inno_hdmi_set_pwr_mode(hdmi, NORMAL);
 }
+
+static void inno_hdmi_encoder_disable(struct drm_encoder *encoder)
+{
+	struct inno_hdmi *hdmi = to_inno_hdmi(encoder);
+
+	inno_hdmi_set_pwr_mode(hdmi, LOWER_PWR);
+}
+
+static bool inno_hdmi_encoder_mode_fixup(struct drm_encoder *encoder,
+					 const struct drm_display_mode *mode,
+					 struct drm_display_mode *adj_mode)
+{
+	return true;
+}
+
+static int
+inno_hdmi_encoder_atomic_check(struct drm_encoder *encoder,
+			       struct drm_crtc_state *crtc_state,
+			       struct drm_connector_state *conn_state)
+{
+	struct rockchip_crtc_state *s = to_rockchip_crtc_state(crtc_state);
+
+	s->output_mode = ROCKCHIP_OUT_MODE_P888;
+	s->output_type = DRM_MODE_CONNECTOR_HDMIA;
+
+	return 0;
+}
+
+static struct drm_encoder_helper_funcs inno_hdmi_encoder_helper_funcs = {
+	.enable     = inno_hdmi_encoder_enable,
+	.disable    = inno_hdmi_encoder_disable,
+	.mode_fixup = inno_hdmi_encoder_mode_fixup,
+	.mode_set   = inno_hdmi_encoder_mode_set,
+	.atomic_check = inno_hdmi_encoder_atomic_check,
+};
+
+static enum drm_connector_status
+inno_hdmi_connector_detect(struct drm_connector *connector, bool force)
+{
+	struct inno_hdmi *hdmi = to_inno_hdmi(connector);
+
+	return (hdmi_readb(hdmi, HDMI_STATUS) & m_HOTPLUG) ?
+		connector_status_connected : connector_status_disconnected;
+}
+
+static int inno_hdmi_connector_get_modes(struct drm_connector *connector)
+{
+	struct inno_hdmi *hdmi = to_inno_hdmi(connector);
+	struct edid *edid;
+	int ret = 0;
+
+	if (!hdmi->ddc)
+		return 0;
+
+	edid = drm_get_edid(connector, hdmi->ddc);
+	if (edid) {
+		hdmi->hdmi_data.sink_is_hdmi = drm_detect_hdmi_monitor(edid);
+		hdmi->hdmi_data.sink_has_audio = drm_detect_monitor_audio(edid);
+		drm_connector_update_edid_property(connector, edid);
+		ret = drm_add_edid_modes(connector, edid);
+		kfree(edid);
+	}
+
+	return ret;
+}
+
+static enum drm_mode_status
+inno_hdmi_connector_mode_valid(struct drm_connector *connector,
+			       struct drm_display_mode *mode)
+{
+	return MODE_OK;
+}
+
+static int
+inno_hdmi_probe_single_connector_modes(struct drm_connector *connector,
+				       uint32_t maxX, uint32_t maxY)
+{
+	return drm_helper_probe_single_connector_modes(connector, 1920, 1080);
+}
+
+static void inno_hdmi_connector_destroy(struct drm_connector *connector)
+{
+	drm_connector_unregister(connector);
+	drm_connector_cleanup(connector);
+}
+
+static const struct drm_connector_funcs inno_hdmi_connector_funcs = {
+	.fill_modes = inno_hdmi_probe_single_connector_modes,
+	.detect = inno_hdmi_connector_detect,
+	.destroy = inno_hdmi_connector_destroy,
+	.reset = drm_atomic_helper_connector_reset,
+	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+};
+
+static struct drm_connector_helper_funcs inno_hdmi_connector_helper_funcs = {
+	.get_modes = inno_hdmi_connector_get_modes,
+	.mode_valid = inno_hdmi_connector_mode_valid,
+};
+
+static int inno_hdmi_register(struct drm_device *drm, struct inno_hdmi *hdmi)
+{
+	struct drm_encoder *encoder = &hdmi->encoder;
+	struct device *dev = hdmi->dev;
+
+	encoder->possible_crtcs = rockchip_drm_of_find_possible_crtcs(drm, dev->of_node);
+
+	/*
+	 * If we failed to find the CRTC(s) which this encoder is
+	 * supposed to be connected to, it's because the CRTC has
+	 * not been registered yet.  Defer probing, and hope that
+	 * the required CRTC is added later.
+	 */
+	if (encoder->possible_crtcs == 0)
+		return -EPROBE_DEFER;
+
+	drm_encoder_helper_add(encoder, &inno_hdmi_encoder_helper_funcs);
+	drm_simple_encoder_init(drm, encoder, DRM_MODE_ENCODER_TMDS);
+
+	hdmi->connector.polled = DRM_CONNECTOR_POLL_HPD;
+
+	drm_connector_helper_add(&hdmi->connector,
+				 &inno_hdmi_connector_helper_funcs);
+	drm_connector_init_with_ddc(drm, &hdmi->connector,
+				    &inno_hdmi_connector_funcs,
+				    DRM_MODE_CONNECTOR_HDMIA,
+				    hdmi->ddc);
+
+	drm_connector_attach_encoder(&hdmi->connector, encoder);
+
+	return 0;
+}
+
+static irqreturn_t inno_hdmi_i2c_irq(struct inno_hdmi *hdmi)
+{
+	struct inno_hdmi_i2c *i2c = hdmi->i2c;
+	u8 stat;
+
+	stat = hdmi_readb(hdmi, HDMI_INTERRUPT_STATUS1);
+	if (!(stat & m_INT_EDID_READY))
+		return IRQ_NONE;
+
+	/* Clear HDMI EDID interrupt flag */
+	hdmi_writeb(hdmi, HDMI_INTERRUPT_STATUS1, m_INT_EDID_READY);
+
+	complete(&i2c->cmp);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t inno_hdmi_hardirq(int irq, void *dev_id)
+{
+	struct inno_hdmi *hdmi = dev_id;
+	irqreturn_t ret = IRQ_NONE;
+	u8 interrupt;
+
+	if (hdmi->i2c)
+		ret = inno_hdmi_i2c_irq(hdmi);
+
+	interrupt = hdmi_readb(hdmi, HDMI_STATUS);
+	if (interrupt & m_INT_HOTPLUG) {
+		hdmi_modb(hdmi, HDMI_STATUS, m_INT_HOTPLUG, m_INT_HOTPLUG);
+		ret = IRQ_WAKE_THREAD;
+	}
+
+	return ret;
+}
+
+static irqreturn_t inno_hdmi_irq(int irq, void *dev_id)
+{
+	struct inno_hdmi *hdmi = dev_id;
+
+	drm_helper_hpd_irq_event(hdmi->connector.dev);
+
+	return IRQ_HANDLED;
+}
+
+static int inno_hdmi_i2c_read(struct inno_hdmi *hdmi, struct i2c_msg *msgs)
+{
+	int length = msgs->len;
+	u8 *buf = msgs->buf;
+	int ret;
+
+	ret = wait_for_completion_timeout(&hdmi->i2c->cmp, HZ / 10);
+	if (!ret)
+		return -EAGAIN;
+
+	while (length--)
+		*buf++ = hdmi_readb(hdmi, HDMI_EDID_FIFO_ADDR);
+
+	return 0;
+}
+
+static int inno_hdmi_i2c_write(struct inno_hdmi *hdmi, struct i2c_msg *msgs)
+{
+	/*
+	 * The DDC module only support read EDID message, so
+	 * we assume that each word write to this i2c adapter
+	 * should be the offset of EDID word address.
+	 */
+	if ((msgs->len != 1) ||
+	    ((msgs->addr != DDC_ADDR) && (msgs->addr != DDC_SEGMENT_ADDR)))
+		return -EINVAL;
+
+	reinit_completion(&hdmi->i2c->cmp);
+
+	if (msgs->addr == DDC_SEGMENT_ADDR)
+		hdmi->i2c->segment_addr = msgs->buf[0];
+	if (msgs->addr == DDC_ADDR)
+		hdmi->i2c->ddc_addr = msgs->buf[0];
+
+	/* Set edid fifo first addr */
+	hdmi_writeb(hdmi, HDMI_EDID_FIFO_OFFSET, 0x00);
+
+	/* Set edid word address 0x00/0x80 */
+	hdmi_writeb(hdmi, HDMI_EDID_WORD_ADDR, hdmi->i2c->ddc_addr);
+
+	/* Set edid segment pointer */
+	hdmi_writeb(hdmi, HDMI_EDID_SEGMENT_POINTER, hdmi->i2c->segment_addr);
+
+	return 0;
+}
+
+static int inno_hdmi_i2c_xfer(struct i2c_adapter *adap,
+			      struct i2c_msg *msgs, int num)
+{
+	struct inno_hdmi *hdmi = i2c_get_adapdata(adap);
+	struct inno_hdmi_i2c *i2c = hdmi->i2c;
+	int i, ret = 0;
+
+	mutex_lock(&i2c->lock);
+
+	/* Clear the EDID interrupt flag and unmute the interrupt */
+	hdmi_writeb(hdmi, HDMI_INTERRUPT_MASK1, m_INT_EDID_READY);
+	hdmi_writeb(hdmi, HDMI_INTERRUPT_STATUS1, m_INT_EDID_READY);
+
+	for (i = 0; i < num; i++) {
+		DRM_DEV_DEBUG(hdmi->dev,
+			      "xfer: num: %d/%d, len: %d, flags: %#x\n",
+			      i + 1, num, msgs[i].len, msgs[i].flags);
+
+		if (msgs[i].flags & I2C_M_RD)
+			ret = inno_hdmi_i2c_read(hdmi, &msgs[i]);
+		else
+			ret = inno_hdmi_i2c_write(hdmi, &msgs[i]);
+
+		if (ret < 0)
+			break;
+	}
+
+	if (!ret)
+		ret = num;
+
+	/* Mute HDMI EDID interrupt */
+	hdmi_writeb(hdmi, HDMI_INTERRUPT_MASK1, 0);
+
+	mutex_unlock(&i2c->lock);
+
+	return ret;
+}
+
+static u32 inno_hdmi_i2c_func(struct i2c_adapter *adapter)
+{
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+}
+
+static const struct i2c_algorithm inno_hdmi_algorithm = {
+	.master_xfer	= inno_hdmi_i2c_xfer,
+	.functionality	= inno_hdmi_i2c_func,
+};
+
+static struct i2c_adapter *inno_hdmi_i2c_adapter(struct inno_hdmi *hdmi)
+{
+	struct i2c_adapter *adap;
+	struct inno_hdmi_i2c *i2c;
+	int ret;
+
+	i2c = devm_kzalloc(hdmi->dev, sizeof(*i2c), GFP_KERNEL);
+	if (!i2c)
+		return ERR_PTR(-ENOMEM);
+
+	mutex_init(&i2c->lock);
+	init_completion(&i2c->cmp);
+
+	adap = &i2c->adap;
+	adap->class = I2C_CLASS_DDC;
+	adap->owner = THIS_MODULE;
+	adap->dev.parent = hdmi->dev;
+	adap->dev.of_node = hdmi->dev->of_node;
+	adap->algo = &inno_hdmi_algorithm;
+	strlcpy(adap->name, "Inno HDMI", sizeof(adap->name));
+	i2c_set_adapdata(adap, hdmi);
+
+	ret = i2c_add_adapter(adap);
+	if (ret) {
+		dev_warn(hdmi->dev, "cannot add %s I2C adapter\n", adap->name);
+		devm_kfree(hdmi->dev, i2c);
+		return ERR_PTR(ret);
+	}
+
+	hdmi->i2c = i2c;
+
+	DRM_DEV_INFO(hdmi->dev, "registered %s I2C bus driver\n", adap->name);
+
+	return adap;
+}
+
+static int inno_hdmi_bind(struct device *dev, struct device *master,
+				 void *data)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct drm_device *drm = data;
+	struct inno_hdmi *hdmi;
+	struct resource *iores;
+	int irq;
+	int ret;
+
+	hdmi = devm_kzalloc(dev, sizeof(*hdmi), GFP_KERNEL);
+	if (!hdmi)
+		return -ENOMEM;
+
+	hdmi->dev = dev;
+	hdmi->drm_dev = drm;
+
+	iores = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	hdmi->regs = devm_ioremap_resource(dev, iores);
+	if (IS_ERR(hdmi->regs))
+		return PTR_ERR(hdmi->regs);
+
+	hdmi->pclk = devm_clk_get(hdmi->dev, "pclk");
+	if (IS_ERR(hdmi->pclk)) {
+		DRM_DEV_ERROR(hdmi->dev, "Unable to get HDMI pclk clk\n");
+		return PTR_ERR(hdmi->pclk);
+	}
+
+	ret = clk_prepare_enable(hdmi->pclk);
+	if (ret) {
+		DRM_DEV_ERROR(hdmi->dev,
+			      "Cannot enable HDMI pclk clock: %d\n", ret);
+		return ret;
+	}
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
+		ret = irq;
+		goto err_disable_clk;
+	}
+
+	inno_hdmi_reset(hdmi);
+
+	hdmi->ddc = inno_hdmi_i2c_adapter(hdmi);
+	if (IS_ERR(hdmi->ddc)) {
+		ret = PTR_ERR(hdmi->ddc);
+		hdmi->ddc = NULL;
+		goto err_disable_clk;
+	}
+
+	/*
+	 * When IP controller haven't configured to an accurate video
+	 * timing, then the TMDS clock source would be switched to
+	 * PCLK_HDMI, so we need to init the TMDS rate to PCLK rate,
+	 * and reconfigure the DDC clock.
+	 */
+	hdmi->tmds_rate = clk_get_rate(hdmi->pclk);
+	inno_hdmi_i2c_init(hdmi);
+
+	ret = inno_hdmi_register(drm, hdmi);
+	if (ret)
+		goto err_put_adapter;
+
+	dev_set_drvdata(dev, hdmi);
+
+	/* Unmute hotplug interrupt */
+	hdmi_modb(hdmi, HDMI_STATUS, m_MASK_INT_HOTPLUG, v_MASK_INT_HOTPLUG(1));
+
+	ret = devm_request_threaded_irq(dev, irq, inno_hdmi_hardirq,
+					inno_hdmi_irq, IRQF_SHARED,
+					dev_name(dev), hdmi);
+	if (ret < 0)
+		goto err_cleanup_hdmi;
+
+	return 0;
+err_cleanup_hdmi:
+	hdmi->connector.funcs->destroy(&hdmi->connector);
+	hdmi->encoder.funcs->destroy(&hdmi->encoder);
+err_put_adapter:
+	i2c_put_adapter(hdmi->ddc);
+err_disable_clk:
+	clk_disable_unprepare(hdmi->pclk);
+	return ret;
+}
+
+static void inno_hdmi_unbind(struct device *dev, struct device *master,
+			     void *data)
+{
+	struct inno_hdmi *hdmi = dev_get_drvdata(dev);
+
+	hdmi->connector.funcs->destroy(&hdmi->connector);
+	hdmi->encoder.funcs->destroy(&hdmi->encoder);
+
+	i2c_put_adapter(hdmi->ddc);
+	clk_disable_unprepare(hdmi->pclk);
+}
+
+static const struct component_ops inno_hdmi_ops = {
+	.bind	= inno_hdmi_bind,
+	.unbind	= inno_hdmi_unbind,
+};
+
+static int inno_hdmi_probe(struct platform_device *pdev)
+{
+	return component_add(&pdev->dev, &inno_hdmi_ops);
+}
+
+static int inno_hdmi_remove(struct platform_device *pdev)
+{
+	component_del(&pdev->dev, &inno_hdmi_ops);
+
+	return 0;
+}
+
+static const struct of_device_id inno_hdmi_dt_ids[] = {
+	{ .compatible = "rockchip,rk3036-inno-hdmi",
+	},
+	{},
+};
+MODULE_DEVICE_TABLE(of, inno_hdmi_dt_ids);
+
+struct platform_driver inno_hdmi_driver = {
+	.probe  = inno_hdmi_probe,
+	.remove = inno_hdmi_remove,
+	.driver = {
+		.name = "innohdmi-rockchip",
+		.of_match_table = inno_hdmi_dt_ids,
+	},
+};
