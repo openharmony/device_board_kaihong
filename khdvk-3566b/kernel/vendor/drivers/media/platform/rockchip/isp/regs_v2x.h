@@ -1830,3 +1830,888 @@
 #define ISP_RAWAWB_SUM_G_SMA_MULTIWINDOW_3	(ISP_RAWAWB_BASE + 0x00544)
 #define ISP_RAWAWB_SUM_B_SMA_MULTIWINDOW_3	(ISP_RAWAWB_BASE + 0x00548)
 #define ISP_RAWAWB_WP_NM_SMA_MULTIWINDOW_3	(ISP_RAWAWB_BASE + 0x0054c)
+#define ISP_RAWAWB_SUM_R_NOR_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00550)
+#define ISP_RAWAWB_SUM_G_NOR_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00554)
+#define ISP_RAWAWB_SUM_B_NOR_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00558)
+#define ISP_RAWAWB_WP_NM_NOR_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x0055c)
+#define ISP_RAWAWB_SUM_R_BIG_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00560)
+#define ISP_RAWAWB_SUM_G_BIG_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00564)
+#define ISP_RAWAWB_SUM_B_BIG_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00568)
+#define ISP_RAWAWB_WP_NM_BIG_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x0056c)
+#define ISP_RAWAWB_SUM_R_SMA_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00570)
+#define ISP_RAWAWB_SUM_G_SMA_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00574)
+#define ISP_RAWAWB_SUM_B_SMA_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x00578)
+#define ISP_RAWAWB_WP_NM_SMA_MULTIWINDOW_4	(ISP_RAWAWB_BASE + 0x0057c)
+#define ISP_RAWAWB_SUM_R_NOR_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x00580)
+#define ISP_RAWAWB_SUM_G_NOR_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x00584)
+#define ISP_RAWAWB_SUM_B_NOR_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x00588)
+#define ISP_RAWAWB_WP_NM_NOR_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x0058c)
+#define ISP_RAWAWB_SUM_R_BIG_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x00590)
+#define ISP_RAWAWB_SUM_G_BIG_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x00594)
+#define ISP_RAWAWB_SUM_B_BIG_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x00598)
+#define ISP_RAWAWB_WP_NM_BIG_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x0059c)
+#define ISP_RAWAWB_SUM_R_SMA_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x005a0)
+#define ISP_RAWAWB_SUM_G_SMA_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x005a4)
+#define ISP_RAWAWB_SUM_B_SMA_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x005a8)
+#define ISP_RAWAWB_WP_NM_SMA_MULTIWINDOW_5	(ISP_RAWAWB_BASE + 0x005ac)
+#define ISP_RAWAWB_SUM_R_NOR_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005b0)
+#define ISP_RAWAWB_SUM_G_NOR_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005b4)
+#define ISP_RAWAWB_SUM_B_NOR_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005b8)
+#define ISP_RAWAWB_WP_NM_NOR_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005bc)
+#define ISP_RAWAWB_SUM_R_BIG_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005c0)
+#define ISP_RAWAWB_SUM_G_BIG_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005c4)
+#define ISP_RAWAWB_SUM_B_BIG_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005c8)
+#define ISP_RAWAWB_WP_NM_BIG_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005cc)
+#define ISP_RAWAWB_SUM_R_SMA_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005d0)
+#define ISP_RAWAWB_SUM_G_SMA_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005d4)
+#define ISP_RAWAWB_SUM_B_SMA_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005d8)
+#define ISP_RAWAWB_WP_NM_SMA_MULTIWINDOW_6	(ISP_RAWAWB_BASE + 0x005dc)
+#define ISP_RAWAWB_SUM_R_EXC_0			(ISP_RAWAWB_BASE + 0x005e0)
+#define ISP_RAWAWB_SUM_G_EXC_0			(ISP_RAWAWB_BASE + 0x005e4)
+#define ISP_RAWAWB_SUM_B_EXC_0			(ISP_RAWAWB_BASE + 0x005e8)
+#define ISP_RAWAWB_WP_NM_EXC_0			(ISP_RAWAWB_BASE + 0x005ec)
+#define ISP_RAWAWB_SUM_R_EXC_1			(ISP_RAWAWB_BASE + 0x005f0)
+#define ISP_RAWAWB_SUM_G_EXC_1			(ISP_RAWAWB_BASE + 0x005f4)
+#define ISP_RAWAWB_SUM_B_EXC_1			(ISP_RAWAWB_BASE + 0x005f8)
+#define ISP_RAWAWB_WP_NM_EXC_1			(ISP_RAWAWB_BASE + 0x005fc)
+#define ISP_RAWAWB_SUM_R_EXC_2			(ISP_RAWAWB_BASE + 0x00600)
+#define ISP_RAWAWB_SUM_G_EXC_2			(ISP_RAWAWB_BASE + 0x00604)
+#define ISP_RAWAWB_SUM_B_EXC_2			(ISP_RAWAWB_BASE + 0x00608)
+#define ISP_RAWAWB_WP_NM_EXC_2			(ISP_RAWAWB_BASE + 0x0060c)
+#define ISP_RAWAWB_SUM_R_EXC_3			(ISP_RAWAWB_BASE + 0x00610)
+#define ISP_RAWAWB_SUM_G_EXC_3			(ISP_RAWAWB_BASE + 0x00614)
+#define ISP_RAWAWB_SUM_B_EXC_3			(ISP_RAWAWB_BASE + 0x00618)
+#define ISP_RAWAWB_WP_NM_EXC_3			(ISP_RAWAWB_BASE + 0x0061c)
+#define ISP_RAWAWB_SUM_R_EXC_4			(ISP_RAWAWB_BASE + 0x00620)
+#define ISP_RAWAWB_SUM_G_EXC_4			(ISP_RAWAWB_BASE + 0x00624)
+#define ISP_RAWAWB_SUM_B_EXC_4			(ISP_RAWAWB_BASE + 0x00628)
+#define ISP_RAWAWB_WP_NM_EXC_4			(ISP_RAWAWB_BASE + 0x0062c)
+#define ISP_RAWAWB_SUM_R_EXC_5			(ISP_RAWAWB_BASE + 0x00630)
+#define ISP_RAWAWB_SUM_G_EXC_5			(ISP_RAWAWB_BASE + 0x00634)
+#define ISP_RAWAWB_SUM_B_EXC_5			(ISP_RAWAWB_BASE + 0x00638)
+#define ISP_RAWAWB_WP_NM_EXC_5			(ISP_RAWAWB_BASE + 0x0063c)
+#define ISP_RAWAWB_SUM_R_EXC_6			(ISP_RAWAWB_BASE + 0x00640)
+#define ISP_RAWAWB_SUM_G_EXC_6			(ISP_RAWAWB_BASE + 0x00644)
+#define ISP_RAWAWB_SUM_B_EXC_6			(ISP_RAWAWB_BASE + 0x00648)
+#define ISP_RAWAWB_WP_NM_EXC_6			(ISP_RAWAWB_BASE + 0x0064c)
+#define ISP_RAWAWB_RAM_CTRL			(ISP_RAWAWB_BASE + 0x00650)
+#define ISP_RAWAWB_RAM_DATA			(ISP_RAWAWB_BASE + 0x00660)
+
+#define ISP21_RAWAWB_BASE                        0x00005000
+#define ISP21_RAWAWB_CTRL                        (ISP21_RAWAWB_BASE + 0x0000)
+#define ISP21_RAWAWB_BLK_CTRL                    (ISP21_RAWAWB_BASE + 0x0004)
+#define ISP21_RAWAWB_WIN_OFFS                    (ISP21_RAWAWB_BASE + 0x0008)
+#define ISP21_RAWAWB_WIN_SIZE                    (ISP21_RAWAWB_BASE + 0x000c)
+#define ISP21_RAWAWB_LIMIT_RG_MAX                (ISP21_RAWAWB_BASE + 0x0010)
+#define ISP21_RAWAWB_LIMIT_BY_MAX                (ISP21_RAWAWB_BASE + 0x0014)
+#define ISP21_RAWAWB_LIMIT_RG_MIN                (ISP21_RAWAWB_BASE + 0x0018)
+#define ISP21_RAWAWB_LIMIT_BY_MIN                (ISP21_RAWAWB_BASE + 0x001c)
+#define ISP21_RAWAWB_WEIGHT_CURVE_CTRL           (ISP21_RAWAWB_BASE + 0x0020)
+#define ISP21_RAWAWB_YWEIGHT_CURVE_XCOOR03       (ISP21_RAWAWB_BASE + 0x0024)
+#define ISP21_RAWAWB_YWEIGHT_CURVE_XCOOR47       (ISP21_RAWAWB_BASE + 0x0028)
+#define ISP21_RAWAWB_YWEIGHT_CURVE_XCOOR8        (ISP21_RAWAWB_BASE + 0x002c)
+#define ISP21_RAWAWB_YWEIGHT_CURVE_YCOOR03       (ISP21_RAWAWB_BASE + 0x0030)
+#define ISP21_RAWAWB_YWEIGHT_CURVE_YCOOR47       (ISP21_RAWAWB_BASE + 0x0034)
+#define ISP21_RAWAWB_YWEIGHT_CURVE_YCOOR8        (ISP21_RAWAWB_BASE + 0x0038)
+#define ISP21_RAWAWB_PRE_WBGAIN_INV              (ISP21_RAWAWB_BASE + 0x003c)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_0           (ISP21_RAWAWB_BASE + 0x0040)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_0           (ISP21_RAWAWB_BASE + 0x0044)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_0           (ISP21_RAWAWB_BASE + 0x0048)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_0           (ISP21_RAWAWB_BASE + 0x004c)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_0          (ISP21_RAWAWB_BASE + 0x0050)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE12_0          (ISP21_RAWAWB_BASE + 0x0054)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_0          (ISP21_RAWAWB_BASE + 0x0058)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_0          (ISP21_RAWAWB_BASE + 0x005c)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_1           (ISP21_RAWAWB_BASE + 0x0060)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_1           (ISP21_RAWAWB_BASE + 0x0064)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_1           (ISP21_RAWAWB_BASE + 0x0068)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_1           (ISP21_RAWAWB_BASE + 0x006c)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_1          (ISP21_RAWAWB_BASE + 0x0070)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE12_1          (ISP21_RAWAWB_BASE + 0x0074)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_1          (ISP21_RAWAWB_BASE + 0x0078)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_1          (ISP21_RAWAWB_BASE + 0x007c)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_2           (ISP21_RAWAWB_BASE + 0x0080)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_2           (ISP21_RAWAWB_BASE + 0x0084)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_2           (ISP21_RAWAWB_BASE + 0x0088)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_2           (ISP21_RAWAWB_BASE + 0x008c)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_2          (ISP21_RAWAWB_BASE + 0x0090)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE12_2          (ISP21_RAWAWB_BASE + 0x0094)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_2          (ISP21_RAWAWB_BASE + 0x0098)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_2          (ISP21_RAWAWB_BASE + 0x009c)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_3           (ISP21_RAWAWB_BASE + 0x00a0)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_3           (ISP21_RAWAWB_BASE + 0x00a4)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_3           (ISP21_RAWAWB_BASE + 0x00a8)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_3           (ISP21_RAWAWB_BASE + 0x00ac)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_3          (ISP21_RAWAWB_BASE + 0x00b0)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE12_3          (ISP21_RAWAWB_BASE + 0x00b4)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_3          (ISP21_RAWAWB_BASE + 0x00b8)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_3          (ISP21_RAWAWB_BASE + 0x00bc)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_4           (ISP21_RAWAWB_BASE + 0x00c0)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_4           (ISP21_RAWAWB_BASE + 0x00c4)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_4           (ISP21_RAWAWB_BASE + 0x00c8)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_4           (ISP21_RAWAWB_BASE + 0x00cc)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_4          (ISP21_RAWAWB_BASE + 0x00d0)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE12_4          (ISP21_RAWAWB_BASE + 0x00d4)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_4          (ISP21_RAWAWB_BASE + 0x00d8)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_4          (ISP21_RAWAWB_BASE + 0x00dc)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_5           (ISP21_RAWAWB_BASE + 0x00e0)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_5           (ISP21_RAWAWB_BASE + 0x00e4)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_5           (ISP21_RAWAWB_BASE + 0x00e8)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_5           (ISP21_RAWAWB_BASE + 0x00ec)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_5          (ISP21_RAWAWB_BASE + 0x00f0)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE10_5          (ISP21_RAWAWB_BASE + 0x00f4)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_5          (ISP21_RAWAWB_BASE + 0x00f8)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_5          (ISP21_RAWAWB_BASE + 0x00fc)
+#define ISP21_RAWAWB_UV_DETC_VERTEX0_6           (ISP21_RAWAWB_BASE + 0x0100)
+#define ISP21_RAWAWB_UV_DETC_VERTEX1_6           (ISP21_RAWAWB_BASE + 0x0104)
+#define ISP21_RAWAWB_UV_DETC_VERTEX2_6           (ISP21_RAWAWB_BASE + 0x0108)
+#define ISP21_RAWAWB_UV_DETC_VERTEX3_6           (ISP21_RAWAWB_BASE + 0x010c)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE01_6          (ISP21_RAWAWB_BASE + 0x0110)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE10_6          (ISP21_RAWAWB_BASE + 0x0114)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE23_6          (ISP21_RAWAWB_BASE + 0x0118)
+#define ISP21_RAWAWB_UV_DETC_ISLOPE30_6          (ISP21_RAWAWB_BASE + 0x011c)
+#define ISP21_RAWAWB_YUV_RGB2ROTY_0              (ISP21_RAWAWB_BASE + 0x0120)
+#define ISP21_RAWAWB_YUV_RGB2ROTY_1              (ISP21_RAWAWB_BASE + 0x0124)
+#define ISP21_RAWAWB_YUV_RGB2ROTU_0              (ISP21_RAWAWB_BASE + 0x0128)
+#define ISP21_RAWAWB_YUV_RGB2ROTU_1              (ISP21_RAWAWB_BASE + 0x012c)
+#define ISP21_RAWAWB_YUV_RGB2ROTV_0              (ISP21_RAWAWB_BASE + 0x0130)
+#define ISP21_RAWAWB_YUV_RGB2ROTV_1              (ISP21_RAWAWB_BASE + 0x0134)
+#define ISP21_RAWAWB_YUV_X_COOR_Y_0              (ISP21_RAWAWB_BASE + 0x0140)
+#define ISP21_RAWAWB_YUV_X_COOR_U_0              (ISP21_RAWAWB_BASE + 0x0144)
+#define ISP21_RAWAWB_YUV_X_COOR_V_0              (ISP21_RAWAWB_BASE + 0x0148)
+#define ISP21_RAWAWB_YUV_X1X2_DIS_0              (ISP21_RAWAWB_BASE + 0x014c)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_UCOOR_0    (ISP21_RAWAWB_BASE + 0x0150)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH0_0      (ISP21_RAWAWB_BASE + 0x0154)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH1_0      (ISP21_RAWAWB_BASE + 0x0158)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH2_0      (ISP21_RAWAWB_BASE + 0x015c)
+#define ISP21_RAWAWB_YUV_X_COOR_Y_1              (ISP21_RAWAWB_BASE + 0x0160)
+#define ISP21_RAWAWB_YUV_X_COOR_U_1              (ISP21_RAWAWB_BASE + 0x0164)
+#define ISP21_RAWAWB_YUV_X_COOR_V_1              (ISP21_RAWAWB_BASE + 0x0168)
+#define ISP21_RAWAWB_YUV_X1X2_DIS_1              (ISP21_RAWAWB_BASE + 0x016c)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_UCOOR_1    (ISP21_RAWAWB_BASE + 0x0170)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH0_1      (ISP21_RAWAWB_BASE + 0x0174)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH1_1      (ISP21_RAWAWB_BASE + 0x0178)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH2_1      (ISP21_RAWAWB_BASE + 0x017c)
+#define ISP21_RAWAWB_YUV_X_COOR_Y_2              (ISP21_RAWAWB_BASE + 0x0180)
+#define ISP21_RAWAWB_YUV_X_COOR_U_2              (ISP21_RAWAWB_BASE + 0x0184)
+#define ISP21_RAWAWB_YUV_X_COOR_V_2              (ISP21_RAWAWB_BASE + 0x0188)
+#define ISP21_RAWAWB_YUV_X1X2_DIS_2              (ISP21_RAWAWB_BASE + 0x018c)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_UCOOR_2    (ISP21_RAWAWB_BASE + 0x0190)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH0_2      (ISP21_RAWAWB_BASE + 0x0194)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH1_2      (ISP21_RAWAWB_BASE + 0x0198)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH2_2      (ISP21_RAWAWB_BASE + 0x019c)
+#define ISP21_RAWAWB_YUV_X_COOR_Y_3              (ISP21_RAWAWB_BASE + 0x01a0)
+#define ISP21_RAWAWB_YUV_X_COOR_U_3              (ISP21_RAWAWB_BASE + 0x01a4)
+#define ISP21_RAWAWB_YUV_X_COOR_V_3              (ISP21_RAWAWB_BASE + 0x01a8)
+#define ISP21_RAWAWB_YUV_X1X2_DIS_3              (ISP21_RAWAWB_BASE + 0x01ac)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_UCOOR_3    (ISP21_RAWAWB_BASE + 0x01b0)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH0_3      (ISP21_RAWAWB_BASE + 0x01b4)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH1_3      (ISP21_RAWAWB_BASE + 0x01b8)
+#define ISP21_RAWAWB_YUV_INTERP_CURVE_TH2_3      (ISP21_RAWAWB_BASE + 0x01bc)
+#define ISP21_RAWAWB_RGB2XY_WT01                 (ISP21_RAWAWB_BASE + 0x01fc)
+#define ISP21_RAWAWB_RGB2XY_WT2                  (ISP21_RAWAWB_BASE + 0x0200)
+#define ISP21_RAWAWB_RGB2XY_MAT0_XY              (ISP21_RAWAWB_BASE + 0x0204)
+#define ISP21_RAWAWB_RGB2XY_MAT1_XY              (ISP21_RAWAWB_BASE + 0x0208)
+#define ISP21_RAWAWB_RGB2XY_MAT2_XY              (ISP21_RAWAWB_BASE + 0x020c)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_0             (ISP21_RAWAWB_BASE + 0x0210)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_0             (ISP21_RAWAWB_BASE + 0x0214)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_0             (ISP21_RAWAWB_BASE + 0x0218)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_0             (ISP21_RAWAWB_BASE + 0x021c)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_1             (ISP21_RAWAWB_BASE + 0x0228)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_1             (ISP21_RAWAWB_BASE + 0x022c)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_1             (ISP21_RAWAWB_BASE + 0x0230)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_1             (ISP21_RAWAWB_BASE + 0x0234)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_2             (ISP21_RAWAWB_BASE + 0x0240)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_2             (ISP21_RAWAWB_BASE + 0x0244)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_2             (ISP21_RAWAWB_BASE + 0x0248)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_2             (ISP21_RAWAWB_BASE + 0x024c)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_3             (ISP21_RAWAWB_BASE + 0x0258)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_3             (ISP21_RAWAWB_BASE + 0x025c)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_3             (ISP21_RAWAWB_BASE + 0x0260)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_3             (ISP21_RAWAWB_BASE + 0x0264)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_4             (ISP21_RAWAWB_BASE + 0x0270)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_4             (ISP21_RAWAWB_BASE + 0x0274)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_4             (ISP21_RAWAWB_BASE + 0x0278)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_4             (ISP21_RAWAWB_BASE + 0x027c)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_5             (ISP21_RAWAWB_BASE + 0x0288)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_5             (ISP21_RAWAWB_BASE + 0x028c)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_5             (ISP21_RAWAWB_BASE + 0x0290)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_5             (ISP21_RAWAWB_BASE + 0x0294)
+#define ISP21_RAWAWB_XY_DETC_NOR_X_6             (ISP21_RAWAWB_BASE + 0x02a0)
+#define ISP21_RAWAWB_XY_DETC_NOR_Y_6             (ISP21_RAWAWB_BASE + 0x02a4)
+#define ISP21_RAWAWB_XY_DETC_BIG_X_6             (ISP21_RAWAWB_BASE + 0x02a8)
+#define ISP21_RAWAWB_XY_DETC_BIG_Y_6             (ISP21_RAWAWB_BASE + 0x02ac)
+#define ISP21_RAWAWB_MULTIWINDOW_EXC_CTRL        (ISP21_RAWAWB_BASE + 0x02b8)
+#define ISP21_RAWAWB_EXC_WP_REGION0_XU           (ISP21_RAWAWB_BASE + 0x02fc)
+#define ISP21_RAWAWB_EXC_WP_REGION0_YV           (ISP21_RAWAWB_BASE + 0x0300)
+#define ISP21_RAWAWB_EXC_WP_REGION1_XU           (ISP21_RAWAWB_BASE + 0x0304)
+#define ISP21_RAWAWB_EXC_WP_REGION1_YV           (ISP21_RAWAWB_BASE + 0x0308)
+#define ISP21_RAWAWB_EXC_WP_REGION2_XU           (ISP21_RAWAWB_BASE + 0x030c)
+#define ISP21_RAWAWB_EXC_WP_REGION2_YV           (ISP21_RAWAWB_BASE + 0x0310)
+#define ISP21_RAWAWB_EXC_WP_REGION3_XU           (ISP21_RAWAWB_BASE + 0x0314)
+#define ISP21_RAWAWB_EXC_WP_REGION3_YV           (ISP21_RAWAWB_BASE + 0x0318)
+#define ISP21_RAWAWB_EXC_WP_REGION4_XU           (ISP21_RAWAWB_BASE + 0x031c)
+#define ISP21_RAWAWB_EXC_WP_REGION4_YV           (ISP21_RAWAWB_BASE + 0x0320)
+#define ISP21_RAWAWB_EXC_WP_REGION5_XU           (ISP21_RAWAWB_BASE + 0x0324)
+#define ISP21_RAWAWB_EXC_WP_REGION5_YV           (ISP21_RAWAWB_BASE + 0x0328)
+#define ISP21_RAWAWB_EXC_WP_REGION6_XU           (ISP21_RAWAWB_BASE + 0x032c)
+#define ISP21_RAWAWB_EXC_WP_REGION6_YV           (ISP21_RAWAWB_BASE + 0x0330)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_0             (ISP21_RAWAWB_BASE + 0x0340)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_0             (ISP21_RAWAWB_BASE + 0x0348)
+#define ISP21_RAWAWB_WP_NUM_NOR_0                (ISP21_RAWAWB_BASE + 0x034c)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_0             (ISP21_RAWAWB_BASE + 0x0350)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_0             (ISP21_RAWAWB_BASE + 0x0358)
+#define ISP21_RAWAWB_WP_NUM_BIG_0                (ISP21_RAWAWB_BASE + 0x035c)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_1             (ISP21_RAWAWB_BASE + 0x0370)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_1             (ISP21_RAWAWB_BASE + 0x0378)
+#define ISP21_RAWAWB_WP_NUM_NOR_1                (ISP21_RAWAWB_BASE + 0x037c)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_1             (ISP21_RAWAWB_BASE + 0x0380)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_1             (ISP21_RAWAWB_BASE + 0x0388)
+#define ISP21_RAWAWB_WP_NUM_BIG_1                (ISP21_RAWAWB_BASE + 0x038c)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_2             (ISP21_RAWAWB_BASE + 0x03a0)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_2             (ISP21_RAWAWB_BASE + 0x03a8)
+#define ISP21_RAWAWB_WP_NUM_NOR_2                (ISP21_RAWAWB_BASE + 0x03ac)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_2             (ISP21_RAWAWB_BASE + 0x03b0)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_2             (ISP21_RAWAWB_BASE + 0x03b8)
+#define ISP21_RAWAWB_WP_NUM_BIG_2                (ISP21_RAWAWB_BASE + 0x03bc)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_3             (ISP21_RAWAWB_BASE + 0x03d0)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_3             (ISP21_RAWAWB_BASE + 0x03d8)
+#define ISP21_RAWAWB_WP_NUM_NOR_3                (ISP21_RAWAWB_BASE + 0x03dc)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_3             (ISP21_RAWAWB_BASE + 0x03e0)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_3             (ISP21_RAWAWB_BASE + 0x03e8)
+#define ISP21_RAWAWB_WP_NUM_BIG_3                (ISP21_RAWAWB_BASE + 0x03ec)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_4             (ISP21_RAWAWB_BASE + 0x0400)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_4             (ISP21_RAWAWB_BASE + 0x0408)
+#define ISP21_RAWAWB_WP_NUM_NOR_4                (ISP21_RAWAWB_BASE + 0x040c)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_4             (ISP21_RAWAWB_BASE + 0x0410)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_4             (ISP21_RAWAWB_BASE + 0x0418)
+#define ISP21_RAWAWB_WP_NUM_BIG_4                (ISP21_RAWAWB_BASE + 0x041c)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_5             (ISP21_RAWAWB_BASE + 0x0430)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_5             (ISP21_RAWAWB_BASE + 0x0438)
+#define ISP21_RAWAWB_WP_NUM_NOR_5                (ISP21_RAWAWB_BASE + 0x043c)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_5             (ISP21_RAWAWB_BASE + 0x0440)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_5             (ISP21_RAWAWB_BASE + 0x0448)
+#define ISP21_RAWAWB_WP_NUM_BIG_5                (ISP21_RAWAWB_BASE + 0x044c)
+#define ISP21_RAWAWB_SUM_RGAIN_NOR_6             (ISP21_RAWAWB_BASE + 0x0460)
+#define ISP21_RAWAWB_SUM_BGAIN_NOR_6             (ISP21_RAWAWB_BASE + 0x0468)
+#define ISP21_RAWAWB_WP_NUM_NOR_6                (ISP21_RAWAWB_BASE + 0x046c)
+#define ISP21_RAWAWB_SUM_RGAIN_BIG_6             (ISP21_RAWAWB_BASE + 0x0470)
+#define ISP21_RAWAWB_SUM_BGAIN_BIG_6             (ISP21_RAWAWB_BASE + 0x0478)
+#define ISP21_RAWAWB_WP_NUM_BIG_6                (ISP21_RAWAWB_BASE + 0x047c)
+#define ISP21_RAWAWB_Y_HIST01                    (ISP21_RAWAWB_BASE + 0x0620)
+#define ISP21_RAWAWB_Y_HIST23                    (ISP21_RAWAWB_BASE + 0x0624)
+#define ISP21_RAWAWB_Y_HIST45                    (ISP21_RAWAWB_BASE + 0x0628)
+#define ISP21_RAWAWB_Y_HIST67                    (ISP21_RAWAWB_BASE + 0x062c)
+#define ISP21_RAWAWB_RAM_CTRL                    (ISP21_RAWAWB_BASE + 0x0650)
+#define ISP21_RAWAWB_WRAM_CTRL                   (ISP21_RAWAWB_BASE + 0x0654)
+#define ISP21_RAWAWB_WRAM_DATA_BASE              (ISP21_RAWAWB_BASE + 0x0660)
+#define ISP21_RAWAWB_RAM_DATA_BASE               (ISP21_RAWAWB_BASE + 0x0700)
+
+
+/* VI_ISP_EN */
+#define VI_CCL_EN			BIT(0)
+#define VI_ISP_EN_SEL			BIT(1)
+#define VI_ISP_BLS_EN			BIT(5)
+#define VI_ISP_GAMMA_IN_EN		BIT(6)
+#define VI_ISP_HDRMGE_EN		BIT(7)
+#define VI_ISP_RAWNR_EN			BIT(9)
+#define VI_ISP_LSC_EN			BIT(10)
+#define VI_ISP_HDRTMO_EN		BIT(11)
+#define VI_ISP_GIC_EN			BTI(12)
+#define VI_ISP_DEBAYER_EN		BIT(13)
+#define VI_ISP_CCM_EN			BIT(14)
+#define VI_ISP_GAMMA12_EN		BIT(15)
+#define VI_ISP_RKWDR_EN			BIT(16)
+#define VI_ISP_DHAZ_EN			BIT(17)
+#define VI_ISP_3DLUT_EN			BIT(18)
+#define VI_ISP_AWB_EN			BIT(20)
+#define VI_ISP_CP_EN			BIT(21)
+#define VI_ISP_RSZ_EN			BIT(22)
+#define VI_ISP_EFF_EN			BIT(24)
+#define VI_ISP_IMP_EN			BIT(25)
+
+/* VI_ISP_PATH */
+#define SW_3A_RAWAE_SEL(a)		(((a) & 0x3) << 16)
+#define SW_3A_RAWAF_SEL(a)		(((a) & 0x3) << 18)
+#define SW_3A_RAWAWB_SEL(a)		(((a) & 0x3) << 20)
+#define SW_3A_RAWAE_SWAP(a)		(((a) & 0x3) << 22)
+
+/* VI_ISP_CLK_CTRL */
+#define CLK_CTRL_ISP_RAW		BIT(0)
+#define CLK_CTRL_ISP_RGB		BIT(1)
+#define CLK_CTRL_ISP_YUV		BIT(2)
+#define CLK_CTRL_ISP_3A			BIT(3)
+#define CLK_CTRL_MIPI_RAM		BIT(4)
+#define CLK_CTRL_ISP_FIFO_RAM		BIT(5)
+#define CLK_CTRL_ISP_DEM_RAM		BIT(6)
+#define CLK_CTRL_ISP_DPCC_RAM		BIT(7)
+#define CLK_CTRL_ISP_IE_RAM		BIT(8)
+#define CLK_CTRL_RSZ_RAM		BIT(9)
+#define CLK_CTRL_JPEG_RAM		BIT(10)
+#define CLK_CTRL_ACLK_ISP		BIT(11)
+#define CLK_CTRL_LDC_RAM		BIT(12)
+#define CLK_CTRL_MI_LDC			BIT(13)
+#define CLK_CTRL_MI_MP			BIT(14)
+#define CLK_CTRL_MI_JPEG		BIT(15)
+#define CLK_CTRL_MI_DP			BIT(16)
+#define CLK_CTRL_MI_Y12			BIT(17)
+#define CLK_CTRL_MI_SP			BIT(18)
+#define CLK_CTRL_MI_RAW0		BIT(19)
+#define CLK_CTRL_MI_RAW1		BIT(20)
+#define CLK_CTRL_MI_READ		BIT(21)
+#define CLK_CTRL_MI_RAWRD		BIT(22)
+#define CLK_CTRL_CP			BIT(23)
+#define CLK_CTRL_IE			BIT(24)
+#define CLK_CTRL_SI			BIT(25)
+#define CLK_CTRL_RSZM			BIT(26)
+#define CLK_CTRL_DPMUX			BIT(27)
+#define CLK_CTRL_JPEG			BIT(28)
+#define CLK_CTRL_RSZS			BIT(29)
+#define CLK_CTRL_MIPI			BIT(30)
+#define CLK_CTRL_MARVINMI		BIT(31)
+
+/* VI_ICCL */
+#define ICCL_ISP_CLK			BIT(0)
+#define ICCL_CP_CLK			BIT(1)
+#define ICCL_MRSZ_CLK			BIT(3)
+#define ICCL_SRSZ_CLK			BIT(4)
+#define ICCL_JPEG_CLK			BIT(5)
+#define ICCL_MI_CLK			BIT(6)
+#define ICCL_IE_CLK			BIT(8)
+#define ICCL_SIMP_CLK			BIT(9)
+#define ICCL_SMIA_CLK			BIT(10)
+#define ICCL_MIPI_CLK			BIT(11)
+#define ICCL_MPFBC_CLK			BIT(14)
+
+/* VI_IRCL */
+#define IRCL_ISP_SW_RST			BIT(0)
+#define IRCL_CP_SW_RST			BIT(1)
+#define IRCL_YCS_SW_RST			BIT(2)
+#define IRCL_MRSZ_SW_RST		BIT(3)
+#define IRCL_SRSZ_SW_RST		BIT(4)
+#define IRCL_JPEG_SW_RST		BIT(5)
+#define IRCL_MI_SW_RST			BIT(6)
+#define IRCL_MARVIN_RST			BIT(7)
+#define IRCL_IE_SW_RST			BIT(8)
+#define IRCL_SI_SW_RST			BIT(9)
+#define IRCL_MIPI_SW_RST		BIT(11)
+#define IRCL_3A_SW_RST			BIT(13)
+
+/* VI_DPCL */
+#define VI_DPCL_IF_SEL_LVDS		BIT(8)
+
+/* SWS_CFG */
+#define SW_SWS_EN			BIT(0)
+#define SW_ISP2PP_PIPE_EN		BIT(1)
+#define SW_MPIP_DROP_FRM_DIS		BIT(2)
+#define SW_SENSOR_ID(a)			(((a) & 0x3) << 4)
+#define SW_SWS_TMO_DDR_RD		BIT(8)
+#define SW_SWS_WDR_DDR_RD		BIT(9)
+#define SW_SWS_DHAZ_DDR_RD		BIT(10)
+#define SW_SWS_ISP_DDRLOAD_DIS		BIT(11)
+#define SW_SWS_DMA_START_MODE(a)	(((a) & 0x3) << 12)
+#define SW_ISP2PP_DIFX16(a)		(((a) & 0xff) << 16)
+#define SW_3A_DDR_WRITE_EN		BIT(24)
+#define SW_ISP2PP_HOLD			BIT(31)
+
+/* LVDS_CTRL */
+#define SW_LVDS_EN			BIT(0)
+#define SW_LVDS_MODE			BIT(1)
+#define SW_LVDS_WIDTH(a)		(((a) & 0x3) << 2)
+#define SW_LVDS_LANE_EN(a)		(((a) & 0xf) << 4)
+#define SW_LVDS_MAIN_LANE(a)		(((a) & 0x3) << 8)
+#define SW_LVDS_START_X(a)		(((a) & 0x7ff) << 10)
+#define SW_LVDS_START_Y(a)		(((a) & 0x7ff) << 21)
+
+#define SW_LVDS_SAV(a)			((a) & 0xfff)
+#define SW_LVDS_EAV(a)			(((a) & 0xfff) << 16)
+
+/* ISP CTRL */
+#define NOC_HURRY_PRIORITY(a)		(((a) & 0x3) << 30)
+#define NOC_HURRY_W_MODE(a)		(((a) & 0x7) << 21)
+#define NOC_HURRY_R_MODE(a)		(((a) & 0x7) << 18)
+
+/* ISP CTRL1 */
+#define ISP2X_SYS_YNR_FST		BIT(23)
+#define ISP2X_SYS_ADRC_FST		BIT(24)
+#define ISP2X_SYS_DHAZ_FST		BIT(25)
+#define ISP2X_SYS_CNR_FST		BIT(26)
+#define ISP2X_SYS_BAY3D_FST		BIT(27)
+#define ISP2X_SYS_BIGMODE_FORCEEN	BIT(28)
+#define ISP2X_SYS_BIGMODE_MANUAL	BIT(29)
+
+/* isp interrupt */
+#define ISP2X_OFF			BIT(0)
+#define ISP2X_FRAME			BIT(1)
+#define ISP2X_DATA_LOSS			BIT(2)
+#define ISP2X_PIC_SIZE_ERROR		BIT(3)
+#define ISP2X_SIAWB_DONE		BIT(4)
+#define ISP2X_FRAME_IN			BIT(5)
+#define ISP2X_V_START			BIT(6)
+#define ISP2X_H_START			BIT(7)
+#define ISP2X_FLASH_ON			BIT(8)
+#define ISP2X_FLASH_OFF			BIT(9)
+#define ISP2X_SHUTTER_ON		BIT(10)
+#define ISP2X_SHUTTER_OFF		BIT(11)
+#define ISP2X_AFM_SUM_OF		BIT(12)
+#define ISP2X_AFM_LUM_OF		BIT(13)
+#define ISP2X_SIAF_FIN			BIT(14)
+#define ISP2X_SIHST_RDY			BIT(15)
+#define ISP2X_LSC_LUT_ERR		BIT(16)
+#define ISP2X_FLASH_CAP			BIT(17)
+#define ISP2X_YUVAE_END			BIT(18)
+#define ISP2X_VSM_END			BIT(19)
+#define ISP2X_HDR_DONE			BIT(20)
+#define ISP2X_DHAZ_DONE			BIT(21)
+#define ISP2X_GAIN_DONE			BIT(22)
+
+/* isp3a interrupt */
+#define ISP2X_3A_RAWAE_BIG		BIT(0)
+#define ISP2X_3A_RAWAE_CH0		BIT(1)
+#define ISP2X_3A_RAWAE_CH1		BIT(2)
+#define ISP2X_3A_RAWAE_CH2		BIT(3)
+#define ISP2X_3A_RAWHIST_BIG		BIT(4)
+#define ISP2X_3A_RAWHIST_CH0		BIT(5)
+#define ISP2X_3A_RAWHIST_CH1		BIT(6)
+#define ISP2X_3A_RAWHIST_CH2		BIT(7)
+#define ISP2X_3A_RAWAF_SUM		BIT(8)
+#define ISP2X_3A_RAWAF_LUM		BIT(9)
+#define ISP2X_3A_RAWAF			BIT(10)
+#define ISP2X_3A_RAWAWB			BIT(11)
+#define ISP2X_3A_DDR_DONE		BIT(12)
+
+/* MI_WR_CTRL */
+#define MI_LUM_BURST_MASK		GENMASK(17, 16)
+#define MI_MIPI_LUM_BURST2		BIT(16)
+#define MI_MIPI_LUM_BURST4		BIT(17)
+#define MI_MIPI_LUM_BURST8		(3 << 16)
+#define MI_MIPI_LUM_BURST16		(0 << 16)
+
+/* mi interrupt */
+#define MI_MP_FRAME			BIT(0)
+#define MI_SP_FRAME			BIT(1)
+#define MI_MBLK_LINE			BIT(2)
+#define MI_FILL_MP_Y			BIT(3)
+#define MI_WRAP_MP_Y			BIT(4)
+#define MI_WRAP_MP_CB			BIT(5)
+#define MI_WRAP_MP_CR			BIT(6)
+#define MI_WRAP_SP_Y			BIT(7)
+#define MI_WRAP_SP_CB			BIT(8)
+#define MI_WARP_SP_CR			BIT(9)
+#define MI_FILL_MP_Y2			BIT(10)
+#define MI_DMA_READY			BIT(11)
+#define MI_Y12Y_FRAME			BIT(12)
+#define MI_Y12C_FRAME			BIT(13)
+#define MI_ALL_FRAME			BIT(14)
+#define MI_RAW0_WR_FRAME		BIT(16)
+#define MI_RAW1_WR_FRAME		BIT(17)
+#define MI_RAW2_WR_FRAME		BIT(18)
+#define MI_RAW3_WR_FRAME		BIT(19)
+#define MI_DBR_WR_FRAME			BIT(20)
+#define MI_GAIN_WR_FRAME		BIT(21)
+#define MI_MPFBC_FRAME			BIT(31)
+
+/* MI_CTRL2 */
+#define SW_BAY3D_FORCEUPD		BIT(22)
+#define SW_BAY3D_WR_AUTOUPD		BIT(16)
+#define SW_GAIN_WR_AUTOUPD		BIT(13)
+#define SW_GAIN_WR_PINGPONG		BIT(12)
+#define SW_DBR_WR_AUTOUPD		BIT(10)
+#define SW_MIMUX_BYTE_SWAP		BIT(9)
+#define SW_MIMUX_EN			BIT(8)
+#define SW_RAW3_WR_AUTOUPD		BIT(3)
+#define SW_RAW2_WR_AUTOUPD		BIT(2)
+#define SW_RAW1_WR_AUTOUPD		BIT(1)
+#define SW_RAW0_WR_AUTOUPD		BIT(0)
+
+/* MI_RD_CTRL2 */
+#define BAY3D_RW_ONEADDR_EN		BIT(4)
+
+/* MPFBC */
+#define SW_MPFBC_EN			BIT(0)
+#define SW_MPFBC_MAINISP_MODE		BIT(3)
+#define SW_MPFBC_YUV_MODE(a)		(((a) & 0x3) << 1)
+#define SW_MPFBC_PINGPONG_EN		BIT(4)
+
+/* CSI2RX */
+#define SW_CSI2RX_EN			BIT(0)
+#define SW_HDR_ESP_MODE(a)		(((a) & 0x3) << 2)
+#define SW_IBUF_OP_MODE(a)		(((a) & 0x0F) << 8)
+#define SW_DMA_2FRM_MODE(a)		(((a) & 0x3) << 12)
+
+#define SW_CSI_LANE(a)			((a) & 0x3)
+#define SW_CSI_CH0_SEL(a)		(((a) & 0x7) << 4)
+#define SW_CSI_CH1_SEL(a)		(((a) & 0x7) << 8)
+#define SW_CSI_CH2_SEL(a)		(((a) & 0x7) << 12)
+#define SW_CSI_CH3_SEL(a)		(((a) & 0x7) << 16)
+#define SW_LVL0_SEL0_CSI1		BIT(20)
+#define SW_LVL0_SEL1_RAW0		BIT(21)
+#define SW_LVL0_SEL2_RAW1		BIT(22)
+#define SW_LVL0_SEL3_RAW3		BIT(23)
+#define SW_LVL1_SEL0(a)			(((a) & 0x3) << 24)
+#define SW_LVL1_SEL1(a)			(((a) & 0x3) << 26)
+#define SW_LVL1_SEL2(a)			(((a) & 0x3) << 28)
+
+#define SW_CSI_ID0(a)			((a) & 0xff)
+#define SW_CSI_ID1(a)			(((a) & 0xff) << 8)
+#define SW_CSI_ID2(a)			(((a) & 0xff) << 16)
+#define SW_CSI_ID3(a)			(((a) & 0xff) << 24)
+
+#define SW_CSI_ID4(a)			((a) & 0xff)
+#define SW_CSI_ID5(a)			(((a) & 0xff) << 8)
+#define SW_CSI_ID6(a)			(((a) & 0xff) << 16)
+#define SW_CSI_ID7(a)			(((a) & 0xff) << 24)
+
+#define PHY_ERR_SOTHS			GENMASK(3, 0)
+#define PHY_ERR_SOTSYNCHS		GENMASK(7, 4)
+#define PHY_ERR_EOTSYNCHS		GENMASK(11, 8)
+#define PHY_ERR_ESC			GENMASK(15, 12)
+#define PHY_ERR_CTL			GENMASK(23, 20)
+
+#define PACKET_ERR_F_BNDRY_MATCG	GENMASK(3, 0)
+#define PACKET_ERR_F_SEQ		GENMASK(7, 4)
+#define PACKET_ERR_FRAME_DATA		GENMASK(11, 8)
+#define PACKET_ERR_ID			GENMASK(15, 12)
+#define PACKET_ERR_ECC_1BIT		GENMASK(19, 16)
+#define PACKET_ERR_ECC_2BIT		BIT(20)
+#define PACKET_ERR_CHECKSUM		GENMASK(27, 24)
+
+#define AFIFO0_OVERFLOW			BIT(0)
+#define AFIFO1X_OVERFLOW		GENMASK(7, 4)
+#define LAFIFO1X_OVERFLOW		GENMASK(11, 8)
+#define AFIFO2X_OVERFLOW		GENMASK(14, 12)
+#define IBUFX3_OVERFLOW			GENMASK(18, 16)
+#define IBUF3R_OVERFLOW			BIT(19)
+#define Y_STAT_AFIFOX3_OVERFLOW		GENMASK(22, 20)
+
+#define RAW0_WR_FRAME			BIT(0)
+#define RAW1_WR_FRAME			BIT(1)
+#define RAW2_WR_FRAME			BIT(2)
+#define MIPI_DROP_FRM			BIT(3)
+#define RAW0_RD_FRAME			BIT(4)
+#define RAW1_RD_FRAME			BIT(5)
+#define RAW2_RD_FRAME			BIT(6)
+#define RAW_WR_SIZE_ERR			GENMASK(15, 8)
+#define MIPI_LINECNT			BIT(16)
+#define RAW_RD_SIZE_ERR			GENMASK(19, 17)
+#define MIPI_FRAME_ST_VC(a)		(((a) & 0xf) << 20)
+#define MIPI_FRAME_END_VC(a)		(((a) & 0xf) << 24)
+#define RAW0_Y_STATE			BIT(28)
+#define RAW1_Y_STATE			BIT(29)
+#define RAW2_Y_STATE			BIT(30)
+
+#define SW_CSI_RAW_WR_EN_ORG		BIT(0)
+#define SW_CSI_RAW_WR_SIMG_MODE		BIT(1)
+#define SW_CSI_RWA_WR_SIMG_SWP		BIT(2)
+#define SW_CSI_RAW_WR_H_OUT		BIT(3)
+#define SW_CSI_RAW_WR_CRC_OUT		BIT(4)
+#define SW_CSI_RAW_WR_CH_EN(a)		(((a) & 0xff) << 8)
+#define SW_CSI_RAW_WR_EN_SHD		BIT(31)
+
+#define SW_CSI_RAW_PIC_V_SIZE(a)	(((a) & 0x3FFF) << 16)
+#define SW_CSI_RAW_PIC_H_SIZE(a)	((a) & 0x3FFF)
+
+#define SW_CSI_RAW_PIC_V_OFF(a)		(((a) & 0x3FFF) << 16)
+#define SW_CSI_RAW_PIC_H_OFF(a)		((a) & 0x3FFF)
+
+#define SW_CSI_RAW0_RD_EN_ORG		BIT(0)
+#define SW_CSI_RAW1_RD_EN_ORG		BIT(1)
+#define SW_CSI_RAW2_RD_EN_ORG		BIT(2)
+#define SW_CSI_RAW_RD_SIMG_MOD		BIT(3)
+#define SW_CSI_RAW_RD_SIMG_SWP		BIT(4)
+#define SW_CSI_RAW_RD_CH_SEL(a)		(((a) & 0x7) << 5)
+
+#define SW_RAW_OUT_EN			BIT(0)
+#define SW_RAWFBC_EN			BIT(1)
+#define SW_RAWFBC_HEAD_DIFF_EN		BIT(4)
+#define SW_RAWFBC_HEAD_DIFF_NUM(a)	(((a) & 0x3) << 8)
+
+#define SW_CSI_ESP_LCNT_PADPIX(a)	((a) & 0xFFF)
+#define SW_CSI_ESP_LCNT_PADNUM(a)	(((a) & 0x3F) << 12)
+
+#define SW_CSI_ESP_IDCD_OBPIX(a)	((a) & 0x7F)
+#define SW_CSI_ESP_IDCD_EFPIX(a)	(((a) & 0x7F) << 16)
+
+#define SW_Y_STAT_INT_MODE_MASK		GENMASK(3, 2)
+#define SW_Y_STAT_RD_FRM_ID_MASK	GENMASK(5, 4)
+#define SW_Y_STAT_RD_TILE_ID_MASK	GENMASK(7, 6)
+#define SW_Y_STAT_EN			BIT(0)
+#define SW_Y_STAT_RD_EN			BIT(1)
+#define SW_Y_STAT_INT_MODE(a)		(((a) & 0x3) << 2)
+#define SW_Y_STAT_RD_FRM_ID(a)		(((a) & 0x3) << 4)
+#define SW_Y_STAT_RD_TILE_ID(a)		(((a) & 0x3) << 6)
+#define SW_Y_STAT_BLK_R(a)		(((a) & 0x1f) << 8)
+#define SW_Y_STAT_BLK_G(a)		(((a) & 0x1f) << 16)
+#define SW_Y_STAT_BLK_B(a)		(((a) & 0x1f) << 24)
+
+/* DEBAYER */
+#define SW_DEBAYER_EN			BIT(0)
+#define SW_DEBAYER_FILTER_G_EN		BIT(4)
+#define SW_DEBAYER_FILTER_C_EN		BIT(8)
+
+#define SW_DEBAYER_CLIP_EN		BIT(0)
+
+/* HDRMGE */
+#define SW_HDRMGE_EN			BIT(0)
+#define SW_HDRMGE_MODE_NORMAL		(0 << 2)
+#define SW_HDRMGE_MODE_FRAMEX2		BIT(2)
+#define SW_HDRMGE_MODE_FRAMEX3		(2 << 2)
+
+/* BLS */
+/* ISP_BLS_CTRL */
+#define ISP_BLS_ENA			BIT(0)
+#define ISP_BLS_MODE_MEASURED		BIT(1)
+#define ISP_BLS_MODE_FIXED		0
+#define ISP_BLS_WINDOW_1		(1 << 2)
+#define ISP_BLS_WINDOW_2		(2 << 2)
+#define ISP_BLS_BLS1_EN		BIT(4)
+
+/* GIC */
+/* ISP_GIC_CTRL */
+#define ISP_GIC_ENA			BIT(0)
+#define ISP_GIC_EDGE_OPEN		BIT(1)
+
+/* DHAZ */
+/* ISP_DHAZ_CTRL */
+#define ISP_DHAZ_ENMUX			BIT(0)
+#define ISP_DHAZ_NOBIGEN		BIT(2)
+#define ISP_DHAZ_BIGEN			BIT(3)
+#define ISP_DHAZ_DCEN			BIT(4)
+#define ISP_DHAZ_HSTEN			BIT(8)
+#define ISP_DHAZ_HPARAEN		BIT(12)
+#define ISP_DHAZ_HSTCHN			BIT(16)
+#define ISP_DHAZ_ENHANCE		BIT(20)
+
+/* HDRTMO */
+/* ISP_HDRTMO_CTRL */
+#define ISP_HDRTMO_EN			BIT(0)
+
+/* HDRDRC */
+/* ISP21_DRC_CTRL0 */
+#define ISP_DRC_EN			BIT(0)
+
+/* HDRMGE */
+/* ISP_HDRMGE_CTRL */
+#define ISP_HDRMGE_MODE_MASK		GENMASK(3, 2)
+#define ISP_HDRMGE_EN			BIT(0)
+
+/* RAWNR */
+/* ISP_RAWNR_CTRL */
+#define ISP_RAWNR_EN			BIT(0)
+
+/* DPCC */
+/* ISP_DPCC_CTRL */
+#define ISP_DPCC_EN			BIT(0)
+
+/* CCM */
+/* ISP_CCM_CTRL */
+#define ISP_CCM_EN			BIT(0)
+
+/* 3DLUT */
+/* ISP_3DLUT_CTRL */
+#define ISP_3DLUT_EN			BIT(0)
+#define ISP_3DLUT_BYPASS		BIT(1)
+
+/* DEBAYER */
+/* ISP_DEBAYER_CONTROL */
+#define ISP_DEBAYER_EN			BIT(0)
+
+/* LSC */
+/* ISP_LSC_CTRL */
+#define ISP_LSC_EN			BIT(0)
+#define ISP_LSC_LUT_EN			BIT(1)
+#define ISP_ISP_LSC_TABLE_DATA(v0, v1)	\
+	(((v0) & 0x1FFF) | (((v1) & 0x1FFF) << 16))
+
+#define ISP21_YNR_EN			BIT(0)
+#define ISP21_CNR_EN			BIT(0)
+#define ISP21_SHARP_EN			BIT(0)
+#define ISP21_BAYNR_EN			BIT(0)
+#define ISP21_BAY3D_EN			BIT(0)
+
+/* ISP21 ISP CTRL0 */
+#define ISP21_CGC_RATIO_EN		BIT(29)
+#define ISP21_CGC_YUV_LIMIT		BIT(28)
+#define ISP21_NOC_HURRY_W1_MODE(a)	(((a) & 0x7) << 24)
+
+/* ISP CTRL1 */
+#define ISP21_BIGMODE_MODE		BIT(29)
+#define ISP21_BIGMODE_FORCE_EN		BIT(28)
+#define ISP21_RAW3D_FST_FRAME		BIT(27)
+#define ISP21_CNR_FST_FRAME		BIT(26)
+#define ISP21_DHAZ_FST_FRAME		BIT(25)
+#define ISP21_ADRC_FST_FRAME		BIT(24)
+#define ISP21_YNR_FST_FRAME		BIT(23)
+#define ISP21_BT1120_YC_SWAP		BIT(22)
+#define ISP21_DUALEDGE_EN		BIT(21)
+#define ISP21_BI1120_EN			BIT(20)
+#define ISP21_FIELD_INV			BIT(11)
+
+/* ISP21 ACQ_H_OFFS */
+#define ISP21_SENSOR_MODE(a)		(((a) & 3) << 30)
+#define ISP21_SENSOR_INDEX(a)		(((a) & 3) << 28)
+#define ISP21_ACQ_H_OFFS(a)		((a) & 0x7fff)
+
+/* ISP21 ACQ_H_SIZE */
+#define ISP21_ACQ_H_SIZE_BAY3DMI(a)	(((a) & 0xffff) << 16)
+#define ISP21_ACQ_H_SIZE(a)		((a) & 0x7fff)
+
+/* ISP21 MI_WR_INIT */
+#define ISP21_SP_FORCE_UPD		BIT(21)
+#define ISP21_MP_FORCE_UPD		BIT(20)
+
+/* ISP21 MI_WR_CTRL2*/
+#define ISP21_BAY3D_FORCE_UPD		BIT(22)
+#define ISP21_GAIN_FORCE_UPD		BIT(21)
+#define ISP21_DBR_FORCE_UPD		BIT(20)
+#define ISP21_BAY3D_WR_AUTO_UPD		BIT(16)
+
+/* ISP21 CSI2RX */
+#define ISP21_CSI_2PIX_MODE		BIT(1)
+
+#define ISP21_MIPI_DROP_FRM		BIT(31)
+
+#define ISP21_RAW3_WR_FRAME		BIT(3)
+
+#define ISP21_RAW_FORCE_UPD		BIT(31)
+
+/* ISP21 DHAZ/DRC/BAY3D */
+#define ISP21_SELF_FORCE_UPD		BIT(31)
+
+static inline bool dmatx0_is_stream_stopped(void __iomem *base)
+{
+	u32 ret = readl(base + CSI2RX_RAW0_WR_CTRL);
+
+	return !(ret & SW_CSI_RAW_WR_EN_SHD);
+}
+
+static inline bool dmatx1_is_stream_stopped(void __iomem *base)
+{
+	u32 ret = readl(base + CSI2RX_RAW1_WR_CTRL);
+
+	return !(ret & SW_CSI_RAW_WR_EN_SHD);
+}
+
+static inline bool dmatx2_is_stream_stopped(void __iomem *base)
+{
+	u32 ret = readl(base + CSI2RX_RAW2_WR_CTRL);
+
+	return !(ret & SW_CSI_RAW_WR_EN_SHD);
+}
+
+static inline bool dmatx3_is_stream_stopped(void __iomem *base)
+{
+	u32 ret = readl(base + CSI2RX_RAW3_WR_CTRL);
+
+	return !(ret & SW_CSI_RAW_WR_EN_SHD);
+}
+
+static inline bool is_mpfbc_stopped(void __iomem *base)
+{
+	u32 ret = readl(base + ISP_MPFBC_CTRL);
+
+	return !(ret & SW_MPFBC_EN);
+}
+
+static inline void mi_wr_ctrl2(void __iomem *base, u32 val)
+{
+	void __iomem *addr = base + MI_WR_CTRL2;
+
+	writel(val | readl(addr), addr);
+}
+
+static inline void raw_wr_set_pic_size(struct rkisp_stream *stream,
+				       u32 width, u32 height)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+
+	if (stream->out_isp_fmt.fmt_type == FMT_YUV)
+		width *= 2;
+	/* hardware received 16bit embedded data */
+	else if (stream->out_isp_fmt.fmt_type == FMT_EBD)
+		width /= 2;
+	writel(height << 16 | width,
+	       base + stream->config->dma.pic_size);
+}
+
+static inline void raw_wr_set_pic_offs(struct rkisp_stream *stream, u32 val)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+
+	writel(val, base + stream->config->dma.pic_offs);
+}
+
+static inline void raw_wr_ctrl(struct rkisp_stream *stream, u32 val)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+
+	writel(val, base + stream->config->dma.ctrl);
+}
+
+static inline void raw_wr_enable(struct rkisp_stream *stream)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+	void __iomem *addr = base + stream->config->dma.ctrl;
+	u32 val = readl(addr);
+
+	val |= ISP21_RAW_FORCE_UPD | SW_CSI_RAW_WR_EN_ORG;
+	writel(val, addr);
+}
+
+static inline void raw_wr_disable(struct rkisp_stream *stream)
+{
+	void __iomem *base = stream->ispdev->base_addr;
+	void __iomem *addr = base + stream->config->dma.ctrl;
+	u32 val = readl(addr);
+
+	val &= ~(ISP21_RAW_FORCE_UPD | SW_CSI_RAW_WR_EN_ORG);
+	writel(val, addr);
+}
+
+static inline void mi_raw0_rd_set_addr(void __iomem *base, u32 val)
+{
+	writel(val, base + MI_RAW0_RD_BASE);
+}
+
+static inline void mi_raw1_rd_set_addr(void __iomem *base, u32 val)
+{
+	writel(val, base + MI_RAW1_RD_BASE);
+}
+
+static inline void mi_raw2_rd_set_addr(void __iomem *base, u32 val)
+{
+	writel(val, base + MI_RAW2_RD_BASE);
+}
+
+static inline void raw_rd_ctrl(void __iomem *base, u32 val)
+{
+	writel(val, base + CSI2RX_RAW_RD_CTRL);
+}
+
+static inline void mi_raw_length(struct rkisp_stream *stream)
+{
+	bool is_direct = true;
+
+	if (stream->config->mi.length == MI_RAW0_RD_LENGTH ||
+	    stream->config->mi.length == MI_RAW1_RD_LENGTH ||
+	    stream->config->mi.length == MI_RAW2_RD_LENGTH)
+		is_direct = false;
+	rkisp_write(stream->ispdev, stream->config->mi.length,
+		    stream->out_fmt.plane_fmt[0].bytesperline, is_direct);
+	if (stream->ispdev->isp_ver == ISP_V21 || stream->ispdev->isp_ver == ISP_V30)
+		rkisp_set_bits(stream->ispdev, MI_RD_CTRL2, 0, BIT(30), false);
+	if (stream->ispdev->hw_dev->is_unite) {
+		rkisp_next_write(stream->ispdev, stream->config->mi.length,
+				 stream->out_fmt.plane_fmt[0].bytesperline, is_direct);
+		rkisp_next_set_bits(stream->ispdev, MI_RD_CTRL2, 0, BIT(30), false);
+	}
+}
+
+static inline void rx_force_upd(void __iomem *base)
+{
+	void __iomem *addr = base + CSI2RX_RAW_RD_CTRL;
+
+	writel(ISP21_RAW_FORCE_UPD | readl(addr), addr);
+}
+
+#endif /* _RKISP_REGS_V2X_H */
