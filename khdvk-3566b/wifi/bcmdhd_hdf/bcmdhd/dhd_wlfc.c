@@ -3888,3 +3888,728 @@ int dhd_wlfc_disable_credit_borrow_event(dhd_pub_t *dhdp, uint8* event_data)
 	return BCME_OK;
 }
 #endif /* LIMIT_BORROW */
+
+/**
+ * Called eg on receiving a WLC_E_BCMC_CREDIT_SUPPORT event from the dongle (broadcast/multicast
+ * specific)
+ */
+int dhd_wlfc_BCMCCredit_support_event(dhd_pub_t *dhdp)
+{
+	int rc;
+
+	if (dhdp == NULL) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhdp);
+
+	if (!dhdp->wlfc_state || (dhdp->proptxstatus_mode == WLFC_FCMODE_NONE)) {
+		dhd_os_wlfc_unblock(dhdp);
+		return WLFC_UNSUPPORTED;
+	}
+
+	rc = _dhd_wlfc_BCMCCredit_support_update(dhdp->wlfc_state);
+
+	dhd_os_wlfc_unblock(dhdp);
+	return rc;
+}
+
+/** debug specific function */
+int
+dhd_wlfc_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
+{
+	int i;
+	uint8* ea;
+	athost_wl_status_info_t* wlfc;
+	wlfc_hanger_t* h;
+	wlfc_mac_descriptor_t* mac_table;
+	wlfc_mac_descriptor_t* interfaces;
+	char* iftypes[] = {"STA", "AP", "WDS", "p2pGO", "p2pCL"};
+
+	if (!dhdp || !strbuf) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhdp);
+
+	if (!dhdp->wlfc_state || (dhdp->proptxstatus_mode == WLFC_FCMODE_NONE)) {
+		dhd_os_wlfc_unblock(dhdp);
+		return WLFC_UNSUPPORTED;
+	}
+
+	wlfc = (athost_wl_status_info_t*)dhdp->wlfc_state;
+
+	h = (wlfc_hanger_t*)wlfc->hanger;
+	if (h == NULL) {
+		bcm_bprintf(strbuf, "wlfc-hanger not initialized yet\n");
+	}
+
+	mac_table = wlfc->destination_entries.nodes;
+	interfaces = wlfc->destination_entries.interfaces;
+	bcm_bprintf(strbuf, "---- wlfc stats ----\n");
+
+	if (!WLFC_GET_AFQ(dhdp->wlfc_mode)) {
+		h = (wlfc_hanger_t*)wlfc->hanger;
+		if (h == NULL) {
+			bcm_bprintf(strbuf, "wlfc-hanger not initialized yet\n");
+		} else {
+			bcm_bprintf(strbuf, "wlfc hanger (pushed,popped,f_push,"
+				"f_pop,f_slot, pending) = (%d,%d,%d,%d,%d,%d)\n",
+				h->pushed,
+				h->popped,
+				h->failed_to_push,
+				h->failed_to_pop,
+				h->failed_slotfind,
+				(h->pushed - h->popped));
+		}
+	}
+
+	bcm_bprintf(strbuf, "wlfc fail(tlv,credit_rqst,mac_update,psmode_update), "
+		"(dq_full,rollback_fail) = (%d,%d,%d,%d), (%d,%d)\n",
+		wlfc->stats.tlv_parse_failed,
+		wlfc->stats.credit_request_failed,
+		wlfc->stats.mac_update_failed,
+		wlfc->stats.psmode_update_failed,
+		wlfc->stats.delayq_full_error,
+		wlfc->stats.rollback_failed);
+
+	bcm_bprintf(strbuf, "PKTS (init_credit,credit,sent,drop_d,drop_s,outoforder) "
+		"(AC0[%d,%d,%d,%d,%d,%d],AC1[%d,%d,%d,%d,%d,%d],AC2[%d,%d,%d,%d,%d,%d],"
+		"AC3[%d,%d,%d,%d,%d,%d],BC_MC[%d,%d,%d,%d,%d,%d])\n",
+		wlfc->Init_FIFO_credit[0], wlfc->FIFO_credit[0], wlfc->stats.send_pkts[0],
+		wlfc->stats.drop_pkts[0], wlfc->stats.drop_pkts[1], wlfc->stats.ooo_pkts[0],
+		wlfc->Init_FIFO_credit[1], wlfc->FIFO_credit[1], wlfc->stats.send_pkts[1],
+		wlfc->stats.drop_pkts[2], wlfc->stats.drop_pkts[3], wlfc->stats.ooo_pkts[1],
+		wlfc->Init_FIFO_credit[2], wlfc->FIFO_credit[2], wlfc->stats.send_pkts[2],
+		wlfc->stats.drop_pkts[4], wlfc->stats.drop_pkts[5], wlfc->stats.ooo_pkts[2],
+		wlfc->Init_FIFO_credit[3], wlfc->FIFO_credit[3], wlfc->stats.send_pkts[3],
+		wlfc->stats.drop_pkts[6], wlfc->stats.drop_pkts[7], wlfc->stats.ooo_pkts[3],
+		wlfc->Init_FIFO_credit[4], wlfc->FIFO_credit[4], wlfc->stats.send_pkts[4],
+		wlfc->stats.drop_pkts[8], wlfc->stats.drop_pkts[9], wlfc->stats.ooo_pkts[4]);
+
+	bcm_bprintf(strbuf, "\n");
+	for (i = 0; i < WLFC_MAX_IFNUM; i++) {
+		if (interfaces[i].occupied) {
+			char* iftype_desc;
+
+			if (interfaces[i].iftype > WLC_E_IF_ROLE_P2P_CLIENT)
+				iftype_desc = "<Unknown";
+			else
+				iftype_desc = iftypes[interfaces[i].iftype];
+
+			ea = interfaces[i].ea;
+			bcm_bprintf(strbuf, "INTERFACE[%d].ea = "
+				"["MACDBG"], if:%d, type: %s "
+				"netif_flow_control:%s\n", i,
+				MAC2STRDBG(ea), interfaces[i].interface_id,
+				iftype_desc, ((wlfc->hostif_flow_state[i] == OFF)
+				? " OFF":" ON"));
+
+			bcm_bprintf(strbuf, "INTERFACE[%d].PSQ(len,state,credit),"
+				"(trans,supp_trans,onbus)"
+				"= (%d,%s,%d),(%d,%d,%d)\n",
+				i,
+				interfaces[i].psq.n_pkts_tot,
+				((interfaces[i].state ==
+				WLFC_STATE_OPEN) ? "OPEN":"CLOSE"),
+				interfaces[i].requested_credit,
+				interfaces[i].transit_count,
+				interfaces[i].suppr_transit_count,
+				interfaces[i].onbus_pkts_count);
+
+			bcm_bprintf(strbuf, "INTERFACE[%d].PSQ"
+				"(delay0,sup0,afq0),(delay1,sup1,afq1),(delay2,sup2,afq2),"
+				"(delay3,sup3,afq3),(delay4,sup4,afq4) = (%d,%d,%d),"
+				"(%d,%d,%d),(%d,%d,%d),(%d,%d,%d),(%d,%d,%d)\n",
+				i,
+				interfaces[i].psq.q[0].n_pkts,
+				interfaces[i].psq.q[1].n_pkts,
+				interfaces[i].afq.q[0].n_pkts,
+				interfaces[i].psq.q[2].n_pkts,
+				interfaces[i].psq.q[3].n_pkts,
+				interfaces[i].afq.q[1].n_pkts,
+				interfaces[i].psq.q[4].n_pkts,
+				interfaces[i].psq.q[5].n_pkts,
+				interfaces[i].afq.q[2].n_pkts,
+				interfaces[i].psq.q[6].n_pkts,
+				interfaces[i].psq.q[7].n_pkts,
+				interfaces[i].afq.q[3].n_pkts,
+				interfaces[i].psq.q[8].n_pkts,
+				interfaces[i].psq.q[9].n_pkts,
+				interfaces[i].afq.q[4].n_pkts);
+		}
+	}
+
+	bcm_bprintf(strbuf, "\n");
+	for (i = 0; i < WLFC_MAC_DESC_TABLE_SIZE; i++) {
+		if (mac_table[i].occupied) {
+			ea = mac_table[i].ea;
+			bcm_bprintf(strbuf, "MAC_table[%d].ea = "
+				"["MACDBG"], if:%d \n", i,
+				MAC2STRDBG(ea),	mac_table[i].interface_id);
+
+			bcm_bprintf(strbuf, "MAC_table[%d].PSQ(len,state,credit),"
+				"(trans,supp_trans,onbus)"
+				"= (%d,%s,%d),(%d,%d,%d)\n",
+				i,
+				mac_table[i].psq.n_pkts_tot,
+				((mac_table[i].state ==
+				WLFC_STATE_OPEN) ? " OPEN":"CLOSE"),
+				mac_table[i].requested_credit,
+				mac_table[i].transit_count,
+				mac_table[i].suppr_transit_count,
+				mac_table[i].onbus_pkts_count);
+#ifdef PROP_TXSTATUS_DEBUG
+			bcm_bprintf(strbuf, "MAC_table[%d]: (opened, closed) = (%d, %d)\n",
+				i, mac_table[i].opened_ct, mac_table[i].closed_ct);
+#endif // endif
+			bcm_bprintf(strbuf, "MAC_table[%d].PSQ"
+				"(delay0,sup0,afq0),(delay1,sup1,afq1),(delay2,sup2,afq2),"
+				"(delay3,sup3,afq3),(delay4,sup4,afq4) =(%d,%d,%d),"
+				"(%d,%d,%d),(%d,%d,%d),(%d,%d,%d),(%d,%d,%d)\n",
+				i,
+				mac_table[i].psq.q[0].n_pkts,
+				mac_table[i].psq.q[1].n_pkts,
+				mac_table[i].afq.q[0].n_pkts,
+				mac_table[i].psq.q[2].n_pkts,
+				mac_table[i].psq.q[3].n_pkts,
+				mac_table[i].afq.q[1].n_pkts,
+				mac_table[i].psq.q[4].n_pkts,
+				mac_table[i].psq.q[5].n_pkts,
+				mac_table[i].afq.q[2].n_pkts,
+				mac_table[i].psq.q[6].n_pkts,
+				mac_table[i].psq.q[7].n_pkts,
+				mac_table[i].afq.q[3].n_pkts,
+				mac_table[i].psq.q[8].n_pkts,
+				mac_table[i].psq.q[9].n_pkts,
+				mac_table[i].afq.q[4].n_pkts);
+
+		}
+	}
+
+#ifdef PROP_TXSTATUS_DEBUG
+	{
+		int avg;
+		int moving_avg = 0;
+		int moving_samples;
+
+		if (wlfc->stats.latency_sample_count) {
+			moving_samples = sizeof(wlfc->stats.deltas)/sizeof(uint32);
+
+			for (i = 0; i < moving_samples; i++)
+				moving_avg += wlfc->stats.deltas[i];
+			moving_avg /= moving_samples;
+
+			avg = (100 * wlfc->stats.total_status_latency) /
+				wlfc->stats.latency_sample_count;
+			bcm_bprintf(strbuf, "txstatus latency (average, last, moving[%d]) = "
+				"(%d.%d, %03d, %03d)\n",
+				moving_samples, avg/100, (avg - (avg/100)*100),
+				wlfc->stats.latency_most_recent,
+				moving_avg);
+		}
+	}
+
+	bcm_bprintf(strbuf, "wlfc- fifo[0-5] credit stats: sent = (%d,%d,%d,%d,%d,%d), "
+		"back = (%d,%d,%d,%d,%d,%d)\n",
+		wlfc->stats.fifo_credits_sent[0],
+		wlfc->stats.fifo_credits_sent[1],
+		wlfc->stats.fifo_credits_sent[2],
+		wlfc->stats.fifo_credits_sent[3],
+		wlfc->stats.fifo_credits_sent[4],
+		wlfc->stats.fifo_credits_sent[5],
+
+		wlfc->stats.fifo_credits_back[0],
+		wlfc->stats.fifo_credits_back[1],
+		wlfc->stats.fifo_credits_back[2],
+		wlfc->stats.fifo_credits_back[3],
+		wlfc->stats.fifo_credits_back[4],
+		wlfc->stats.fifo_credits_back[5]);
+	{
+		uint32 fifo_cr_sent = 0;
+		uint32 fifo_cr_acked = 0;
+		uint32 request_cr_sent = 0;
+		uint32 request_cr_ack = 0;
+		uint32 bc_mc_cr_ack = 0;
+
+		for (i = 0; i < sizeof(wlfc->stats.fifo_credits_sent)/sizeof(uint32); i++) {
+			fifo_cr_sent += wlfc->stats.fifo_credits_sent[i];
+		}
+
+		for (i = 0; i < sizeof(wlfc->stats.fifo_credits_back)/sizeof(uint32); i++) {
+			fifo_cr_acked += wlfc->stats.fifo_credits_back[i];
+		}
+
+		for (i = 0; i < WLFC_MAC_DESC_TABLE_SIZE; i++) {
+			if (wlfc->destination_entries.nodes[i].occupied) {
+				request_cr_sent +=
+					wlfc->destination_entries.nodes[i].dstncredit_sent_packets;
+			}
+		}
+		for (i = 0; i < WLFC_MAX_IFNUM; i++) {
+			if (wlfc->destination_entries.interfaces[i].occupied) {
+				request_cr_sent +=
+				wlfc->destination_entries.interfaces[i].dstncredit_sent_packets;
+			}
+		}
+		for (i = 0; i < WLFC_MAC_DESC_TABLE_SIZE; i++) {
+			if (wlfc->destination_entries.nodes[i].occupied) {
+				request_cr_ack +=
+					wlfc->destination_entries.nodes[i].dstncredit_acks;
+			}
+		}
+		for (i = 0; i < WLFC_MAX_IFNUM; i++) {
+			if (wlfc->destination_entries.interfaces[i].occupied) {
+				request_cr_ack +=
+					wlfc->destination_entries.interfaces[i].dstncredit_acks;
+			}
+		}
+		bcm_bprintf(strbuf, "wlfc- (sent, status) => pq(%d,%d), vq(%d,%d),"
+			"other:%d, bc_mc:%d, signal-only, (sent,freed): (%d,%d)",
+			fifo_cr_sent, fifo_cr_acked,
+			request_cr_sent, request_cr_ack,
+			wlfc->destination_entries.other.dstncredit_acks,
+			bc_mc_cr_ack,
+			wlfc->stats.signal_only_pkts_sent, wlfc->stats.signal_only_pkts_freed);
+	}
+#endif /* PROP_TXSTATUS_DEBUG */
+	bcm_bprintf(strbuf, "\n");
+	bcm_bprintf(strbuf, "wlfc- pkt((in,2bus,txstats,hdrpull,out),"
+		"(dropped,hdr_only,wlc_tossed,wlc_dropped,wlc_exptime)"
+		"(freed,free_err,rollback)) = "
+		"((%d,%d,%d,%d,%d),(%d,%d,%d,%d,%d),(%d,%d,%d))\n",
+		wlfc->stats.pktin,
+		wlfc->stats.pkt2bus,
+		wlfc->stats.txstatus_in,
+		wlfc->stats.dhd_hdrpulls,
+		wlfc->stats.pktout,
+
+		wlfc->stats.pktdropped,
+		wlfc->stats.wlfc_header_only_pkt,
+		wlfc->stats.wlc_tossed_pkts,
+		wlfc->stats.pkt_dropped,
+		wlfc->stats.pkt_exptime,
+
+		wlfc->stats.pkt_freed,
+		wlfc->stats.pkt_free_err, wlfc->stats.rollback);
+
+	bcm_bprintf(strbuf, "wlfc- suppress((d11,wlc,err),enq(d11,wl,hq,mac?),retx(d11,wlc,hq)) = "
+		"((%d,%d,%d),(%d,%d,%d,%d),(%d,%d,%d))\n",
+		wlfc->stats.d11_suppress,
+		wlfc->stats.wl_suppress,
+		wlfc->stats.bad_suppress,
+
+		wlfc->stats.psq_d11sup_enq,
+		wlfc->stats.psq_wlsup_enq,
+		wlfc->stats.psq_hostq_enq,
+		wlfc->stats.mac_handle_notfound,
+
+		wlfc->stats.psq_d11sup_retx,
+		wlfc->stats.psq_wlsup_retx,
+		wlfc->stats.psq_hostq_retx);
+
+	bcm_bprintf(strbuf, "wlfc- cleanup(txq,psq,fw) = (%d,%d,%d)\n",
+		wlfc->stats.cleanup_txq_cnt,
+		wlfc->stats.cleanup_psq_cnt,
+		wlfc->stats.cleanup_fw_cnt);
+
+	bcm_bprintf(strbuf, "wlfc- generic error: %d\n", wlfc->stats.generic_error);
+
+	for (i = 0; i < WLFC_MAX_IFNUM; i++) {
+		bcm_bprintf(strbuf, "wlfc- if[%d], pkt_cnt_in_q/AC[0-4] = (%d,%d,%d,%d,%d)\n", i,
+			wlfc->pkt_cnt_in_q[i][0],
+			wlfc->pkt_cnt_in_q[i][1],
+			wlfc->pkt_cnt_in_q[i][2],
+			wlfc->pkt_cnt_in_q[i][3],
+			wlfc->pkt_cnt_in_q[i][4]);
+	}
+	bcm_bprintf(strbuf, "\n");
+
+	dhd_os_wlfc_unblock(dhdp);
+	return BCME_OK;
+} /* dhd_wlfc_dump */
+
+int dhd_wlfc_clear_counts(dhd_pub_t *dhd)
+{
+	athost_wl_status_info_t* wlfc;
+	wlfc_hanger_t* hanger;
+
+	if (dhd == NULL) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	if (!dhd->wlfc_state || (dhd->proptxstatus_mode == WLFC_FCMODE_NONE)) {
+		dhd_os_wlfc_unblock(dhd);
+		return WLFC_UNSUPPORTED;
+	}
+
+	wlfc = (athost_wl_status_info_t*)dhd->wlfc_state;
+
+	memset(&wlfc->stats, 0, sizeof(athost_wl_stat_counters_t));
+
+	if (!WLFC_GET_AFQ(dhd->wlfc_mode)) {
+		hanger = (wlfc_hanger_t*)wlfc->hanger;
+
+		hanger->pushed = 0;
+		hanger->popped = 0;
+		hanger->failed_slotfind = 0;
+		hanger->failed_to_pop = 0;
+		hanger->failed_to_push = 0;
+	}
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** returns TRUE if flow control is enabled */
+int dhd_wlfc_get_enable(dhd_pub_t *dhd, bool *val)
+{
+	if (!dhd || !val) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	*val = dhd->wlfc_enabled;
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** Called via an IOVAR */
+int dhd_wlfc_get_mode(dhd_pub_t *dhd, int *val)
+{
+	if (!dhd || !val) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	*val = dhd->wlfc_state ? dhd->proptxstatus_mode : 0;
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** Called via an IOVAR */
+int dhd_wlfc_set_mode(dhd_pub_t *dhd, int val)
+{
+	if (!dhd) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	if (dhd->wlfc_state) {
+		dhd->proptxstatus_mode = val & 0xff;
+	}
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** Called when rx frame is received from the dongle */
+bool dhd_wlfc_is_header_only_pkt(dhd_pub_t * dhd, void *pktbuf)
+{
+	athost_wl_status_info_t* wlfc;
+	bool rc = FALSE;
+
+	if (dhd == NULL) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return FALSE;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	if (!dhd->wlfc_state || (dhd->proptxstatus_mode == WLFC_FCMODE_NONE)) {
+		dhd_os_wlfc_unblock(dhd);
+		return FALSE;
+	}
+
+	wlfc = (athost_wl_status_info_t*)dhd->wlfc_state;
+
+	if (PKTLEN(wlfc->osh, pktbuf) == 0) {
+		wlfc->stats.wlfc_header_only_pkt++;
+		rc = TRUE;
+	}
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return rc;
+}
+
+int dhd_wlfc_flowcontrol(dhd_pub_t *dhdp, bool state, bool bAcquireLock)
+{
+	if (dhdp == NULL) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	if (bAcquireLock) {
+		dhd_os_wlfc_block(dhdp);
+	}
+
+	if (!dhdp->wlfc_state || (dhdp->proptxstatus_mode == WLFC_FCMODE_NONE) ||
+		dhdp->proptxstatus_module_ignore) {
+		if (bAcquireLock) {
+			dhd_os_wlfc_unblock(dhdp);
+		}
+		return WLFC_UNSUPPORTED;
+	}
+
+	if (state != dhdp->proptxstatus_txoff) {
+		dhdp->proptxstatus_txoff = state;
+	}
+
+	if (bAcquireLock) {
+		dhd_os_wlfc_unblock(dhdp);
+	}
+
+	return BCME_OK;
+}
+
+/** Called when eg an rx frame is received from the dongle */
+int dhd_wlfc_save_rxpath_ac_time(dhd_pub_t * dhd, uint8 prio)
+{
+	athost_wl_status_info_t* wlfc;
+	int rx_path_ac = -1;
+
+	if ((dhd == NULL) || (prio >= NUMPRIO)) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	if (!dhd->wlfc_rxpkt_chk) {
+		dhd_os_wlfc_unblock(dhd);
+		return BCME_OK;
+	}
+
+	if (!dhd->wlfc_state || (dhd->proptxstatus_mode == WLFC_FCMODE_NONE)) {
+		dhd_os_wlfc_unblock(dhd);
+		return WLFC_UNSUPPORTED;
+	}
+
+	wlfc = (athost_wl_status_info_t*)dhd->wlfc_state;
+
+	rx_path_ac = prio2fifo[prio];
+	wlfc->rx_timestamp[rx_path_ac] = OSL_SYSUPTIME();
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_get_module_ignore(dhd_pub_t *dhd, int *val)
+{
+	if (!dhd || !val) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	*val = dhd->proptxstatus_module_ignore;
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_set_module_ignore(dhd_pub_t *dhd, int val)
+{
+	uint32 tlv = 0;
+	bool bChanged = FALSE;
+
+	if (!dhd) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	if ((bool)val != dhd->proptxstatus_module_ignore) {
+		dhd->proptxstatus_module_ignore = (val != 0);
+		/* force txstatus_ignore sync with proptxstatus_module_ignore */
+		dhd->proptxstatus_txstatus_ignore = dhd->proptxstatus_module_ignore;
+		if (FALSE == dhd->proptxstatus_module_ignore) {
+			tlv = WLFC_FLAGS_RSSI_SIGNALS |
+				WLFC_FLAGS_XONXOFF_SIGNALS |
+				WLFC_FLAGS_CREDIT_STATUS_SIGNALS |
+				WLFC_FLAGS_HOST_PROPTXSTATUS_ACTIVE;
+		}
+		/* always enable host reorder */
+		tlv |= WLFC_FLAGS_HOST_RXRERODER_ACTIVE;
+		bChanged = TRUE;
+	}
+
+	dhd_os_wlfc_unblock(dhd);
+
+	if (bChanged) {
+		/* select enable proptxtstatus signaling */
+		if (dhd_wl_ioctl_set_intiovar(dhd, "tlv", tlv, WLC_SET_VAR, TRUE, 0)) {
+			DHD_ERROR(("%s: failed to set bdcv2 tlv signaling to 0x%x\n",
+				__FUNCTION__, tlv));
+		} else {
+			DHD_ERROR(("%s: successfully set bdcv2 tlv signaling to 0x%x\n",
+				__FUNCTION__, tlv));
+		}
+	}
+
+#if defined(DHD_WLFC_THREAD)
+	_dhd_wlfc_thread_wakeup(dhd);
+#endif /* defined(DHD_WLFC_THREAD) */
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_get_credit_ignore(dhd_pub_t *dhd, int *val)
+{
+	if (!dhd || !val) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	*val = dhd->proptxstatus_credit_ignore;
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_set_credit_ignore(dhd_pub_t *dhd, int val)
+{
+	if (!dhd) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	dhd->proptxstatus_credit_ignore = (val != 0);
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_get_txstatus_ignore(dhd_pub_t *dhd, int *val)
+{
+	if (!dhd || !val) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	*val = dhd->proptxstatus_txstatus_ignore;
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_set_txstatus_ignore(dhd_pub_t *dhd, int val)
+{
+	if (!dhd) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	dhd->proptxstatus_txstatus_ignore = (val != 0);
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_get_rxpkt_chk(dhd_pub_t *dhd, int *val)
+{
+	if (!dhd || !val) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	*val = dhd->wlfc_rxpkt_chk;
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+/** called via an IOVAR */
+int dhd_wlfc_set_rxpkt_chk(dhd_pub_t *dhd, int val)
+{
+	if (!dhd) {
+		DHD_ERROR(("Error: %s():%d\n", __FUNCTION__, __LINE__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhd);
+
+	dhd->wlfc_rxpkt_chk = (val != 0);
+
+	dhd_os_wlfc_unblock(dhd);
+
+	return BCME_OK;
+}
+
+#ifdef PROPTX_MAXCOUNT
+int dhd_wlfc_update_maxcount(dhd_pub_t *dhdp, uint8 ifid, int maxcount)
+{
+	athost_wl_status_info_t* ctx;
+	int rc = 0;
+
+	if (dhdp == NULL) {
+		DHD_ERROR(("%s: dhdp is NULL\n", __FUNCTION__));
+		return BCME_BADARG;
+	}
+
+	dhd_os_wlfc_block(dhdp);
+
+	if (!dhdp->wlfc_state || (dhdp->proptxstatus_mode == WLFC_FCMODE_NONE)) {
+		rc = WLFC_UNSUPPORTED;
+		goto exit;
+	}
+
+	if (ifid >= WLFC_MAX_IFNUM) {
+		DHD_ERROR(("%s: bad ifid\n", __FUNCTION__));
+		rc = BCME_BADARG;
+		goto exit;
+	}
+
+	ctx = (athost_wl_status_info_t*)dhdp->wlfc_state;
+	ctx->destination_entries.interfaces[ifid].transit_maxcount = maxcount;
+exit:
+	dhd_os_wlfc_unblock(dhdp);
+	return rc;
+}
+#endif /* PROPTX_MAXCOUNT */
+
+#endif /* PROP_TXSTATUS */
