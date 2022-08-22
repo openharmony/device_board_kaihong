@@ -24898,3 +24898,332 @@ wl_notify_start_auth(struct bcm_cfg80211 *cfg,
 
 	return BCME_OK;
 }
+
+static s32
+wl_handle_auth_event(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	const wl_event_msg_t *e, void *data)
+{
+	bcm_struct_cfgdev *cfgdev = ndev_to_cfgdev(ndev);
+	u8 bsscfgidx = e->bsscfgidx;
+	u8 *mgmt_frame = NULL;
+	u8 *body = NULL;
+	u32 body_len = 0;
+	s32 chan;
+	chanspec_t chanspec;
+	s32 freq;
+	struct ether_addr da;
+	struct ether_addr bssid;
+	u32 len = ntoh32(e->datalen);
+	u32 status = ntoh32(e->status);
+	int err = BCME_OK;
+	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+	u16 channel;
+	struct ieee80211_supported_band *band;
+
+	if (wl_get_mode_by_netdev(cfg, ndev) == WL_INVALID) {
+		return WL_INVALID;
+	}
+
+	if (!len) {
+		WL_ERR(("WLC_E_AUTH has no payload. status %d reason %d\n",
+			status, ntoh32(e->reason)));
+#ifdef WL_EXT_IAPSTA
+		if (status != WLC_E_STATUS_SUCCESS)
+			wl_ext_in4way_sync(ndev, STA_NO_SCAN_IN4WAY|STA_NO_BTC_IN4WAY,
+				WL_EXT_STATUS_DISCONNECTED, NULL);
+#endif
+		return WL_INVALID;
+	}
+
+	body = (u8 *)MALLOCZ(cfg->osh, len);
+	if (body == NULL) {
+		WL_ERR(("Failed to allocate body\n"));
+		return WL_INVALID;
+	}
+	(void)memcpy_s(body, len, data, len);
+
+	err = wldev_iovar_getbuf_bsscfg(ndev, "cur_etheraddr",
+		NULL, 0, cfg->ioctl_buf, WLC_IOCTL_SMLEN, bsscfgidx, &cfg->ioctl_buf_sync);
+	if (unlikely(err)) {
+		WL_ERR(("Could not get cur_etheraddr %d\n", err));
+		goto exit;
+	}
+	(void)memcpy_s(da.octet, ETHER_ADDR_LEN, cfg->ioctl_buf, ETHER_ADDR_LEN);
+
+	bzero(&bssid, sizeof(bssid));
+	err = wldev_ioctl_get(ndev, WLC_GET_BSSID, &bssid, ETHER_ADDR_LEN);
+	/* Use e->addr as bssid for Sta case , before association completed */
+	if (err == BCME_NOTASSOCIATED) {
+		(void)memcpy_s(&bssid, ETHER_ADDR_LEN, &e->addr, ETHER_ADDR_LEN);
+		err = BCME_OK;
+	}
+	if (unlikely(err)) {
+		MFREE(cfg->osh, body, len);
+		WL_ERR(("Could not get bssid %d\n", err));
+		return err;
+	}
+
+	err = wldev_iovar_getint(ndev, "chanspec", &chan);
+	if (unlikely(err)) {
+		WL_ERR(("Could not get chanspec %d\n", err));
+		goto exit;
+	}
+
+	chanspec = wl_chspec_driver_to_host(chan);
+	channel = wf_chspec_ctlchan(chanspec);
+
+	if (channel <= CH_MAX_2G_CHANNEL)
+		band = wiphy->bands[IEEE80211_BAND_2GHZ];
+	else
+		band = wiphy->bands[IEEE80211_BAND_5GHZ];
+	if (!band) {
+		WL_ERR(("No valid band\n"));
+		goto exit;
+	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
+	freq = ieee80211_channel_to_frequency(channel);
+#else
+	freq = ieee80211_channel_to_frequency(channel, band->band);
+#endif
+
+	body_len = len;
+	err = wl_frame_get_mgmt(cfg, FC_AUTH, &da, &e->addr, &bssid,
+		&mgmt_frame, &len, body);
+	if (!err) {
+#ifdef WL_EXT_IAPSTA
+		wl_ext_update_extsae_4way(ndev, (struct ieee80211_mgmt *)mgmt_frame, FALSE);
+#endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
+		cfg80211_rx_mgmt(cfgdev, freq, 0, mgmt_frame, len, 0);
+#ifdef CONFIG_AP6XXX_WIFI6_HDF
+		HdfWifiEventRxMgmt(get_hdf_netdev(g_event_ifidx), freq, 0, mgmt_frame, len);
+#endif
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0))
+		cfg80211_rx_mgmt(cfgdev, freq, 0, mgmt_frame, len, 0, GFP_ATOMIC);
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0))
+		cfg80211_rx_mgmt(cfgdev, freq, 0, mgmt_frame, len, GFP_ATOMIC);
+#else
+		cfg80211_rx_mgmt(ndev, freq, mgmt_frame, len, GFP_ATOMIC);
+#endif
+		MFREE(cfg->osh, mgmt_frame, len);
+	}
+
+exit:
+	if (body) {
+		MFREE(cfg->osh, body, body_len);
+	}
+
+	return err;
+}
+
+/** Called by the cfg80211 framework */
+static s32
+wl_cfg80211_external_auth(struct wiphy *wiphy,
+	struct net_device *ndev, struct cfg80211_external_auth_params *ext_auth_param)
+{
+	int err = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	wl_assoc_mgr_cmd_t cmd;
+
+	WL_DBG(("Enter\n"));
+
+	if (!ext_auth_param ||
+		ETHER_ISNULLADDR(ext_auth_param->bssid)) {
+		WL_ERR(("Invalid param\n"));
+		return -EINVAL;
+	}
+
+	cmd.version = WL_ASSOC_MGR_CURRENT_VERSION;
+	cmd.length = sizeof(cmd);
+	cmd.cmd = WL_ASSOC_MGR_CMD_PAUSE_ON_EVT;
+	cmd.params = WL_ASSOC_MGR_PARAMS_EVENT_NONE;
+	err = wldev_iovar_setbuf(ndev, "assoc_mgr_cmd", (void *)&cmd, sizeof(cmd),
+		cfg->ioctl_buf, WLC_IOCTL_SMLEN, &cfg->ioctl_buf_sync);
+	if (unlikely(err)) {
+		WL_ERR(("Failed to pause assoc(%d)\n", err));
+	}
+
+	return err;
+}
+
+static s32
+wl_cfg80211_mgmt_auth_tx(struct net_device *dev, bcm_struct_cfgdev *cfgdev,
+	struct bcm_cfg80211 *cfg, const u8 *buf, size_t len, s32 bssidx, u64 *cookie)
+{
+	int err = 0;
+	wl_assoc_mgr_cmd_t *cmd;
+	char *ambuf = NULL;
+	int param_len;
+	bool ack = true;
+
+	param_len = sizeof(wl_assoc_mgr_cmd_t) + len;
+	ambuf = MALLOCZ(cfg->osh, param_len);
+	if (ambuf == NULL) {
+		WL_ERR(("unable to allocate frame\n"));
+		return -ENOMEM;
+	}
+
+	cmd = (wl_assoc_mgr_cmd_t*)ambuf;
+	cmd->version = WL_ASSOC_MGR_CURRENT_VERSION;
+	cmd->length = len;
+	cmd->cmd = WL_ASSOC_MGR_CMD_SEND_AUTH;
+	err = memcpy_s(&cmd->params, len, buf, len);
+	if (err) {
+		WL_ERR(("Failed to copy cmd params(%d)\n", err));
+		ack = false;
+	} else {
+		err = wldev_iovar_setbuf(dev, "assoc_mgr_cmd", ambuf, param_len,
+			cfg->ioctl_buf, WLC_IOCTL_SMLEN, &cfg->ioctl_buf_sync);
+		if (unlikely(err)) {
+			WL_ERR(("Failed to send auth(%d)\n", err));
+			ack = false;
+		}
+#ifdef WL_EXT_IAPSTA
+		else {
+			const struct ieee80211_mgmt *mgmt = (const struct ieee80211_mgmt *)buf;
+			wl_ext_update_extsae_4way(dev, mgmt, TRUE);
+		}
+#endif
+	}
+
+	MFREE(cfg->osh, ambuf, param_len);
+
+	cfg80211_mgmt_tx_status(cfgdev, *cookie, buf, len, ack, GFP_KERNEL);
+	return BCME_OK;
+}
+#endif /* WL_CLIENT_SAE */
+
+static s32
+wl_cfg80211_config_rsnxe_ie(struct net_device *dev,
+	const u8 *parse, u32 len)
+{
+	bcm_tlv_t *ie = NULL;
+	s32 err = 0;
+	u8 ie_len = 0;
+	char smbuf[WLC_IOCTL_SMLEN];
+
+	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_RSNXE_ID))) {
+		WL_DBG(("Found RSNXE ie\n"));
+		break;
+	}
+
+	ie_len = (ie != NULL) ? (ie->len + BCM_TLV_HDR_SIZE): 0;
+
+	err = wldev_iovar_setbuf(dev, "rsnxe", ie, ie_len,
+		smbuf, sizeof(smbuf), NULL);
+	if (!err) {
+		WL_DBG(("Configured RSNXE IE\n"));
+	} else if (err == BCME_UNSUPPORTED) {
+		WL_DBG(("FW does not support rsnxe iovar\n"));
+		err = BCME_OK;
+	} else {
+		WL_ERR(("rsnxe set error (%d)\n", err));
+	}
+	return err;
+}
+
+s32
+wl_cfg80211_autochannel(struct net_device *dev, char* command, int total_len)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	int ret = 0;
+	int bytes_written = -1;
+
+	sscanf(command, "%*s %d", &cfg->autochannel);
+
+	if (cfg->autochannel == 0) {
+		cfg->best_2g_ch = 0;
+		cfg->best_5g_ch = 0;
+	} else if (cfg->autochannel == 2) {
+		bytes_written = snprintf(command, total_len, "2g=%d 5g=%d",
+			cfg->best_2g_ch, cfg->best_5g_ch);
+		WL_TRACE(("command result is %s\n", command));
+		ret = bytes_written;
+	}
+
+	return ret;
+}
+
+#ifdef WL_STATIC_IF
+bool
+wl_cfg80211_static_if(struct bcm_cfg80211 *cfg, struct net_device *ndev)
+{
+	int i;
+
+	if (!cfg)
+		return FALSE;
+
+	for (i=0; i<DHD_MAX_STATIC_IFS; i++) {
+		if (cfg->static_ndev[i] == ndev)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+int
+wl_cfg80211_static_ifidx(struct bcm_cfg80211 *cfg, struct net_device *ndev)
+{
+	int i;
+
+	if (!cfg)
+		return -1;
+
+	for (i=0; i<DHD_MAX_STATIC_IFS; i++) {
+		if (cfg->static_ndev[i] == ndev)
+			return i;
+	}
+
+	return -1;
+}
+
+struct net_device *
+wl_cfg80211_static_if_active(struct bcm_cfg80211 *cfg)
+{
+	int i;
+
+	if (!cfg)
+		return NULL;
+
+	for (i=0; i<DHD_MAX_STATIC_IFS; i++) {
+		if (cfg->static_ndev[i] && (cfg->static_ndev_state[i] & NDEV_STATE_FW_IF_CREATED))
+			return cfg->static_ndev[i];
+	}
+
+	return NULL;
+}
+
+int
+wl_cfg80211_static_if_name(struct bcm_cfg80211 *cfg, const char *name)
+{
+	int i;
+
+	if (!cfg)
+		return -1;
+
+	for (i=0; i<DHD_MAX_STATIC_IFS; i++) {
+		if (cfg->static_ndev[i] && (!strncmp(cfg->static_ndev[i]->name, name, strlen(name))))
+			return i;
+	}
+
+	return -1;
+}
+
+void
+wl_cfg80211_static_if_dev_close(struct net_device *dev)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	int i;
+
+	if (!cfg)
+		return;
+
+	for (i=0; i<DHD_MAX_STATIC_IFS; i++) {
+		if (cfg->static_ndev[i] && (cfg->static_ndev[i]->flags & IFF_UP))
+			dev_close(cfg->static_ndev[i]);
+	}
+
+	return;
+}
+#endif /* WL_STATIC_IF */
