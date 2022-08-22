@@ -3679,3 +3679,709 @@ process_nvram_vars(char *varbuf, unsigned int len)
 	return buf_len;
 }
 
+#ifndef setbit /* As in the header file */
+#ifdef BCMUTILS_BIT_MACROS_USE_FUNCS
+/* Set bit in byte array. */
+void
+setbit(void *array, uint bit)
+{
+	((uint8 *)array)[bit / NBBY] |= 1 << (bit % NBBY);
+}
+
+/* Clear bit in byte array. */
+void
+clrbit(void *array, uint bit)
+{
+	((uint8 *)array)[bit / NBBY] &= ~(1 << (bit % NBBY));
+}
+
+/* Test if bit is set in byte array. */
+bool
+isset(const void *array, uint bit)
+{
+	return (((const uint8 *)array)[bit / NBBY] & (1 << (bit % NBBY)));
+}
+
+/* Test if bit is clear in byte array. */
+bool
+isclr(const void *array, uint bit)
+{
+	return ((((const uint8 *)array)[bit / NBBY] & (1 << (bit % NBBY))) == 0);
+}
+#endif /* BCMUTILS_BIT_MACROS_USE_FUNCS */
+#endif /* setbit */
+
+void
+set_bitrange(void *array, uint start, uint end, uint maxbit)
+{
+	uint startbyte = start/NBBY;
+	uint endbyte = end/NBBY;
+	uint i, startbytelastbit, endbytestartbit;
+
+	if (end >= start) {
+		if (endbyte - startbyte > 1)
+		{
+			startbytelastbit = (startbyte+1)*NBBY - 1;
+			endbytestartbit = endbyte*NBBY;
+			for (i = startbyte+1; i < endbyte; i++)
+				((uint8 *)array)[i] = 0xFF;
+			for (i = start; i <= startbytelastbit; i++)
+				setbit(array, i);
+			for (i = endbytestartbit; i <= end; i++)
+				setbit(array, i);
+		} else {
+			for (i = start; i <= end; i++)
+				setbit(array, i);
+		}
+	}
+	else {
+		set_bitrange(array, start, maxbit, maxbit);
+		set_bitrange(array, 0, end, maxbit);
+	}
+}
+
+void
+bcm_bitprint32(const uint32 u32arg)
+{
+	int i;
+	for (i = NBITS(uint32) - 1; i >= 0; i--) {
+		if (isbitset(u32arg, i)) {
+			printf("1");
+		} else {
+			printf("0");
+		}
+
+		if ((i % NBBY) == 0) printf(" ");
+	}
+	printf("\n");
+}
+
+/* calculate checksum for ip header, tcp / udp header / data */
+uint16
+bcm_ip_cksum(uint8 *buf, uint32 len, uint32 sum)
+{
+	while (len > 1) {
+		sum += (uint32)((buf[0] << 8) | buf[1]);
+		buf += 2;
+		len -= 2;
+	}
+
+	if (len > 0) {
+		sum += (uint32)((*buf) << 8);
+	}
+
+	while (sum >> 16) {
+		sum = (sum & 0xffff) + (sum >> 16);
+	}
+
+	return ((uint16)~sum);
+}
+
+int
+BCMRAMFN(valid_bcmerror)(int e)
+{
+	return ((e <= 0) && (e >= BCME_LAST));
+}
+
+#ifdef DEBUG_COUNTER
+#if (OSL_SYSUPTIME_SUPPORT == TRUE)
+void counter_printlog(counter_tbl_t *ctr_tbl)
+{
+	uint32 now;
+
+	if (!ctr_tbl->enabled)
+		return;
+
+	now = OSL_SYSUPTIME();
+
+	if (now - ctr_tbl->prev_log_print > ctr_tbl->log_print_interval) {
+		uint8 i = 0;
+		printf("counter_print(%s %d):", ctr_tbl->name, now - ctr_tbl->prev_log_print);
+
+		for (i = 0; i < ctr_tbl->needed_cnt; i++) {
+			printf(" %u", ctr_tbl->cnt[i]);
+		}
+		printf("\n");
+
+		ctr_tbl->prev_log_print = now;
+		bzero(ctr_tbl->cnt, CNTR_TBL_MAX * sizeof(uint));
+	}
+}
+#else
+/* OSL_SYSUPTIME is not supported so no way to get time */
+#define counter_printlog(a) do {} while (0)
+#endif /* OSL_SYSUPTIME_SUPPORT == TRUE */
+#endif /* DEBUG_COUNTER */
+
+/* calculate partial checksum */
+static uint32
+ip_cksum_partial(uint32 sum, uint8 *val8, uint32 count)
+{
+	uint32 i;
+	uint16 *val16 = (uint16 *)val8;
+
+	ASSERT(val8 != NULL);
+	/* partial chksum calculated on 16-bit values */
+	ASSERT((count % 2) == 0);
+
+	count /= 2;
+
+	for (i = 0; i < count; i++) {
+		sum += *val16++;
+	}
+	return sum;
+}
+
+/* calculate IP checksum */
+static uint16
+ip_cksum(uint32 sum, uint8 *val8, uint32 count)
+{
+	uint16 *val16 = (uint16 *)val8;
+
+	ASSERT(val8 != NULL);
+
+	while (count > 1) {
+		sum += *val16++;
+		count -= 2;
+	}
+	/*  add left-over byte, if any */
+	if (count > 0) {
+		sum += (*(uint8 *)val16);
+	}
+
+	/*  fold 32-bit sum to 16 bits */
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	return ((uint16)~sum);
+}
+
+/* calculate IPv4 header checksum
+ * - input ip points to IP header in network order
+ * - output cksum is in network order
+ */
+uint16
+ipv4_hdr_cksum(uint8 *ip, int ip_len)
+{
+	uint32 sum = 0;
+	uint8 *ptr = ip;
+
+	ASSERT(ip != NULL);
+	ASSERT(ip_len >= IPV4_MIN_HEADER_LEN);
+
+	/* partial cksum skipping the hdr_chksum field */
+	sum = ip_cksum_partial(sum, ptr, OFFSETOF(struct ipv4_hdr, hdr_chksum));
+	ptr += OFFSETOF(struct ipv4_hdr, hdr_chksum) + 2;
+
+	/* return calculated chksum */
+	return ip_cksum(sum, ptr, (uint32)((uint)ip_len - OFFSETOF(struct ipv4_hdr, src_ip)));
+}
+
+/* calculate TCP header checksum using partial sum */
+static uint16
+tcp_hdr_chksum(uint32 sum, uint8 *tcp_hdr, uint16 tcp_len)
+{
+	uint8 *ptr = tcp_hdr;
+
+	ASSERT(tcp_hdr != NULL);
+	ASSERT(tcp_len >= TCP_MIN_HEADER_LEN);
+
+	/* partial TCP cksum skipping the chksum field */
+	sum = ip_cksum_partial(sum, ptr, OFFSETOF(struct bcmtcp_hdr, chksum));
+	ptr += OFFSETOF(struct bcmtcp_hdr, chksum) + 2;
+
+	/* return calculated chksum */
+	return ip_cksum(sum, ptr, tcp_len - OFFSETOF(struct bcmtcp_hdr, urg_ptr));
+}
+
+struct tcp_pseudo_hdr {
+	uint8   src_ip[IPV4_ADDR_LEN];  /* Source IP Address */
+	uint8   dst_ip[IPV4_ADDR_LEN];  /* Destination IP Address */
+	uint8	zero;
+	uint8	prot;
+	uint16	tcp_size;
+};
+
+/* calculate IPv4 TCP header checksum
+ * - input ip and tcp points to IP and TCP header in network order
+ * - output cksum is in network order
+ */
+uint16
+ipv4_tcp_hdr_cksum(uint8 *ip, uint8 *tcp, uint16 tcp_len)
+{
+	struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)ip;
+	struct tcp_pseudo_hdr tcp_ps;
+	uint32 sum = 0;
+
+	ASSERT(ip != NULL);
+	ASSERT(tcp != NULL);
+	ASSERT(tcp_len >= TCP_MIN_HEADER_LEN);
+
+	if (!ip || !tcp || !(tcp_len >= TCP_MIN_HEADER_LEN))
+		return 0;
+	/* pseudo header cksum */
+	memset(&tcp_ps, 0, sizeof(tcp_ps));
+	memcpy(&tcp_ps.dst_ip, ip_hdr->dst_ip, IPV4_ADDR_LEN);
+	memcpy(&tcp_ps.src_ip, ip_hdr->src_ip, IPV4_ADDR_LEN);
+	tcp_ps.zero = 0;
+	tcp_ps.prot = ip_hdr->prot;
+	tcp_ps.tcp_size = hton16(tcp_len);
+	sum = ip_cksum_partial(sum, (uint8 *)&tcp_ps, sizeof(tcp_ps));
+
+	/* return calculated TCP header chksum */
+	return tcp_hdr_chksum(sum, tcp, tcp_len);
+}
+
+struct ipv6_pseudo_hdr {
+	uint8  saddr[IPV6_ADDR_LEN];
+	uint8  daddr[IPV6_ADDR_LEN];
+	uint16 payload_len;
+	uint8  zero;
+	uint8  next_hdr;
+};
+
+/* calculate IPv6 TCP header checksum
+ * - input ipv6 and tcp points to IPv6 and TCP header in network order
+ * - output cksum is in network order
+ */
+uint16
+ipv6_tcp_hdr_cksum(uint8 *ipv6, uint8 *tcp, uint16 tcp_len)
+{
+	struct ipv6_hdr *ipv6_hdr = (struct ipv6_hdr *)ipv6;
+	struct ipv6_pseudo_hdr ipv6_pseudo;
+	uint32 sum = 0;
+
+	ASSERT(ipv6 != NULL);
+	ASSERT(tcp != NULL);
+	ASSERT(tcp_len >= TCP_MIN_HEADER_LEN);
+
+	if (!ipv6 || !tcp || !(tcp_len >= TCP_MIN_HEADER_LEN))
+		return 0;
+	/* pseudo header cksum */
+	memset((char *)&ipv6_pseudo, 0, sizeof(ipv6_pseudo));
+	memcpy((char *)ipv6_pseudo.saddr, (char *)ipv6_hdr->saddr.addr,
+		sizeof(ipv6_pseudo.saddr));
+	memcpy((char *)ipv6_pseudo.daddr, (char *)ipv6_hdr->daddr.addr,
+		sizeof(ipv6_pseudo.daddr));
+	ipv6_pseudo.payload_len = ipv6_hdr->payload_len;
+	ipv6_pseudo.next_hdr = ipv6_hdr->nexthdr;
+	sum = ip_cksum_partial(sum, (uint8 *)&ipv6_pseudo, sizeof(ipv6_pseudo));
+
+	/* return calculated TCP header chksum */
+	return tcp_hdr_chksum(sum, tcp, tcp_len);
+}
+
+void *_bcmutils_dummy_fn = NULL;
+
+/* GROUP 1 --- start
+ * These function under GROUP 1 are general purpose functions to do complex number
+ * calculations and square root calculation.
+ */
+
+uint32 sqrt_int(uint32 value)
+{
+	uint32 root = 0, shift = 0;
+
+	/* Compute integer nearest to square root of input integer value */
+	for (shift = 0; shift < 32; shift += 2) {
+		if (((0x40000000 >> shift) + root) <= value) {
+			value -= ((0x40000000 >> shift) + root);
+			root = (root >> 1) | (0x40000000 >> shift);
+		}
+		else {
+			root = root >> 1;
+		}
+	}
+
+	/* round to the nearest integer */
+	if (root < value) ++root;
+
+	return root;
+}
+/* GROUP 1 --- end */
+
+/* read/write field in a consecutive bits in an octet array.
+ * 'addr' is the octet array's start byte address
+ * 'size' is the octet array's byte size
+ * 'stbit' is the value's start bit offset
+ * 'nbits' is the value's bit size
+ * This set of utilities are for convenience. Don't use them
+ * in time critical/data path as there's a great overhead in them.
+ */
+void
+setbits(uint8 *addr, uint size, uint stbit, uint nbits, uint32 val)
+{
+	uint fbyte = stbit >> 3;		/* first byte */
+	uint lbyte = (stbit + nbits - 1) >> 3;	/* last byte */
+	uint fbit = stbit & 7;			/* first bit in the first byte */
+	uint rbits = (nbits > 8 - fbit ?
+	              nbits - (8 - fbit) :
+	              0) & 7;			/* remaining bits of the last byte when not 0 */
+	uint8 mask;
+	uint byte;
+
+	BCM_REFERENCE(size);
+
+	ASSERT(fbyte < size);
+	ASSERT(lbyte < size);
+	ASSERT(nbits <= (sizeof(val) << 3));
+
+	/* all bits are in the same byte */
+	if (fbyte == lbyte) {
+		mask = (uint8)(((1 << nbits) - 1) << fbit);
+		addr[fbyte] &= ~mask;
+		addr[fbyte] |= (uint8)(val << fbit);
+		return;
+	}
+
+	/* first partial byte */
+	if (fbit > 0) {
+		mask = (uint8)(0xff << fbit);
+		addr[fbyte] &= ~mask;
+		addr[fbyte] |= (uint8)(val << fbit);
+		val >>= (8 - fbit);
+		nbits -= (8 - fbit);
+		fbyte ++;	/* first full byte */
+	}
+
+	/* last partial byte */
+	if (rbits > 0) {
+		mask = (uint8)((1 << rbits) - 1);
+		addr[lbyte] &= ~mask;
+		addr[lbyte] |= (uint8)(val >> (nbits - rbits));
+		lbyte --;	/* last full byte */
+	}
+
+	/* remaining full byte(s) */
+	for (byte = fbyte; byte <= lbyte; byte ++) {
+		addr[byte] = (uint8)val;
+		val >>= 8;
+	}
+}
+
+uint32
+getbits(const uint8 *addr, uint size, uint stbit, uint nbits)
+{
+	uint fbyte = stbit >> 3;		/* first byte */
+	uint lbyte = (stbit + nbits - 1) >> 3;	/* last byte */
+	uint fbit = stbit & 7;			/* first bit in the first byte */
+	uint rbits = (nbits > 8 - fbit ?
+	              nbits - (8 - fbit) :
+	              0) & 7;			/* remaining bits of the last byte when not 0 */
+	uint32 val = 0;
+	uint bits = 0;				/* bits in first partial byte */
+	uint8 mask;
+	uint byte;
+
+	BCM_REFERENCE(size);
+
+	ASSERT(fbyte < size);
+	ASSERT(lbyte < size);
+	ASSERT(nbits <= (sizeof(val) << 3));
+
+	/* all bits are in the same byte */
+	if (fbyte == lbyte) {
+		mask = (uint8)(((1 << nbits) - 1) << fbit);
+		val = (addr[fbyte] & mask) >> fbit;
+		return val;
+	}
+
+	/* first partial byte */
+	if (fbit > 0) {
+		bits = 8 - fbit;
+		mask = (uint8)(0xFFu << fbit);
+		val |= (addr[fbyte] & mask) >> fbit;
+		fbyte ++;	/* first full byte */
+	}
+
+	/* last partial byte */
+	if (rbits > 0) {
+		mask = (uint8)((1 << rbits) - 1);
+		val |= (uint32)((addr[lbyte] & mask) << (nbits - rbits));
+		lbyte --;	/* last full byte */
+	}
+
+	/* remaining full byte(s) */
+	for (byte = fbyte; byte <= lbyte; byte ++) {
+		val |= (uint32)((addr[byte] << (((byte - fbyte) << 3) + bits)));
+	}
+
+	return val;
+}
+
+#ifdef BCMDRIVER
+
+/** allocate variable sized data with 'size' bytes. note: vld should NOT be null.
+ */
+int
+bcm_vdata_alloc(osl_t *osh, var_len_data_t *vld, uint32 size)
+{
+	int ret = BCME_ERROR;
+	uint8 *dat = NULL;
+
+	if (vld == NULL) {
+		ASSERT(0);
+		goto done;
+	}
+
+	/* trying to allocate twice? */
+	if (vld->vdata != NULL) {
+		ASSERT(0);
+		goto done;
+	}
+
+	/* trying to allocate 0 size? */
+	if (size == 0) {
+		ASSERT(0);
+		ret = BCME_BADARG;
+		goto done;
+	}
+
+	dat = MALLOCZ(osh, size);
+	if (dat == NULL) {
+		ret = BCME_NOMEM;
+		goto done;
+	}
+	vld->vlen = size;
+	vld->vdata = dat;
+	ret = BCME_OK;
+done:
+	return ret;
+}
+
+/** free memory associated with variable sized data. note: vld should NOT be null.
+ */
+int
+bcm_vdata_free(osl_t *osh, var_len_data_t *vld)
+{
+	int ret = BCME_ERROR;
+
+	if (vld == NULL) {
+		ASSERT(0);
+		goto done;
+	}
+
+	if (vld->vdata) {
+		MFREE(osh, vld->vdata, vld->vlen);
+		vld->vdata = NULL;
+		vld->vlen = 0;
+		ret = BCME_OK;
+	}
+done:
+	return ret;
+}
+
+#endif /* BCMDRIVER */
+
+/* Count the number of elements not matching a given value in a null terminated array */
+int
+array_value_mismatch_count(uint8 value, uint8 *array, int array_size)
+{
+	int i;
+	int count = 0;
+
+	for (i = 0; i < array_size; i++) {
+		/* exit if a null terminator is found */
+		if (array[i] == 0) {
+			break;
+		}
+		if (array[i] != value) {
+			count++;
+		}
+	}
+	return count;
+}
+
+/* Count the number of non-zero elements in an uint8 array */
+int
+array_nonzero_count(uint8 *array, int array_size)
+{
+	return array_value_mismatch_count(0, array, array_size);
+}
+
+/* Count the number of non-zero elements in an int16 array */
+int
+array_nonzero_count_int16(int16 *array, int array_size)
+{
+	int i;
+	int count = 0;
+
+	for (i = 0; i < array_size; i++) {
+		if (array[i] != 0) {
+			count++;
+		}
+	}
+	return count;
+}
+
+/* Count the number of zero elements in an uint8 array */
+int
+array_zero_count(uint8 *array, int array_size)
+{
+	int i;
+	int count = 0;
+
+	for (i = 0; i < array_size; i++) {
+		if (array[i] == 0) {
+			count++;
+		}
+	}
+	return count;
+}
+
+/* Validate an array that can be 1 of 2 data types.
+ * One of array1 or array2 should be non-NULL.  The other should be NULL.
+ */
+static int
+verify_ordered_array(uint8 *array1, int16 *array2, int array_size,
+	int range_lo, int range_hi, bool err_if_no_zero_term, bool is_ordered)
+{
+	int ret;
+	int i;
+	int val = 0;
+	int prev_val = 0;
+
+	ret = err_if_no_zero_term ? BCME_NOTFOUND : BCME_OK;
+
+	/* Check that:
+	 * - values are in strict descending order.
+	 * - values are within the valid range.
+	 */
+	for (i = 0; i < array_size; i++) {
+		if (array1) {
+			val = (int)array1[i];
+		} else if (array2) {
+			val = (int)array2[i];
+		} else {
+			/* both array parameters are NULL */
+			return BCME_NOTFOUND;
+		}
+		if (val == 0) {
+			/* array is zero-terminated */
+			ret = BCME_OK;
+			break;
+		}
+
+		if (is_ordered && i > 0 && val >= prev_val) {
+			/* array is not in descending order */
+			ret = BCME_BADOPTION;
+			break;
+		}
+		prev_val = val;
+
+		if (val < range_lo || val > range_hi) {
+			/* array value out of range */
+			ret = BCME_RANGE;
+			break;
+		}
+	}
+
+	return ret;
+}
+
+/* Validate an ordered uint8 configuration array */
+int
+verify_ordered_array_uint8(uint8 *array, int array_size,
+	uint8 range_lo, uint8 range_hi)
+{
+	return verify_ordered_array(array, NULL, array_size, (int)range_lo, (int)range_hi,
+		TRUE, TRUE);
+}
+
+/* Validate an ordered int16 non-zero-terminated configuration array */
+int
+verify_ordered_array_int16(int16 *array, int array_size,
+	int16 range_lo, int16 range_hi)
+{
+	return verify_ordered_array(NULL, array, array_size, (int)range_lo, (int)range_hi,
+		FALSE, TRUE);
+}
+
+/* Validate all values in an array are in range */
+int
+verify_array_values(uint8 *array, int array_size,
+	int range_lo, int range_hi, bool zero_terminated)
+{
+	int ret = BCME_OK;
+	int i;
+	int val = 0;
+
+	/* Check that:
+	 * - values are in strict descending order.
+	 * - values are within the valid range.
+	 */
+	for (i = 0; i < array_size; i++) {
+		val = (int)array[i];
+		if (val == 0 && zero_terminated) {
+			ret = BCME_OK;
+			break;
+		}
+		if (val < range_lo || val > range_hi) {
+			/* array value out of range */
+			ret = BCME_RANGE;
+			break;
+		}
+	}
+	return ret;
+}
+
+/* Adds/replaces NVRAM variable with given value
+ * varbuf[in,out]   - Buffer with NVRAM variables (sequence of zero-terminated 'name=value' records,
+ *                    terminated with additional zero)
+ * buflen[in]       - Length of buffer (may, even should, have some unused space)
+ * variable[in]     - Variable to add/replace in 'name=value' form
+ * datalen[out,opt] - Optional output parameter - resulting length of data in buffer
+ * Returns TRUE on success, FALSE if buffer too short or variable specified incorrectly
+ */
+bool
+replace_nvram_variable(char *varbuf, unsigned int buflen, const char *variable,
+	unsigned int *datalen)
+{
+	char *p;
+	int variable_heading_len, record_len, variable_record_len = (int)strlen(variable) + 1;
+	char *buf_end = varbuf + buflen;
+	p = strchr(variable, '=');
+	if (!p) {
+		return FALSE;
+	}
+	/* Length of given variable name, followed by '=' */
+	variable_heading_len = (int)((const char *)(p + 1) - variable);
+	/* Scanning NVRAM, record by record up to trailing 0 */
+	for (p = varbuf; *p; p += strlen(p) + 1) {
+		/* If given variable found - remove it */
+		if (!strncmp(p, variable, (size_t)variable_heading_len)) {
+			record_len = (int)strlen(p) + 1;
+			memmove_s(p, buf_end - p, p + record_len,
+				(size_t)(buf_end - (p + record_len)));
+		}
+	}
+	/* If buffer does not have space for given variable - return FALSE */
+	if ((p + variable_record_len + 1) > buf_end) {
+		return FALSE;
+	}
+	/* Copy given variable to end of buffer */
+	memmove_s(p, buf_end - p, variable, (size_t)variable_record_len);
+	/* Adding trailing 0 */
+	p[variable_record_len] = 0;
+	/* Setting optional output parameter - length of data in buffer */
+	if (datalen) {
+		*datalen = (unsigned int)(p + variable_record_len + 1  - varbuf);
+	}
+	return TRUE;
+}
+
+/* Add to adjust the 802.1x priority */
+void
+pktset8021xprio(void *pkt, int prio)
+{
+	struct ether_header *eh;
+	uint8 *pktdata;
+	if(prio == PKTPRIO(pkt))
+		return;
+	pktdata = (uint8 *)PKTDATA(OSH_NULL, pkt);
+	ASSERT(ISALIGNED((uintptr)pktdata, sizeof(uint16)));
+	eh = (struct ether_header *) pktdata;
+	if (eh->ether_type == hton16(ETHER_TYPE_802_1X)) {
+		ASSERT(prio >= 0 && prio <= MAXPRIO);
+		PKTSETPRIO(pkt, prio);
+	}
+}	
