@@ -1980,3 +1980,932 @@ dbus_pnp_resume(dbus_pub_t *pub, int *fw_reload)
 
 	return err;
 } /* dbus_pnp_resume */
+
+int
+dbus_pnp_sleep(dbus_pub_t *pub)
+{
+	dhd_bus_t *dhd_bus = (dhd_bus_t *) pub;
+	int err = DBUS_ERR;
+
+	DBUSTRACE(("%s\n", __FUNCTION__));
+
+	if (dhd_bus == NULL)
+		return DBUS_ERR;
+
+	dbus_tx_timer_stop(dhd_bus);
+
+	if (dhd_bus->drvintf && dhd_bus->drvintf->pnp) {
+		err = dhd_bus->drvintf->pnp(dhd_bus->bus_info,
+			DBUS_PNP_SLEEP);
+	}
+
+	return err;
+}
+
+int
+dbus_pnp_disconnect(dbus_pub_t *pub)
+{
+	dhd_bus_t *dhd_bus = (dhd_bus_t *) pub;
+	int err = DBUS_ERR;
+
+	DBUSTRACE(("%s\n", __FUNCTION__));
+
+	if (dhd_bus == NULL)
+		return DBUS_ERR;
+
+	dbus_tx_timer_stop(dhd_bus);
+
+	if (dhd_bus->drvintf && dhd_bus->drvintf->pnp) {
+		err = dhd_bus->drvintf->pnp(dhd_bus->bus_info,
+			DBUS_PNP_DISCONNECT);
+	}
+
+	return err;
+}
+
+int
+dhd_bus_iovar_op(dhd_pub_t *dhdp, const char *name,
+	void *params, int plen, void *arg, int len, bool set)
+{
+	dhd_bus_t *dhd_bus = (dhd_bus_t *) dhdp->bus;
+	int err = DBUS_ERR;
+
+	DBUSTRACE(("%s\n", __FUNCTION__));
+
+	if (dhd_bus == NULL)
+		return DBUS_ERR;
+
+	if (dhd_bus->drvintf && dhd_bus->drvintf->iovar_op) {
+		err = dhd_bus->drvintf->iovar_op(dhd_bus->bus_info,
+			name, params, plen, arg, len, set);
+	}
+
+	return err;
+}
+
+
+void *
+dhd_dbus_txq(const dbus_pub_t *pub)
+{
+	return NULL;
+}
+
+uint
+dhd_dbus_hdrlen(const dbus_pub_t *pub)
+{
+	return 0;
+}
+
+void *
+dbus_get_devinfo(dbus_pub_t *pub)
+{
+	return pub->dev_info;
+}
+
+#if defined(BCM_REQUEST_FW) && !defined(EXTERNAL_FW_PATH)
+static int
+dbus_otp(dhd_bus_t *dhd_bus, uint16 *boardtype, uint16 *boardrev)
+{
+	uint32 value = 0;
+	uint8 *cis;
+	uint16 *otpinfo;
+	uint32 i;
+	bool standard_cis = TRUE;
+	uint8 tup, tlen;
+	bool btype_present = FALSE;
+	bool brev_present = FALSE;
+	int ret;
+	int devid;
+	uint16 btype = 0;
+	uint16 brev = 0;
+	uint32 otp_size = 0, otp_addr = 0, otp_sw_rgn = 0;
+
+	if (dhd_bus == NULL || dhd_bus->drvintf == NULL ||
+		dhd_bus->drvintf->readreg == NULL)
+		return DBUS_ERR;
+
+	devid = dhd_bus->pub.attrib.devid;
+
+	if ((devid == BCM43234_CHIP_ID) || (devid == BCM43235_CHIP_ID) ||
+		(devid == BCM43236_CHIP_ID)) {
+
+		otp_size = BCM_OTP_SIZE_43236;
+		otp_sw_rgn = BCM_OTP_SW_RGN_43236;
+		otp_addr = BCM_OTP_ADDR_43236;
+
+	} else {
+		return DBUS_ERR_NVRAM;
+	}
+
+	cis = MALLOC(dhd_bus->pub.osh, otp_size * 2);
+	if (cis == NULL)
+		return DBUS_ERR;
+
+	otpinfo = (uint16 *) cis;
+
+	for (i = 0; i < otp_size; i++) {
+
+		ret = dhd_bus->drvintf->readreg(dhd_bus->bus_info,
+			otp_addr + ((otp_sw_rgn + i) << 1), 2, &value);
+
+		if (ret != DBUS_OK) {
+			MFREE(dhd_bus->pub.osh, cis, otp_size * 2);
+			return ret;
+		}
+		otpinfo[i] = (uint16) value;
+	}
+
+	for (i = 0; i < (otp_size << 1); ) {
+
+		if (standard_cis) {
+			tup = cis[i++];
+			if (tup == CISTPL_NULL || tup == CISTPL_END)
+				tlen = 0;
+			else
+				tlen = cis[i++];
+		} else {
+			if (cis[i] == CISTPL_NULL || cis[i] == CISTPL_END) {
+				tlen = 0;
+				tup = cis[i];
+			} else {
+				tlen = cis[i];
+				tup = CISTPL_BRCM_HNBU;
+			}
+			++i;
+		}
+
+		if (tup == CISTPL_END || (i + tlen) >= (otp_size << 1)) {
+			break;
+		}
+
+		switch (tup) {
+
+		case CISTPL_BRCM_HNBU:
+
+			switch (cis[i]) {
+
+			case HNBU_BOARDTYPE:
+
+				btype = (uint16) ((cis[i + 2] << 8) + cis[i + 1]);
+				btype_present = TRUE;
+				DBUSTRACE(("%s: HNBU_BOARDTYPE = 0x%2x\n", __FUNCTION__,
+					(uint32)btype));
+				break;
+
+			case HNBU_BOARDREV:
+
+				if (tlen == 2)
+					brev = (uint16) cis[i + 1];
+				else
+					brev = (uint16) ((cis[i + 2] << 8) + cis[i + 1]);
+				brev_present = TRUE;
+				DBUSTRACE(("%s: HNBU_BOARDREV =  0x%2x\n", __FUNCTION__,
+					(uint32)*boardrev));
+				break;
+
+			case HNBU_HNBUCIS:
+				DBUSTRACE(("%s: HNBU_HNBUCIS\n", __FUNCTION__));
+				tlen++;
+				standard_cis = FALSE;
+				break;
+			}
+			break;
+		}
+
+		i += tlen;
+	}
+
+	MFREE(dhd_bus->pub.osh, cis, otp_size * 2);
+
+	if (btype_present == TRUE && brev_present == TRUE) {
+		*boardtype = btype;
+		*boardrev = brev;
+		DBUSERR(("otp boardtype = 0x%2x boardrev = 0x%2x\n",
+			*boardtype, *boardrev));
+
+		return DBUS_OK;
+	}
+	else
+		return DBUS_ERR;
+} /* dbus_otp */
+
+static int
+dbus_select_nvram(dhd_bus_t *dhd_bus, int8 *jumbonvram, int jumbolen,
+uint16 boardtype, uint16 boardrev, int8 **nvram, int *nvram_len)
+{
+	/* Multi board nvram file format is contenation of nvram info with \r
+	*  The file format for two contatenated set is
+	*  \nBroadcom Jumbo Nvram file\nfirst_set\nsecond_set\nthird_set\n
+	*/
+	uint8 *nvram_start = NULL, *nvram_end = NULL;
+	uint8 *nvram_start_prev = NULL, *nvram_end_prev = NULL;
+	uint16 btype = 0, brev = 0;
+	int len  = 0;
+	char *field;
+
+	*nvram = NULL;
+	*nvram_len = 0;
+
+	if (strncmp(BCM_JUMBO_START, jumbonvram, strlen(BCM_JUMBO_START))) {
+		/* single nvram file in the native format */
+		DBUSTRACE(("%s: Non-Jumbo NVRAM File \n", __FUNCTION__));
+		*nvram = jumbonvram;
+		*nvram_len = jumbolen;
+		return DBUS_OK;
+	} else {
+		DBUSTRACE(("%s: Jumbo NVRAM File \n", __FUNCTION__));
+	}
+
+	/* sanity test the end of the config sets for proper ending */
+	if (jumbonvram[jumbolen - 1] != BCM_JUMBO_NVRAM_DELIMIT ||
+		jumbonvram[jumbolen - 2] != '\0') {
+		DBUSERR(("%s: Bad Jumbo NVRAM file format\n", __FUNCTION__));
+		return DBUS_JUMBO_BAD_FORMAT;
+	}
+
+	dhd_bus->nvram_nontxt = DBUS_NVRAM_NONTXT;
+
+	nvram_start = jumbonvram;
+
+	while (*nvram_start != BCM_JUMBO_NVRAM_DELIMIT && len < jumbolen) {
+
+		/* consume the  first file info line
+		* \nBroadcom Jumbo Nvram file\nfile1\n ...
+		*/
+		len ++;
+		nvram_start ++;
+	}
+
+	nvram_end = nvram_start;
+
+	/* search for "boardrev=0xabcd" and "boardtype=0x1234" information in
+	* the concatenated nvram config files /sets
+	*/
+
+	while (len < jumbolen) {
+
+		if (*nvram_end == '\0') {
+			/* end of a config set is marked by multiple null characters */
+			len ++;
+			nvram_end ++;
+			DBUSTRACE(("%s: NULL chr len = %d char = 0x%x\n", __FUNCTION__,
+				len, *nvram_end));
+			continue;
+
+		} else if (*nvram_end == BCM_JUMBO_NVRAM_DELIMIT) {
+
+			/* config set delimiter is reached */
+			/* check if next config set is present or not
+			*  return  if next config is not present
+			*/
+
+			/* start search the next config set */
+			nvram_start_prev = nvram_start;
+			nvram_end_prev = nvram_end;
+
+			nvram_end ++;
+			nvram_start = nvram_end;
+			btype = brev = 0;
+			DBUSTRACE(("%s: going to next record len = %d "
+					"char = 0x%x \n", __FUNCTION__, len, *nvram_end));
+			len ++;
+			if (len >= jumbolen) {
+
+				*nvram = nvram_start_prev;
+				*nvram_len = (int)(nvram_end_prev - nvram_start_prev);
+
+				DBUSTRACE(("%s: no more len = %d nvram_end = 0x%p",
+					__FUNCTION__, len, nvram_end));
+
+				return DBUS_JUMBO_NOMATCH;
+
+			} else {
+				continue;
+			}
+
+		} else {
+
+			DBUSTRACE(("%s: config str = %s\n", __FUNCTION__, nvram_end));
+
+			if (bcmp(nvram_end, "boardtype", strlen("boardtype")) == 0) {
+
+				field = strchr(nvram_end, '=');
+				field++;
+				btype = (uint16)bcm_strtoul(field, NULL, 0);
+
+				DBUSTRACE(("%s: btype = 0x%x boardtype = 0x%x \n", __FUNCTION__,
+					btype, boardtype));
+			}
+
+			if (bcmp(nvram_end, "boardrev", strlen("boardrev")) == 0) {
+
+				field = strchr(nvram_end, '=');
+				field++;
+				brev = (uint16)bcm_strtoul(field, NULL, 0);
+
+				DBUSTRACE(("%s: brev = 0x%x boardrev = 0x%x \n", __FUNCTION__,
+					brev, boardrev));
+			}
+			if (btype == boardtype && brev == boardrev) {
+				/* locate nvram config set end - ie.find '\r' char */
+				while (*nvram_end != BCM_JUMBO_NVRAM_DELIMIT)
+					nvram_end ++;
+				*nvram = nvram_start;
+				*nvram_len = (int) (nvram_end - nvram_start);
+				DBUSTRACE(("found len = %d nvram_start = 0x%p "
+					"nvram_end = 0x%p\n", *nvram_len, nvram_start, nvram_end));
+				return DBUS_OK;
+			}
+
+			len += (strlen(nvram_end) + 1);
+			nvram_end += (strlen(nvram_end) + 1);
+		}
+	}
+	return DBUS_JUMBO_NOMATCH;
+} /* dbus_select_nvram */
+
+#endif 
+
+#define DBUS_NRXQ	50
+#define DBUS_NTXQ	100
+
+static void
+dhd_dbus_send_complete(void *handle, void *info, int status)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+	void *pkt = info;
+
+	if ((dhd == NULL) || (pkt == NULL)) {
+		DBUSERR(("dhd or pkt is NULL\n"));
+		return;
+	}
+
+	if (status == DBUS_OK) {
+		dhd->dstats.tx_packets++;
+	} else {
+		DBUSERR(("TX error=%d\n", status));
+		dhd->dstats.tx_errors++;
+	}
+#ifdef PROP_TXSTATUS
+	if (DHD_PKTTAG_WLFCPKT(PKTTAG(pkt)) &&
+		(dhd_wlfc_txcomplete(dhd, pkt, status == 0) != WLFC_UNSUPPORTED)) {
+		return;
+	}
+#endif /* PROP_TXSTATUS */
+	PKTFREE(dhd->osh, pkt, TRUE);
+}
+
+static void
+dhd_dbus_recv_pkt(void *handle, void *pkt)
+{
+	uchar reorder_info_buf[WLHOST_REORDERDATA_TOTLEN];
+	uint reorder_info_len;
+	uint pkt_count;
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+	int ifidx = 0;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	/* If the protocol uses a data header, check and remove it */
+	if (dhd_prot_hdrpull(dhd, &ifidx, pkt, reorder_info_buf,
+		&reorder_info_len) != 0) {
+		DBUSERR(("rx protocol error\n"));
+		PKTFREE(dhd->osh, pkt, FALSE);
+		dhd->rx_errors++;
+		return;
+	}
+
+	if (reorder_info_len) {
+		/* Reordering info from the firmware */
+		dhd_process_pkt_reorder_info(dhd, reorder_info_buf, reorder_info_len,
+			&pkt, &pkt_count);
+		if (pkt_count == 0)
+			return;
+	}
+	else {
+		pkt_count = 1;
+	}
+	dhd_rx_frame(dhd, ifidx, pkt, pkt_count, 0);
+}
+
+static void
+dhd_dbus_recv_buf(void *handle, uint8 *buf, int len)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+	void *pkt;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if ((pkt = PKTGET(dhd->osh, len, FALSE)) == NULL) {
+		DBUSERR(("PKTGET (rx) failed=%d\n", len));
+		return;
+	}
+
+	bcopy(buf, PKTDATA(dhd->osh, pkt), len);
+	dhd_dbus_recv_pkt(dhd, pkt);
+}
+
+static void
+dhd_dbus_txflowcontrol(void *handle, bool onoff)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+	bool wlfc_enabled = FALSE;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+#ifdef PROP_TXSTATUS
+	wlfc_enabled = (dhd_wlfc_flowcontrol(dhd, onoff, !onoff) != WLFC_UNSUPPORTED);
+#endif
+
+	if (!wlfc_enabled) {
+		dhd_txflowcontrol(dhd, ALL_INTERFACES, onoff);
+	}
+}
+
+static void
+dhd_dbus_errhandler(void *handle, int err)
+{
+}
+
+static void
+dhd_dbus_ctl_complete(void *handle, int type, int status)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (type == DBUS_CBCTL_READ) {
+		if (status == DBUS_OK)
+			dhd->rx_ctlpkts++;
+		else
+			dhd->rx_ctlerrs++;
+	} else if (type == DBUS_CBCTL_WRITE) {
+		if (status == DBUS_OK)
+			dhd->tx_ctlpkts++;
+		else
+			dhd->tx_ctlerrs++;
+	}
+
+	dhd_prot_ctl_complete(dhd);
+}
+
+static void
+dhd_dbus_state_change(void *handle, int state)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	switch (state) {
+
+		case DBUS_STATE_DL_NEEDED:
+			DBUSERR(("%s: firmware request cannot be handled\n", __FUNCTION__));
+			break;
+		case DBUS_STATE_DOWN:
+			DBUSTRACE(("%s: DBUS is down\n", __FUNCTION__));
+			dhd->busstate = DHD_BUS_DOWN;
+			break;
+		case DBUS_STATE_UP:
+			DBUSTRACE(("%s: DBUS is up\n", __FUNCTION__));
+			dhd->busstate = DHD_BUS_DATA;
+			break;
+		default:
+			break;
+	}
+
+	DBUSERR(("%s: DBUS current state=%d\n", __FUNCTION__, state));
+}
+
+static void *
+dhd_dbus_pktget(void *handle, uint len, bool send)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+	void *p = NULL;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return NULL;
+	}
+
+	if (send == TRUE) {
+		dhd_os_sdlock_txq(dhd);
+		p = PKTGET(dhd->osh, len, TRUE);
+		dhd_os_sdunlock_txq(dhd);
+	} else {
+		dhd_os_sdlock_rxq(dhd);
+		p = PKTGET(dhd->osh, len, FALSE);
+		dhd_os_sdunlock_rxq(dhd);
+	}
+
+	return p;
+}
+
+static void
+dhd_dbus_pktfree(void *handle, void *p, bool send)
+{
+	dhd_pub_t *dhd = (dhd_pub_t *)handle;
+
+	if (dhd == NULL) {
+		DBUSERR(("%s: dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (send == TRUE) {
+#ifdef PROP_TXSTATUS
+		if (DHD_PKTTAG_WLFCPKT(PKTTAG(p)) &&
+			(dhd_wlfc_txcomplete(dhd, p, FALSE) != WLFC_UNSUPPORTED)) {
+			return;
+		}
+#endif /* PROP_TXSTATUS */
+
+		dhd_os_sdlock_txq(dhd);
+		PKTFREE(dhd->osh, p, TRUE);
+		dhd_os_sdunlock_txq(dhd);
+	} else {
+		dhd_os_sdlock_rxq(dhd);
+		PKTFREE(dhd->osh, p, FALSE);
+		dhd_os_sdunlock_rxq(dhd);
+	}
+}
+
+
+static dbus_callbacks_t dhd_dbus_cbs = {
+	dhd_dbus_send_complete,
+	dhd_dbus_recv_buf,
+	dhd_dbus_recv_pkt,
+	dhd_dbus_txflowcontrol,
+	dhd_dbus_errhandler,
+	dhd_dbus_ctl_complete,
+	dhd_dbus_state_change,
+	dhd_dbus_pktget,
+	dhd_dbus_pktfree
+};
+
+uint
+dhd_bus_chip(struct dhd_bus *bus)
+{
+	ASSERT(bus != NULL);
+	return bus->pub.attrib.devid;
+}
+
+uint
+dhd_bus_chiprev(struct dhd_bus *bus)
+{
+	ASSERT(bus);
+	ASSERT(bus != NULL);
+	return bus->pub.attrib.chiprev;
+}
+
+void
+dhd_bus_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
+{
+	bcm_bprintf(strbuf, "Bus USB\n");
+}
+
+void
+dhd_bus_clearcounts(dhd_pub_t *dhdp)
+{
+}
+
+int
+dhd_bus_txdata(struct dhd_bus *bus, void *pktbuf)
+{
+	DBUSTRACE(("%s\n", __FUNCTION__));
+	if (bus->txoff) {
+		DBUSTRACE(("txoff\n"));
+		return BCME_EPERM;
+	}
+	return dbus_send_txdata(&bus->pub, pktbuf);
+}
+
+static void
+dhd_dbus_advertise_bus_cleanup(dhd_pub_t *dhdp)
+{
+	unsigned long flags;
+	int timeleft;
+
+	DHD_LINUX_GENERAL_LOCK(dhdp, flags);
+	dhdp->busstate = DHD_BUS_DOWN_IN_PROGRESS;
+	DHD_LINUX_GENERAL_UNLOCK(dhdp, flags);
+
+	timeleft = dhd_os_busbusy_wait_negation(dhdp, &dhdp->dhd_bus_busy_state);
+	if ((timeleft == 0) || (timeleft == 1)) {
+		DBUSERR(("%s : Timeout due to dhd_bus_busy_state=0x%x\n",
+				__FUNCTION__, dhdp->dhd_bus_busy_state));
+		ASSERT(0);
+	}
+
+	return;
+}
+
+static void
+dhd_dbus_advertise_bus_remove(dhd_pub_t *dhdp)
+{
+	unsigned long flags;
+	int timeleft;
+
+	DHD_LINUX_GENERAL_LOCK(dhdp, flags);
+	dhdp->busstate = DHD_BUS_REMOVE;
+	DHD_LINUX_GENERAL_UNLOCK(dhdp, flags);
+
+	timeleft = dhd_os_busbusy_wait_negation(dhdp, &dhdp->dhd_bus_busy_state);
+	if ((timeleft == 0) || (timeleft == 1)) {
+		DBUSERR(("%s : Timeout due to dhd_bus_busy_state=0x%x\n",
+				__FUNCTION__, dhdp->dhd_bus_busy_state));
+		ASSERT(0);
+	}
+
+	return;
+}
+
+int
+dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
+{
+	int bcmerror = 0;
+	unsigned long flags;
+	wifi_adapter_info_t *adapter = (wifi_adapter_info_t *)dhdp->adapter;
+
+	if (flag == TRUE) {
+		if (!dhdp->dongle_reset) {
+			DBUSERR(("%s: == Power OFF ==\n", __FUNCTION__));
+			dhd_dbus_advertise_bus_cleanup(dhdp);
+			dhd_os_wd_timer(dhdp, 0);
+#if !defined(IGNORE_ETH0_DOWN)
+			/* Force flow control as protection when stop come before ifconfig_down */
+			dhd_txflowcontrol(dhdp, ALL_INTERFACES, ON);
+#endif /* !defined(IGNORE_ETH0_DOWN) */
+			dbus_stop(dhdp->bus);
+
+			dhdp->dongle_reset = TRUE;
+			dhdp->up = FALSE;
+
+			DHD_LINUX_GENERAL_LOCK(dhdp, flags);
+			dhdp->busstate = DHD_BUS_DOWN;
+			DHD_LINUX_GENERAL_UNLOCK(dhdp, flags);
+			wifi_clr_adapter_status(adapter, WIFI_STATUS_FW_READY);
+
+			printf("%s:  WLAN OFF DONE\n", __FUNCTION__);
+			/* App can now remove power from device */
+		} else
+			bcmerror = BCME_ERROR;
+	} else {
+		/* App must have restored power to device before calling */
+		printf("\n\n%s: == WLAN ON ==\n", __FUNCTION__);
+		if (dhdp->dongle_reset) {
+			/* Turn on WLAN */
+			DHD_MUTEX_UNLOCK();
+			wait_event_interruptible_timeout(adapter->status_event,
+				wifi_get_adapter_status(adapter, WIFI_STATUS_FW_READY),
+				msecs_to_jiffies(DHD_FW_READY_TIMEOUT));
+			DHD_MUTEX_LOCK();
+			bcmerror = dbus_up(dhdp->bus);
+			if (bcmerror == BCME_OK) {
+				dhdp->dongle_reset = FALSE;
+				dhdp->up = TRUE;
+#if !defined(IGNORE_ETH0_DOWN)
+				/* Restore flow control  */
+				dhd_txflowcontrol(dhdp, ALL_INTERFACES, OFF);
+#endif 
+				dhd_os_wd_timer(dhdp, dhd_watchdog_ms);
+
+				DBUSTRACE(("%s: WLAN ON DONE\n", __FUNCTION__));
+			} else {
+				DBUSERR(("%s: failed to dbus_up with code %d\n", __FUNCTION__, bcmerror));
+			}
+		}
+	}
+
+	return bcmerror;
+}
+
+void
+dhd_bus_update_fw_nv_path(struct dhd_bus *bus, char *pfw_path,
+	char *pnv_path, char *pclm_path, char *pconf_path)
+{
+	DBUSTRACE(("%s\n", __FUNCTION__));
+
+	if (bus == NULL) {
+		DBUSERR(("%s: bus is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	bus->fw_path = pfw_path;
+	bus->nv_path = pnv_path;
+	bus->dhd->clm_path = pclm_path;
+	bus->dhd->conf_path = pconf_path;
+
+	dhd_conf_set_path_params(bus->dhd, bus->fw_path, bus->nv_path);
+
+}
+
+/*
+ * hdrlen is space to reserve in pkt headroom for DBUS
+ */
+void *
+dhd_dbus_probe_cb(void *arg, const char *desc, uint32 bustype,
+	uint16 bus_no, uint16 slot, uint32 hdrlen)
+{
+	osl_t *osh = NULL;
+	dhd_bus_t *bus = NULL;
+	dhd_pub_t *pub = NULL;
+	uint rxsz;
+	int dlneeded = 0;
+	wifi_adapter_info_t *adapter = NULL;
+
+	DBUSTRACE(("%s: Enter\n", __FUNCTION__));
+
+	adapter = dhd_wifi_platform_get_adapter(bustype, bus_no, slot);
+
+	if (!g_pub) {
+		/* Ask the OS interface part for an OSL handle */
+		if (!(osh = osl_attach(NULL, bustype, TRUE))) {
+			DBUSERR(("%s: OSL attach failed\n", __FUNCTION__));
+			goto fail;
+		}
+
+		/* Attach to the dhd/OS interface */
+		if (!(pub = dhd_attach(osh, bus, hdrlen, adapter))) {
+			DBUSERR(("%s: dhd_attach failed\n", __FUNCTION__));
+			goto fail;
+		}
+	} else {
+		pub = g_pub;
+		osh = pub->osh;
+	}
+
+	if (pub->bus) {
+		DBUSERR(("%s: wrong probe\n", __FUNCTION__));
+		goto fail;
+	}
+
+	rxsz = dhd_get_rxsz(pub);
+	bus = dbus_attach(osh, rxsz, DBUS_NRXQ, DBUS_NTXQ, pub, &dhd_dbus_cbs, NULL, NULL);
+	if (bus) {
+		pub->bus = bus;
+		bus->dhd = pub;
+
+		dlneeded = dbus_dlneeded(bus);
+		if (dlneeded >= 0) {
+			if (!g_pub) {
+				dhd_conf_reset(pub);
+				dhd_conf_set_chiprev(pub, bus->pub.attrib.devid, bus->pub.attrib.chiprev);
+				dhd_conf_preinit(pub);
+			}
+		}
+
+		if (g_pub || dhd_download_fw_on_driverload) {
+			if (dlneeded == 0) {
+				wifi_set_adapter_status(adapter, WIFI_STATUS_FW_READY);
+#ifdef BCM_REQUEST_FW
+			} else if (dlneeded > 0) {
+				dhd_set_path(bus->dhd);
+				if (dbus_download_firmware(bus, bus->fw_path, bus->nv_path) != DBUS_OK)
+					goto fail;
+#endif
+			} else {
+				goto fail;
+			}
+		}
+	} else {
+		DBUSERR(("%s: dbus_attach failed\n", __FUNCTION__));
+	}
+
+	if (!g_pub) {
+		/* Ok, have the per-port tell the stack we're open for business */
+		if (dhd_attach_net(bus->dhd, TRUE) != 0)
+		{
+			DBUSERR(("%s: Net attach failed!!\n", __FUNCTION__));
+			goto fail;
+		}
+		pub->hang_report  = TRUE;
+#if defined(MULTIPLE_SUPPLICANT)
+		wl_android_post_init(); // terence 20120530: fix critical section in dhd_open and dhdsdio_probe
+#endif
+		g_pub = pub;
+	}
+
+	DBUSTRACE(("%s: Exit\n", __FUNCTION__));
+	wifi_clr_adapter_status(adapter, WIFI_STATUS_DETTACH);
+	wifi_set_adapter_status(adapter, WIFI_STATUS_ATTACH);
+	wake_up_interruptible(&adapter->status_event);
+	/* This is passed to dhd_dbus_disconnect_cb */
+	return bus;
+
+fail:
+	if (pub && pub->bus) {
+		dbus_detach(pub->bus);
+		pub->bus = NULL;
+	}
+	/* Release resources in reverse order */
+	if (!g_pub) {
+		if (pub) {
+			dhd_detach(pub);
+			dhd_free(pub);
+		}
+		if (osh) {
+			osl_detach(osh);
+		}
+	}
+
+	printf("%s: Failed\n", __FUNCTION__);
+	return NULL;
+}
+
+void
+dhd_dbus_disconnect_cb(void *arg)
+{
+	dhd_bus_t *bus = (dhd_bus_t *)arg;
+	dhd_pub_t *pub = g_pub;
+	osl_t *osh;
+	wifi_adapter_info_t *adapter = NULL;
+
+	adapter = (wifi_adapter_info_t *)pub->adapter;
+
+	if (pub && !pub->dhd_remove && bus == NULL) {
+		DBUSERR(("%s: bus is NULL\n", __FUNCTION__));
+		return;
+	}
+	if (!adapter) {
+		DBUSERR(("%s: adapter is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	printf("%s: Enter dhd_remove=%d on %s\n", __FUNCTION__,
+		pub->dhd_remove, adapter->name);
+	if (!pub->dhd_remove) {
+		/* Advertise bus remove during rmmod */
+		dhd_dbus_advertise_bus_remove(bus->dhd);
+		dbus_detach(pub->bus);
+		pub->bus = NULL;
+		wifi_clr_adapter_status(adapter, WIFI_STATUS_ATTACH);
+		wifi_set_adapter_status(adapter, WIFI_STATUS_DETTACH);
+		wake_up_interruptible(&adapter->status_event);
+	} else {
+		osh = pub->osh;
+		dhd_detach(pub);
+		if (pub->bus) {
+			dbus_detach(pub->bus);
+			pub->bus = NULL;
+		}
+		dhd_free(pub);
+		g_pub = NULL;
+		if (MALLOCED(osh)) {
+			DBUSERR(("%s: MEMORY LEAK %d bytes\n", __FUNCTION__, MALLOCED(osh)));
+		}
+		osl_detach(osh);
+	}
+
+	DBUSTRACE(("%s: Exit\n", __FUNCTION__));
+}
+
+#ifdef LINUX_EXTERNAL_MODULE_DBUS
+
+static int __init
+bcm_dbus_module_init(void)
+{
+	printf("Inserting bcm_dbus module \n");
+	return 0;
+}
+
+static void __exit
+bcm_dbus_module_exit(void)
+{
+	printf("Removing bcm_dbus module \n");
+	return;
+}
+
+EXPORT_SYMBOL(dbus_pnp_sleep);
+EXPORT_SYMBOL(dbus_get_devinfo);
+EXPORT_SYMBOL(dbus_detach);
+EXPORT_SYMBOL(dbus_get_attrib);
+EXPORT_SYMBOL(dbus_down);
+EXPORT_SYMBOL(dbus_pnp_resume);
+EXPORT_SYMBOL(dbus_set_config);
+EXPORT_SYMBOL(dbus_flowctrl_rx);
+EXPORT_SYMBOL(dbus_up);
+EXPORT_SYMBOL(dbus_get_device_speed);
+EXPORT_SYMBOL(dbus_send_pkt);
+EXPORT_SYMBOL(dbus_recv_ctl);
+EXPORT_SYMBOL(dbus_attach);
+
+MODULE_LICENSE("GPL");
+
+module_init(bcm_dbus_module_init);
+module_exit(bcm_dbus_module_exit);
+
+#endif  /* #ifdef LINUX_EXTERNAL_MODULE_DBUS */
