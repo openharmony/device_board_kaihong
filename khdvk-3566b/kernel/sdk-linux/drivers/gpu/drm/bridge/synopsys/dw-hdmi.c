@@ -3208,6 +3208,8 @@ static void dw_hdmi_attach_properties(struct dw_hdmi *hdmi)
 			break;
 		case 0x16:
 			color = MEDIA_BUS_FMT_UYVY8_1X16;
+			break;
+		default:
 			color = MEDIA_BUS_FMT_RGB888_1X24;
 			dev_err(hdmi->dev, "unexpected mapping: 0x%x\n",
 				video_mapping);
