@@ -913,3 +913,148 @@ err_free_dma_rx:
 err_free_dma_tx:
 	if (ctlr->dma_tx)
 		dma_release_channel(ctlr->dma_tx);
+err_disable_pm_runtime:
+	pm_runtime_disable(&pdev->dev);
+err_disable_spiclk:
+	clk_disable_unprepare(rs->spiclk);
+err_disable_apbclk:
+	clk_disable_unprepare(rs->apb_pclk);
+err_put_ctlr:
+	spi_controller_put(ctlr);
+
+	return ret;
+}
+
+static int rockchip_spi_remove(struct platform_device *pdev)
+{
+	struct spi_controller *ctlr = spi_controller_get(platform_get_drvdata(pdev));
+	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+
+	pm_runtime_get_sync(&pdev->dev);
+
+	clk_disable_unprepare(rs->spiclk);
+	clk_disable_unprepare(rs->apb_pclk);
+
+	pm_runtime_put_noidle(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+
+	if (ctlr->dma_tx)
+		dma_release_channel(ctlr->dma_tx);
+	if (ctlr->dma_rx)
+		dma_release_channel(ctlr->dma_rx);
+
+	spi_controller_put(ctlr);
+
+	return 0;
+}
+
+#ifdef CONFIG_PM_SLEEP
+static int rockchip_spi_suspend(struct device *dev)
+{
+	int ret;
+	struct spi_controller *ctlr = dev_get_drvdata(dev);
+
+	ret = spi_controller_suspend(ctlr);
+	if (ret < 0)
+		return ret;
+
+	ret = pm_runtime_force_suspend(dev);
+	if (ret < 0)
+		return ret;
+
+	pinctrl_pm_select_sleep_state(dev);
+
+	return 0;
+}
+
+static int rockchip_spi_resume(struct device *dev)
+{
+	int ret;
+	struct spi_controller *ctlr = dev_get_drvdata(dev);
+	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+
+	pinctrl_pm_select_default_state(dev);
+
+	ret = pm_runtime_force_resume(dev);
+	if (ret < 0)
+		return ret;
+
+	ret = spi_controller_resume(ctlr);
+	if (ret < 0) {
+		clk_disable_unprepare(rs->spiclk);
+		clk_disable_unprepare(rs->apb_pclk);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_PM_SLEEP */
+
+#ifdef CONFIG_PM
+static int rockchip_spi_runtime_suspend(struct device *dev)
+{
+	struct spi_controller *ctlr = dev_get_drvdata(dev);
+	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+
+	clk_disable_unprepare(rs->spiclk);
+	clk_disable_unprepare(rs->apb_pclk);
+
+	return 0;
+}
+
+static int rockchip_spi_runtime_resume(struct device *dev)
+{
+	int ret;
+	struct spi_controller *ctlr = dev_get_drvdata(dev);
+	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+
+	ret = clk_prepare_enable(rs->apb_pclk);
+	if (ret < 0)
+		return ret;
+
+	ret = clk_prepare_enable(rs->spiclk);
+	if (ret < 0)
+		clk_disable_unprepare(rs->apb_pclk);
+
+	return 0;
+}
+#endif /* CONFIG_PM */
+
+static const struct dev_pm_ops rockchip_spi_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(rockchip_spi_suspend, rockchip_spi_resume)
+	SET_RUNTIME_PM_OPS(rockchip_spi_runtime_suspend,
+			   rockchip_spi_runtime_resume, NULL)
+};
+
+static const struct of_device_id rockchip_spi_dt_match[] = {
+	{ .compatible = "rockchip,px30-spi", },
+	{ .compatible = "rockchip,rk3036-spi", },
+	{ .compatible = "rockchip,rk3066-spi", },
+	{ .compatible = "rockchip,rk3188-spi", },
+	{ .compatible = "rockchip,rk3228-spi", },
+	{ .compatible = "rockchip,rk3288-spi", },
+	{ .compatible = "rockchip,rk3308-spi", },
+	{ .compatible = "rockchip,rk3328-spi", },
+	{ .compatible = "rockchip,rk3368-spi", },
+	{ .compatible = "rockchip,rk3399-spi", },
+	{ .compatible = "rockchip,rv1108-spi", },
+	{ .compatible = "rockchip,rv1126-spi", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, rockchip_spi_dt_match);
+
+static struct platform_driver rockchip_spi_driver = {
+	.driver = {
+		.name	= DRIVER_NAME,
+		.pm = &rockchip_spi_pm,
+		.of_match_table = of_match_ptr(rockchip_spi_dt_match),
+	},
+	.probe = rockchip_spi_probe,
+	.remove = rockchip_spi_remove,
+};
+
+module_platform_driver(rockchip_spi_driver);
+
+MODULE_AUTHOR("Addy Ke <addy.ke@rock-chips.com>");
+MODULE_DESCRIPTION("ROCKCHIP SPI Controller Driver");
+MODULE_LICENSE("GPL v2");
