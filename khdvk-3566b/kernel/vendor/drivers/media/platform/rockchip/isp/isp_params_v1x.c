@@ -1983,4 +1983,370 @@ void __isp_isr_other_config(struct rkisp_isp_params_vdev *params_vdev,
 	}
 }
 
+static __maybe_unused
+void __isp_isr_meas_config(struct rkisp_isp_params_vdev *params_vdev,
+			   struct  rkisp1_isp_params_cfg *new_params)
+{
+	unsigned int module_en_update, module_cfg_update, module_ens;
+	struct rkisp_isp_params_v1x_ops *ops =
+		(struct rkisp_isp_params_v1x_ops *)params_vdev->priv_ops;
+
+	module_en_update = new_params->module_en_update;
+	module_cfg_update = new_params->module_cfg_update;
+	module_ens = new_params->module_ens;
+
+	if ((module_en_update & CIFISP_MODULE_AWB) ||
+	    (module_cfg_update & CIFISP_MODULE_AWB)) {
+		/* update awb config */
+		if ((module_cfg_update & CIFISP_MODULE_AWB))
+			ops->awb_meas_config(params_vdev,
+					     &new_params->meas.awb_meas_config);
+
+		if (module_en_update & CIFISP_MODULE_AWB)
+			ops->awb_meas_enable(params_vdev,
+					     &new_params->meas.awb_meas_config,
+					     !!(module_ens & CIFISP_MODULE_AWB));
+	}
+
+	if ((module_en_update & CIFISP_MODULE_AFC) ||
+	    (module_cfg_update & CIFISP_MODULE_AFC)) {
+		/* update afc config */
+		if ((module_cfg_update & CIFISP_MODULE_AFC))
+			ops->afm_config(params_vdev, &new_params->meas.afc_config);
+
+		if (module_en_update & CIFISP_MODULE_AFC) {
+			if (!!(module_ens & CIFISP_MODULE_AFC))
+				isp_param_set_bits(params_vdev,
+						   CIF_ISP_AFM_CTRL,
+						   CIF_ISP_AFM_ENA);
+			else
+				isp_param_clear_bits(params_vdev,
+						     CIF_ISP_AFM_CTRL,
+						     CIF_ISP_AFM_ENA);
+		}
+	}
+
+	if ((module_en_update & CIFISP_MODULE_HST) ||
+	    (module_cfg_update & CIFISP_MODULE_HST)) {
+		/* update hst config */
+		if ((module_cfg_update & CIFISP_MODULE_HST))
+			ops->hst_config(params_vdev, &new_params->meas.hst_config);
+
+		if (module_en_update & CIFISP_MODULE_HST)
+			ops->hst_enable(params_vdev,
+					&new_params->meas.hst_config,
+					!!(module_ens & CIFISP_MODULE_HST));
+	}
+
+	if ((module_en_update & CIFISP_MODULE_AEC) ||
+	    (module_cfg_update & CIFISP_MODULE_AEC)) {
+		/* update aec config */
+		if ((module_cfg_update & CIFISP_MODULE_AEC))
+			ops->aec_config(params_vdev, &new_params->meas.aec_config);
+
+		if (module_en_update & CIFISP_MODULE_AEC) {
+			if (!!(module_ens & CIFISP_MODULE_AEC))
+				isp_param_set_bits(params_vdev,
+						   CIF_ISP_EXP_CTRL,
+						   CIF_ISP_EXP_ENA);
+			else
+				isp_param_clear_bits(params_vdev,
+						     CIF_ISP_EXP_CTRL,
+						     CIF_ISP_EXP_ENA);
+		}
+	}
+}
+
+static __maybe_unused
+void __preisp_isr_update_hdrae_para(struct rkisp_isp_params_vdev *params_vdev,
+				    struct rkisp1_isp_params_cfg *new_params)
+{
+	struct preisp_hdrae_para_s *hdrae;
+	struct cifisp_lsc_config *lsc;
+	struct cifisp_awb_gain_config *awb_gain;
+	unsigned int module_en_update, module_cfg_update, module_ens;
+	int i, ret;
+
+	hdrae = &params_vdev->hdrae_para;
+	module_en_update = new_params->module_en_update;
+	module_cfg_update = new_params->module_cfg_update;
+	module_ens = new_params->module_ens;
+	lsc = &new_params->others.lsc_config;
+	awb_gain = &new_params->others.awb_gain_config;
+
+	if (!params_vdev->dev->hdr.sensor)
+		return;
+
+	if ((module_en_update & CIFISP_MODULE_AWB_GAIN) ||
+	    (module_cfg_update & CIFISP_MODULE_AWB_GAIN)) {
+		/* update awb gains */
+		if ((module_cfg_update & CIFISP_MODULE_AWB_GAIN)) {
+			hdrae->r_gain = awb_gain->gain_red;
+			hdrae->b_gain = awb_gain->gain_blue;
+			hdrae->gr_gain = awb_gain->gain_green_r;
+			hdrae->gb_gain = awb_gain->gain_green_b;
+		}
+
+		if (module_en_update & CIFISP_MODULE_AWB_GAIN) {
+			if (!(module_ens & CIFISP_MODULE_AWB_GAIN)) {
+				hdrae->r_gain = 0x0100;
+				hdrae->b_gain = 0x0100;
+				hdrae->gr_gain = 0x0100;
+				hdrae->gb_gain = 0x0100;
+			}
+		}
+	}
+
+	if ((module_en_update & CIFISP_MODULE_LSC) ||
+	    (module_cfg_update & CIFISP_MODULE_LSC)) {
+		/* update lsc config */
+		if ((module_cfg_update & CIFISP_MODULE_LSC))
+			memcpy(hdrae->lsc_table, lsc->gr_data_tbl,
+				PREISP_LSCTBL_SIZE);
+
+		if (module_en_update & CIFISP_MODULE_LSC) {
+			if (!(module_ens & CIFISP_MODULE_LSC))
+				for (i = 0; i < PREISP_LSCTBL_SIZE; i++)
+					hdrae->lsc_table[i] = 0x0400;
+		}
+	}
+
+	ret = v4l2_subdev_call(params_vdev->dev->hdr.sensor, core, ioctl,
+			       PREISP_CMD_SAVE_HDRAE_PARAM, hdrae);
+	if (ret)
+		params_vdev->dev->hdr.sensor = NULL;
+}
+
+static const struct cifisp_awb_meas_config awb_params_default_config = {
+	{
+		0, 0, RKISP_DEFAULT_WIDTH, RKISP_DEFAULT_HEIGHT
+	},
+	CIFISP_AWB_MODE_YCBCR, 200, 30, 20, 20, 0, 128, 128
+};
+
+static const struct cifisp_aec_config aec_params_default_config = {
+	CIFISP_EXP_MEASURING_MODE_0,
+	CIFISP_EXP_CTRL_AUTOSTOP_0,
+	{
+		RKISP_DEFAULT_WIDTH >> 2, RKISP_DEFAULT_HEIGHT >> 2,
+		RKISP_DEFAULT_WIDTH >> 1, RKISP_DEFAULT_HEIGHT >> 1
+	}
+};
+
+static const struct cifisp_hst_config hst_params_default_config = {
+	CIFISP_HISTOGRAM_MODE_RGB_COMBINED,
+	3,
+	{
+		RKISP_DEFAULT_WIDTH >> 2, RKISP_DEFAULT_HEIGHT >> 2,
+		RKISP_DEFAULT_WIDTH >> 1, RKISP_DEFAULT_HEIGHT >> 1
+	},
+	{
+		0, /* To be filled in with 0x01 at runtime. */
+	}
+};
+
+static const struct cifisp_afc_config afc_params_default_config = {
+	1,
+	{
+		{
+			300, 225, 200, 150
+		}
+	},
+	4,
+	14
+};
+
+/* Not called when the camera active, thus not isr protection. */
+static void rkisp1_params_first_cfg_v1x(struct rkisp_isp_params_vdev *params_vdev)
+{
+	struct rkisp_isp_params_v1x_ops *ops =
+		(struct rkisp_isp_params_v1x_ops *)params_vdev->priv_ops;
+	struct cifisp_hst_config hst = hst_params_default_config;
+	struct device *dev = params_vdev->dev->dev;
+	int i;
+
+	spin_lock(&params_vdev->config_lock);
+
+	ops->awb_meas_config(params_vdev, &awb_params_default_config);
+	ops->awb_meas_enable(params_vdev, &awb_params_default_config, true);
+
+	ops->aec_config(params_vdev, &aec_params_default_config);
+	isp_param_set_bits(params_vdev, CIF_ISP_EXP_CTRL, CIF_ISP_EXP_ENA);
+
+	ops->afm_config(params_vdev, &afc_params_default_config);
+	isp_param_set_bits(params_vdev, CIF_ISP_AFM_CTRL, CIF_ISP_AFM_ENA);
+
+	memset(hst.hist_weight, 0x01, sizeof(hst.hist_weight));
+	ops->hst_config(params_vdev, &hst);
+	if (params_vdev->dev->isp_ver == ISP_V12 ||
+	    params_vdev->dev->isp_ver == ISP_V13) {
+		isp_param_set_bits(params_vdev, CIF_ISP_HIST_CTRL_V12,
+				   ~CIF_ISP_HIST_CTRL_MODE_MASK_V12 |
+				   hst_params_default_config.mode);
+	} else {
+		isp_param_set_bits(params_vdev, CIF_ISP_HIST_PROP_V10,
+				   ~CIF_ISP_HIST_PROP_MODE_MASK_V10 |
+				   hst_params_default_config.mode);
+	}
+
+	/* disable color related config for grey sensor */
+	if (params_vdev->in_mbus_code == MEDIA_BUS_FMT_Y8_1X8 ||
+	    params_vdev->in_mbus_code == MEDIA_BUS_FMT_Y10_1X10 ||
+	    params_vdev->in_mbus_code == MEDIA_BUS_FMT_Y12_1X12) {
+		ops->ctk_enable(params_vdev, false);
+		isp_param_clear_bits(params_vdev,
+				     CIF_ISP_CTRL,
+				     CIF_ISP_CTRL_ISP_AWB_ENA);
+		isp_param_clear_bits(params_vdev,
+				     CIF_ISP_LSC_CTRL,
+				     CIF_ISP_LSC_CTRL_ENA);
+	}
+
+	params_vdev->hdrae_para.r_gain = 0x0100;
+	params_vdev->hdrae_para.b_gain = 0x0100;
+	params_vdev->hdrae_para.gr_gain = 0x0100;
+	params_vdev->hdrae_para.gb_gain = 0x0100;
+	for (i = 0; i < PREISP_LSCTBL_SIZE; i++)
+		params_vdev->hdrae_para.lsc_table[i] = 0x0400;
+
+	/* override the default things */
+	if (!params_vdev->isp1x_params->module_cfg_update &&
+	    !params_vdev->isp1x_params->module_en_update)
+		dev_warn(dev, "can not get first iq setting in stream on\n");
+
+	__isp_isr_other_config(params_vdev, params_vdev->isp1x_params);
+	__isp_isr_meas_config(params_vdev, params_vdev->isp1x_params);
+	__preisp_isr_update_hdrae_para(params_vdev, params_vdev->isp1x_params);
+
+	spin_unlock(&params_vdev->config_lock);
+}
+
+static void rkisp1_save_first_param_v1x(struct rkisp_isp_params_vdev *params_vdev, void *param)
+{
+	struct rkisp1_isp_params_cfg *new_params;
+
+	new_params = (struct rkisp1_isp_params_cfg *)param;
+	*params_vdev->isp1x_params = *new_params;
+}
+
+static void rkisp1_clear_first_param_v1x(struct rkisp_isp_params_vdev *params_vdev)
+{
+	params_vdev->isp1x_params->module_cfg_update = 0;
+	params_vdev->isp1x_params->module_en_update = 0;
+}
+
+static void
+rkisp1_get_param_size_v1x(struct rkisp_isp_params_vdev *params_vdev, unsigned int sizes[])
+{
+	sizes[0] = sizeof(struct rkisp1_isp_params_cfg);
+}
+
+/* Not called when the camera active, thus not isr protection. */
+static void rkisp1_params_disable_isp_v1x(struct rkisp_isp_params_vdev *params_vdev)
+{
+	struct rkisp_isp_params_v1x_ops *ops =
+		(struct rkisp_isp_params_v1x_ops *)params_vdev->priv_ops;
+
+	isp_param_clear_bits(params_vdev, CIF_ISP_DPCC_MODE, CIF_ISP_DPCC_ENA);
+	isp_param_clear_bits(params_vdev, CIF_ISP_LSC_CTRL,
+			     CIF_ISP_LSC_CTRL_ENA);
+	isp_param_clear_bits(params_vdev, CIF_ISP_BLS_CTRL, CIF_ISP_BLS_ENA);
+	isp_param_clear_bits(params_vdev, CIF_ISP_CTRL,
+			     CIF_ISP_CTRL_ISP_GAMMA_IN_ENA);
+	isp_param_clear_bits(params_vdev, CIF_ISP_CTRL,
+			     CIF_ISP_CTRL_ISP_GAMMA_OUT_ENA);
+	isp_param_clear_bits(params_vdev, CIF_ISP_DEMOSAIC,
+			     CIF_ISP_DEMOSAIC_BYPASS);
+	isp_param_clear_bits(params_vdev, CIF_ISP_FILT_MODE, CIF_ISP_FLT_ENA);
+	ops->awb_meas_enable(params_vdev, NULL, false);
+	isp_param_clear_bits(params_vdev, CIF_ISP_CTRL,
+			     CIF_ISP_CTRL_ISP_AWB_ENA);
+	isp_param_clear_bits(params_vdev, CIF_ISP_EXP_CTRL, CIF_ISP_EXP_ENA);
+	ops->ctk_enable(params_vdev, false);
+	isp_param_clear_bits(params_vdev, CIF_C_PROC_CTRL,
+			     CIF_C_PROC_CTR_ENABLE);
+	ops->hst_enable(params_vdev, NULL, false);
+	isp_param_clear_bits(params_vdev, CIF_ISP_AFM_CTRL, CIF_ISP_AFM_ENA);
+	ops->ie_enable(params_vdev, false);
+	isp_param_clear_bits(params_vdev, CIF_ISP_DPF_MODE,
+			     CIF_ISP_DPF_MODE_EN);
+}
+
+static void rkisp1_params_isr_v1x(struct rkisp_isp_params_vdev *params_vdev,
+				  u32 isp_mis)
+{
+	struct rkisp1_isp_params_cfg *new_params;
+	struct rkisp_buffer *cur_buf = NULL;
+	unsigned int cur_frame_id =
+		atomic_read(&params_vdev->dev->isp_sdev.frm_sync_seq) - 1;
+
+	spin_lock(&params_vdev->config_lock);
+	if (!params_vdev->streamon)
+		goto unlock;
+
+	/* get one empty buffer */
+	if (!list_empty(&params_vdev->params))
+		cur_buf = list_first_entry(&params_vdev->params,
+					   struct rkisp_buffer, queue);
+	if (!cur_buf)
+		goto unlock;
+
+	new_params = (struct rkisp1_isp_params_cfg *)(cur_buf->vaddr[0]);
+
+	if (isp_mis & CIF_ISP_FRAME) {
+		u32 isp_ctrl;
+
+		list_del(&cur_buf->queue);
+
+		__isp_isr_other_config(params_vdev, new_params);
+		__isp_isr_meas_config(params_vdev, new_params);
+
+		/* update shadow register immediately */
+		isp_ctrl = rkisp1_ioread32(params_vdev, CIF_ISP_CTRL);
+		isp_ctrl |= CIF_ISP_CTRL_ISP_CFG_UPD;
+		rkisp1_iowrite32(params_vdev, isp_ctrl, CIF_ISP_CTRL);
+
+		__preisp_isr_update_hdrae_para(params_vdev, new_params);
+
+		cur_buf->vb.sequence = cur_frame_id;
+		vb2_buffer_done(&cur_buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+	}
+unlock:
+	spin_unlock(&params_vdev->config_lock);
+}
+
+static struct rkisp_isp_params_ops rkisp_isp_params_ops_tbl = {
+	.save_first_param = rkisp1_save_first_param_v1x,
+	.clear_first_param = rkisp1_clear_first_param_v1x,
+	.get_param_size = rkisp1_get_param_size_v1x,
+	.first_cfg = rkisp1_params_first_cfg_v1x,
+	.disable_isp = rkisp1_params_disable_isp_v1x,
+	.isr_hdl = rkisp1_params_isr_v1x,
+};
+
+int rkisp_init_params_vdev_v1x(struct rkisp_isp_params_vdev *params_vdev)
+{
+	params_vdev->ops = &rkisp_isp_params_ops_tbl;
+	if (params_vdev->dev->isp_ver == ISP_V12 ||
+	    params_vdev->dev->isp_ver == ISP_V13) {
+		params_vdev->priv_ops = &rkisp1_v12_isp_params_ops;
+		params_vdev->priv_cfg = &rkisp1_v12_isp_params_config;
+	} else {
+		params_vdev->priv_ops = &rkisp1_v10_isp_params_ops;
+		params_vdev->priv_cfg = &rkisp1_v10_isp_params_config;
+	}
+
+	params_vdev->isp1x_params = vmalloc(sizeof(*params_vdev->isp1x_params));
+	if (!params_vdev->isp1x_params)
+		return -ENOMEM;
+
+	rkisp1_clear_first_param_v1x(params_vdev);
+
+	return 0;
+}
+
+void rkisp_uninit_params_vdev_v1x(struct rkisp_isp_params_vdev *params_vdev)
+{
+	vfree(params_vdev->isp1x_params);
+}
 
