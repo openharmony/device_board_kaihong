@@ -6923,3 +6923,1838 @@ static int wl_cfgvendor_dbg_get_feature(struct wiphy *wiphy,
 exit:
 	return ret;
 }
+
+#ifdef DEBUGABILITY
+static void wl_cfgvendor_dbg_ring_send_evt(void *ctx,
+	const int ring_id, const void *data, const uint32 len,
+	const dhd_dbg_ring_status_t ring_status)
+{
+	struct net_device *ndev = ctx;
+	struct wiphy *wiphy;
+	gfp_t kflags;
+	struct sk_buff *skb;
+	if (!ndev) {
+		WL_ERR(("ndev is NULL\n"));
+		return;
+	}
+	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+	wiphy = ndev->ieee80211_ptr->wiphy;
+	/* Alloc the SKB for vendor_event */
+#if (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+	skb = cfg80211_vendor_event_alloc(wiphy, NULL, len + 100,
+			GOOGLE_DEBUG_RING_EVENT, kflags);
+#else
+	skb = cfg80211_vendor_event_alloc(wiphy, len + 100,
+			GOOGLE_DEBUG_RING_EVENT, kflags);
+#endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
+		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
+	if (!skb) {
+		WL_ERR(("skb alloc failed"));
+		return;
+	}
+	nla_put(skb, DEBUG_ATTRIBUTE_RING_STATUS, sizeof(ring_status), &ring_status);
+	nla_put(skb, DEBUG_ATTRIBUTE_RING_DATA, len, data);
+	cfg80211_vendor_event(skb, kflags);
+}
+#endif /* DEBUGABILITY */
+
+#ifdef DHD_LOG_DUMP
+static int wl_cfgvendor_nla_put_sssr_dump_data(struct sk_buff *skb,
+		struct net_device *ndev)
+{
+	int ret = BCME_OK;
+#ifdef DHD_SSSR_DUMP
+	uint32 arr_len[DUMP_SSSR_ATTR_COUNT];
+	int i = 0, j = 0;
+#endif /* DHD_SSSR_DUMP */
+	char memdump_path[MEMDUMP_PATH_LEN];
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN,
+		"sssr_dump_core_0_before_SR");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SSSR_CORE_0_BEFORE_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put sssr core 0 before dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN,
+		"sssr_dump_core_0_after_SR");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SSSR_CORE_0_AFTER_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put sssr core 1 after dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN,
+		"sssr_dump_core_1_before_SR");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SSSR_CORE_1_BEFORE_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put sssr core 1 before dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN,
+		"sssr_dump_core_1_after_SR");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SSSR_CORE_1_AFTER_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put sssr core 1 after dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN,
+		"sssr_dump_dig_before_SR");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SSSR_DIG_BEFORE_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put sssr dig before dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN,
+		"sssr_dump_dig_after_SR");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SSSR_DIG_AFTER_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put sssr dig after dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+#ifdef DHD_SSSR_DUMP
+	memset(arr_len, 0, sizeof(arr_len));
+	dhd_nla_put_sssr_dump_len(ndev, arr_len);
+
+	for (i = 0, j = DUMP_SSSR_ATTR_START; i < DUMP_SSSR_ATTR_COUNT; i++, j++) {
+		if (arr_len[i]) {
+			ret = nla_put_u32(skb, j, arr_len[i]);
+			if (unlikely(ret)) {
+				WL_ERR(("Failed to nla put sssr dump len, ret=%d\n", ret));
+				goto exit;
+			}
+		}
+	}
+#endif /* DHD_SSSR_DUMP */
+
+exit:
+	return ret;
+}
+
+static int wl_cfgvendor_nla_put_debug_dump_data(struct sk_buff *skb,
+		struct net_device *ndev)
+{
+	int ret = BCME_OK;
+	uint32 len = 0;
+	char dump_path[128];
+
+	ret = dhd_get_debug_dump_file_name(ndev, NULL, dump_path, sizeof(dump_path));
+	if (ret < 0) {
+		WL_ERR(("%s: Failed to get debug dump filename\n", __FUNCTION__));
+		goto exit;
+	}
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_DEBUG_DUMP, dump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put debug dump path, ret=%d\n", ret));
+		goto exit;
+	}
+	WL_ERR(("debug_dump path = %s%s\n", dump_path, FILE_NAME_HAL_TAG));
+	wl_print_verinfo(wl_get_cfg(ndev));
+
+	len = dhd_get_time_str_len();
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_TIMESTAMP, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put time stamp length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+
+	len = dhd_get_dld_len(DLD_BUF_TYPE_GENERAL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_GENERAL_LOG, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put general log length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#ifdef EWP_ECNTRS_LOGGING
+	len = dhd_get_ecntrs_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_ECNTRS, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put ecntrs length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#endif /* EWP_ECNTRS_LOGGING */
+	len = dhd_get_dld_len(DLD_BUF_TYPE_SPECIAL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_SPECIAL_LOG, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put special log length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+	len = dhd_get_dhd_dump_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_DHD_DUMP, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put dhd dump length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+
+#if defined(BCMPCIE)
+	len = dhd_get_ext_trap_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_EXT_TRAP, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put ext trap length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#endif /* BCMPCIE */
+
+#if defined(DHD_FW_COREDUMP) && defined(DNGL_EVENT_SUPPORT)
+	len = dhd_get_health_chk_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_HEALTH_CHK, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put health check length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#endif // endif
+
+	len = dhd_get_dld_len(DLD_BUF_TYPE_PRESERVE);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_PRESERVE_LOG, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put preserve log length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+
+	len = dhd_get_cookie_log_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_COOKIE, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put cookie length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#ifdef DHD_DUMP_PCIE_RINGS
+	len = dhd_get_flowring_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_FLOWRING_DUMP, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put flowring dump length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#endif // endif
+#ifdef DHD_STATUS_LOGGING
+	len = dhd_get_status_log_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_STATUS_LOG, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put status log length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#endif /* DHD_STATUS_LOGGING */
+#ifdef EWP_RTT_LOGGING
+	len = dhd_get_rtt_len(ndev, NULL);
+	if (len) {
+		ret = nla_put_u32(skb, DUMP_LEN_ATTR_RTT_LOG, len);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to nla put rtt log length, ret=%d\n", ret));
+			goto exit;
+		}
+	}
+#endif /* EWP_RTT_LOGGING */
+exit:
+	return ret;
+}
+#ifdef DNGL_AXI_ERROR_LOGGING
+static void wl_cfgvendor_nla_put_axi_error_data(struct sk_buff *skb,
+		struct net_device *ndev)
+{
+	int ret = 0;
+	char axierrordump_path[MEMDUMP_PATH_LEN];
+	int dumpsize = dhd_os_get_axi_error_dump_size(ndev);
+	if (dumpsize <= 0) {
+		WL_ERR(("Failed to calcuate axi error dump len\n"));
+		return;
+	}
+	dhd_os_get_axi_error_filename(ndev, axierrordump_path, MEMDUMP_PATH_LEN);
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_AXI_ERROR_DUMP, axierrordump_path);
+	if (ret) {
+		WL_ERR(("Failed to put filename\n"));
+		return;
+	}
+	ret = nla_put_u32(skb, DUMP_LEN_ATTR_AXI_ERROR, dumpsize);
+	if (ret) {
+		WL_ERR(("Failed to put filesize\n"));
+		return;
+	}
+}
+#endif /* DNGL_AXI_ERROR_LOGGING */
+
+static int wl_cfgvendor_nla_put_memdump_data(struct sk_buff *skb,
+		struct net_device *ndev, const uint32 fw_len)
+{
+	char memdump_path[MEMDUMP_PATH_LEN];
+	int ret = BCME_OK;
+
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN, "mem_dump");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_MEM_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put mem dump path, ret=%d\n", ret));
+		goto exit;
+	}
+	ret = nla_put_u32(skb, DUMP_LEN_ATTR_MEMDUMP, fw_len);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put mem dump length, ret=%d\n", ret));
+		goto exit;
+	}
+
+exit:
+	return ret;
+}
+
+static void wl_cfgvendor_dbg_send_file_dump_evt(void *ctx, const void *data,
+	const uint32 len, const uint32 fw_len)
+{
+	struct net_device *ndev = ctx;
+	struct wiphy *wiphy;
+	gfp_t kflags;
+	struct sk_buff *skb = NULL;
+	struct bcm_cfg80211 *cfg;
+	dhd_pub_t *dhd_pub;
+	int ret = BCME_OK;
+
+	if (!ndev) {
+		WL_ERR(("ndev is NULL\n"));
+		return;
+	}
+
+	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+	wiphy = ndev->ieee80211_ptr->wiphy;
+	/* Alloc the SKB for vendor_event */
+#if (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+	skb = cfg80211_vendor_event_alloc(wiphy, NULL, len + CFG80211_VENDOR_EVT_SKB_SZ,
+			GOOGLE_FILE_DUMP_EVENT, kflags);
+#else
+	skb = cfg80211_vendor_event_alloc(wiphy, len + CFG80211_VENDOR_EVT_SKB_SZ,
+			GOOGLE_FILE_DUMP_EVENT, kflags);
+#endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
+		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
+	if (!skb) {
+		WL_ERR(("skb alloc failed"));
+		return;
+	}
+
+	cfg = wiphy_priv(wiphy);
+	dhd_pub = cfg->pub;
+#ifdef DNGL_AXI_ERROR_LOGGING
+	if (dhd_pub->smmu_fault_occurred) {
+		wl_cfgvendor_nla_put_axi_error_data(skb, ndev);
+	}
+#endif /* DNGL_AXI_ERROR_LOGGING */
+#ifdef DHD_FW_COREDUMP
+	if (dhd_pub->memdump_enabled || (dhd_pub->memdump_type == DUMP_TYPE_BY_SYSDUMP))
+#else
+	if ((dhd_pub->memdump_type == DUMP_TYPE_BY_SYSDUMP))
+#endif
+	{
+		if (((ret = wl_cfgvendor_nla_put_memdump_data(skb, ndev, fw_len)) < 0) ||
+			((ret = wl_cfgvendor_nla_put_debug_dump_data(skb, ndev)) < 0) ||
+			((ret = wl_cfgvendor_nla_put_sssr_dump_data(skb, ndev)) < 0)) {
+			WL_ERR(("nla put failed\n"));
+			goto done;
+		}
+	}
+	/* TODO : Similar to above function add for debug_dump, sssr_dump, and pktlog also. */
+	cfg80211_vendor_event(skb, kflags);
+	return;
+done:
+	if (skb) {
+		dev_kfree_skb_any(skb);
+	}
+}
+#endif /* DHD_LOG_DUMP */
+
+static int wl_cfgvendor_dbg_get_version(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int len)
+{
+	int ret = BCME_OK, rem, type;
+	int buf_len = 1024;
+	bool dhd_ver = FALSE;
+	char *buf_ptr, *ver, *p;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+
+	buf_ptr = (char *)MALLOCZ(cfg->osh, buf_len);
+	if (!buf_ptr) {
+		WL_ERR(("failed to allocate the buffer for version n"));
+		ret = BCME_NOMEM;
+		goto exit;
+	}
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case DEBUG_ATTRIBUTE_GET_DRIVER:
+				dhd_ver = TRUE;
+				break;
+			case DEBUG_ATTRIBUTE_GET_FW:
+				dhd_ver = FALSE;
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_ERROR;
+				goto exit;
+		}
+	}
+	ret = dhd_os_get_version(bcmcfg_to_prmry_ndev(cfg), dhd_ver, &buf_ptr, buf_len);
+	if (ret < 0) {
+		WL_ERR(("failed to get the version %d\n", ret));
+		goto exit;
+	}
+	ver = strstr(buf_ptr, "version ");
+	if (!ver) {
+		WL_ERR(("failed to locate the version\n"));
+		goto exit;
+	}
+	ver += strlen("version ");
+	/* Adjust version format to fit in android sys property */
+	for (p = ver; (*p != ' ') && (*p != '\n') && (*p != 0); p++) {
+		;
+	}
+	ret = wl_cfgvendor_send_cmd_reply(wiphy, ver, p - ver);
+exit:
+	MFREE(cfg->osh, buf_ptr, buf_len);
+	return ret;
+}
+
+#ifdef DBG_PKT_MON
+static int wl_cfgvendor_dbg_start_pkt_fate_monitoring(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int len)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	int ret;
+
+	ret = dhd_os_dbg_attach_pkt_monitor(dhd_pub);
+	if (unlikely(ret)) {
+		WL_ERR(("failed to start pkt fate monitoring, ret=%d", ret));
+	}
+
+	return ret;
+}
+
+typedef int (*dbg_mon_get_pkts_t) (dhd_pub_t *dhdp, void __user *user_buf,
+	uint16 req_count, uint16 *resp_count);
+
+static int __wl_cfgvendor_dbg_get_pkt_fates(struct wiphy *wiphy,
+	const void *data, int len, dbg_mon_get_pkts_t dbg_mon_get_pkts)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	struct sk_buff *skb = NULL;
+	const struct nlattr *iter;
+	void __user *user_buf = NULL;
+	uint16 req_count = 0, resp_count = 0;
+	int ret, tmp, type, mem_needed;
+
+	nla_for_each_attr(iter, data, len, tmp) {
+		type = nla_type(iter);
+		switch (type) {
+			case DEBUG_ATTRIBUTE_PKT_FATE_NUM:
+				req_count = nla_get_u32(iter);
+				break;
+			case DEBUG_ATTRIBUTE_PKT_FATE_DATA:
+				user_buf = (void __user *)(unsigned long) nla_get_u64(iter);
+				break;
+			default:
+				WL_ERR(("%s: no such attribute %d\n", __FUNCTION__, type));
+				ret = -EINVAL;
+				goto exit;
+		}
+	}
+
+	if (!req_count || !user_buf) {
+		WL_ERR(("%s: invalid request, user_buf=%p, req_count=%u\n",
+			__FUNCTION__, user_buf, req_count));
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	ret = dbg_mon_get_pkts(dhd_pub, user_buf, req_count, &resp_count);
+	if (unlikely(ret)) {
+		WL_ERR(("failed to get packets, ret:%d \n", ret));
+		goto exit;
+	}
+
+	mem_needed = VENDOR_REPLY_OVERHEAD + ATTRIBUTE_U32_LEN;
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
+	if (unlikely(!skb)) {
+		WL_ERR(("skb alloc failed"));
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	ret = nla_put_u32(skb, DEBUG_ATTRIBUTE_PKT_FATE_NUM, resp_count);
+	if (ret < 0) {
+		WL_ERR(("Failed to put DEBUG_ATTRIBUTE_PKT_FATE_NUM, ret:%d\n", ret));
+		goto exit;
+	}
+
+	ret = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(ret)) {
+		WL_ERR(("vendor Command reply failed ret:%d \n", ret));
+	}
+	return ret;
+
+exit:
+	/* Free skb memory */
+	if (skb) {
+		kfree_skb(skb);
+	}
+	return ret;
+}
+
+static int wl_cfgvendor_dbg_get_tx_pkt_fates(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret;
+
+	ret = __wl_cfgvendor_dbg_get_pkt_fates(wiphy, data, len,
+			dhd_os_dbg_monitor_get_tx_pkts);
+	if (unlikely(ret)) {
+		WL_ERR(("failed to get tx packets, ret:%d \n", ret));
+	}
+
+	return ret;
+}
+
+static int wl_cfgvendor_dbg_get_rx_pkt_fates(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret;
+
+	ret = __wl_cfgvendor_dbg_get_pkt_fates(wiphy, data, len,
+			dhd_os_dbg_monitor_get_rx_pkts);
+	if (unlikely(ret)) {
+		WL_ERR(("failed to get rx packets, ret:%d \n", ret));
+	}
+
+	return ret;
+}
+#endif /* DBG_PKT_MON */
+
+#ifdef KEEP_ALIVE
+static int wl_cfgvendor_start_mkeep_alive(struct wiphy *wiphy, struct wireless_dev *wdev,
+	const void *data, int len)
+{
+	/* max size of IP packet for keep alive */
+	const int MKEEP_ALIVE_IP_PKT_MAX = 256;
+
+	int ret = BCME_OK, rem, type;
+	uint8 mkeep_alive_id = 0;
+	uint8 *ip_pkt = NULL;
+	uint16 ip_pkt_len = 0;
+	uint8 src_mac[ETHER_ADDR_LEN];
+	uint8 dst_mac[ETHER_ADDR_LEN];
+	uint32 period_msec = 0;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case MKEEP_ALIVE_ATTRIBUTE_ID:
+				mkeep_alive_id = nla_get_u8(iter);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN:
+				ip_pkt_len = nla_get_u16(iter);
+				if (ip_pkt_len > MKEEP_ALIVE_IP_PKT_MAX) {
+					ret = BCME_BADARG;
+					goto exit;
+				}
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_IP_PKT:
+				if (ip_pkt) {
+					ret = BCME_BADARG;
+					WL_ERR(("ip_pkt already allocated\n"));
+					goto exit;
+				}
+				if (!ip_pkt_len) {
+					ret = BCME_BADARG;
+					WL_ERR(("ip packet length is 0\n"));
+					goto exit;
+				}
+				ip_pkt = (u8 *)MALLOCZ(cfg->osh, ip_pkt_len);
+				if (ip_pkt == NULL) {
+					ret = BCME_NOMEM;
+					WL_ERR(("Failed to allocate mem for ip packet\n"));
+					goto exit;
+				}
+				memcpy(ip_pkt, (u8*)nla_data(iter), ip_pkt_len);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR:
+				memcpy(src_mac, nla_data(iter), ETHER_ADDR_LEN);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR:
+				memcpy(dst_mac, nla_data(iter), ETHER_ADDR_LEN);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC:
+				period_msec = nla_get_u32(iter);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADARG;
+				goto exit;
+		}
+	}
+
+	if (ip_pkt == NULL) {
+		ret = BCME_BADARG;
+		WL_ERR(("ip packet is NULL\n"));
+		goto exit;
+	}
+
+	ret = dhd_dev_start_mkeep_alive(dhd_pub, mkeep_alive_id, ip_pkt, ip_pkt_len, src_mac,
+		dst_mac, period_msec);
+	if (ret < 0) {
+		WL_ERR(("start_mkeep_alive is failed ret: %d\n", ret));
+	}
+
+exit:
+	if (ip_pkt) {
+		MFREE(cfg->osh, ip_pkt, ip_pkt_len);
+	}
+
+	return ret;
+}
+
+static int wl_cfgvendor_stop_mkeep_alive(struct wiphy *wiphy, struct wireless_dev *wdev,
+	const void *data, int len)
+{
+	int ret = BCME_OK, rem, type;
+	uint8 mkeep_alive_id = 0;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case MKEEP_ALIVE_ATTRIBUTE_ID:
+				mkeep_alive_id = nla_get_u8(iter);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADARG;
+				break;
+		}
+	}
+
+	ret = dhd_dev_stop_mkeep_alive(dhd_pub, mkeep_alive_id);
+	if (ret < 0) {
+		WL_ERR(("stop_mkeep_alive is failed ret: %d\n", ret));
+	}
+
+	return ret;
+}
+#endif /* KEEP_ALIVE */
+
+#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+static int
+wl_cfgvendor_apf_get_capabilities(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int len)
+{
+	struct net_device *ndev = wdev_to_ndev(wdev);
+	struct sk_buff *skb = NULL;
+	int ret, ver, max_len, mem_needed;
+
+	/* APF version */
+	ver = 0;
+	ret = dhd_dev_apf_get_version(ndev, &ver);
+	if (unlikely(ret)) {
+		WL_ERR(("APF get version failed, ret=%d\n", ret));
+		return ret;
+	}
+
+	/* APF memory size limit */
+	max_len = 0;
+	ret = dhd_dev_apf_get_max_len(ndev, &max_len);
+	if (unlikely(ret)) {
+		WL_ERR(("APF get maximum length failed, ret=%d\n", ret));
+		return ret;
+	}
+
+	mem_needed = VENDOR_REPLY_OVERHEAD + (ATTRIBUTE_U32_LEN * 2);
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
+	if (unlikely(!skb)) {
+		WL_ERR(("%s: can't allocate %d bytes\n", __FUNCTION__, mem_needed));
+		return -ENOMEM;
+	}
+
+	ret = nla_put_u32(skb, APF_ATTRIBUTE_VERSION, ver);
+	if (ret < 0) {
+		WL_ERR(("Failed to put APF_ATTRIBUTE_VERSION, ret:%d\n", ret));
+		goto exit;
+	}
+	ret = nla_put_u32(skb, APF_ATTRIBUTE_MAX_LEN, max_len);
+	if (ret < 0) {
+		WL_ERR(("Failed to put APF_ATTRIBUTE_MAX_LEN, ret:%d\n", ret));
+		goto exit;
+	}
+
+	ret = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(ret)) {
+		WL_ERR(("vendor command reply failed, ret=%d\n", ret));
+	}
+	return ret;
+exit:
+	/* Free skb memory */
+	kfree_skb(skb);
+	return ret;
+}
+
+static int
+wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	struct net_device *ndev = wdev_to_ndev(wdev);
+	const struct nlattr *iter;
+	u8 *program = NULL;
+	u32 program_len = 0;
+	int ret, tmp, type;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+
+	if (len <= 0) {
+		WL_ERR(("Invalid len: %d\n", len));
+		ret = -EINVAL;
+		goto exit;
+	}
+	nla_for_each_attr(iter, data, len, tmp) {
+		type = nla_type(iter);
+		switch (type) {
+			case APF_ATTRIBUTE_PROGRAM_LEN:
+				/* check if the iter value is valid and program_len
+				 * is not already initialized.
+				 */
+				if (nla_len(iter) == sizeof(uint32) && !program_len) {
+					program_len = nla_get_u32(iter);
+				} else {
+					ret = -EINVAL;
+					goto exit;
+				}
+
+				if (program_len > WL_APF_PROGRAM_MAX_SIZE) {
+					WL_ERR(("program len is more than expected len\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
+
+				if (unlikely(!program_len)) {
+					WL_ERR(("zero program length\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
+				break;
+			case APF_ATTRIBUTE_PROGRAM:
+				if (unlikely(program)) {
+					WL_ERR(("program already allocated\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
+				if (unlikely(!program_len)) {
+					WL_ERR(("program len is not set\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
+				if (nla_len(iter) != program_len) {
+					WL_ERR(("program_len is not same\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
+				program = MALLOCZ(cfg->osh, program_len);
+				if (unlikely(!program)) {
+					WL_ERR(("%s: can't allocate %d bytes\n",
+					      __FUNCTION__, program_len));
+					ret = -ENOMEM;
+					goto exit;
+				}
+				memcpy(program, (u8*)nla_data(iter), program_len);
+				break;
+			default:
+				WL_ERR(("%s: no such attribute %d\n", __FUNCTION__, type));
+				ret = -EINVAL;
+				goto exit;
+		}
+	}
+
+	ret = dhd_dev_apf_add_filter(ndev, program, program_len);
+
+exit:
+	if (program) {
+		MFREE(cfg->osh, program, program_len);
+	}
+	return ret;
+}
+#endif /* PKT_FILTER_SUPPORT && APF */
+
+#ifdef NDO_CONFIG_SUPPORT
+static int wl_cfgvendor_configure_nd_offload(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	const struct nlattr *iter;
+	int ret = BCME_OK, rem, type;
+	u8 enable = 0;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case ANDR_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE:
+				enable = nla_get_u8(iter);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADARG;
+				goto exit;
+		}
+	}
+
+	ret = dhd_dev_ndo_cfg(bcmcfg_to_prmry_ndev(cfg), enable);
+	if (ret < 0) {
+		WL_ERR(("dhd_dev_ndo_cfg() failed: %d\n", ret));
+	}
+
+exit:
+	return ret;
+}
+#endif /* NDO_CONFIG_SUPPORT */
+
+/* for kernel >= 4.13 NL80211 wl_cfg80211_set_pmk have to be used. */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0))
+static int wl_cfgvendor_set_pmk(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int len)
+{
+	int ret = 0;
+	wsec_pmk_t pmk;
+	const struct nlattr *iter;
+	int rem, type;
+	struct net_device *ndev = wdev_to_ndev(wdev);
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct wl_security *sec;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case BRCM_ATTR_DRIVER_KEY_PMK:
+				if (nla_len(iter) > sizeof(pmk.key)) {
+					ret = -EINVAL;
+					goto exit;
+				}
+				pmk.flags = 0;
+				pmk.key_len = htod16(nla_len(iter));
+				bcopy((uint8 *)nla_data(iter), pmk.key, len);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADARG;
+				goto exit;
+		}
+	}
+
+	sec = wl_read_prof(cfg, ndev, WL_PROF_SEC);
+	if ((sec->wpa_auth == WLAN_AKM_SUITE_8021X) ||
+		(sec->wpa_auth == WL_AKM_SUITE_SHA256_1X)) {
+		ret = wldev_iovar_setbuf(ndev, "okc_info_pmk", pmk.key, pmk.key_len, cfg->ioctl_buf,
+			WLC_IOCTL_SMLEN,  &cfg->ioctl_buf_sync);
+		if (ret) {
+			/* could fail in case that 'okc' is not supported */
+			WL_INFORM_MEM(("okc_info_pmk failed, err=%d (ignore)\n", ret));
+		}
+	}
+
+	ret = wldev_ioctl_set(ndev, WLC_SET_WSEC_PMK, &pmk, sizeof(pmk));
+	WL_INFORM_MEM(("IOVAR set_pmk ret:%d", ret));
+exit:
+	return ret;
+}
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) */
+
+static int wl_cfgvendor_get_driver_feature(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK;
+	u8 supported[(BRCM_WLAN_VENDOR_FEATURES_MAX / 8) + 1] = {0};
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	struct sk_buff *skb;
+	int32 mem_needed;
+
+	mem_needed = VENDOR_REPLY_OVERHEAD + NLA_HDRLEN + sizeof(supported);
+
+	BCM_REFERENCE(dhd_pub);
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0))
+	if (FW_SUPPORTED(dhd_pub, idsup)) {
+		ret = wl_features_set(supported, sizeof(supported),
+				BRCM_WLAN_VENDOR_FEATURE_KEY_MGMT_OFFLOAD);
+	}
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) */
+
+	/* Alloc the SKB for vendor_event */
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
+	if (unlikely(!skb)) {
+		WL_ERR(("skb alloc failed"));
+		ret = BCME_NOMEM;
+		goto exit;
+	}
+
+	ret = nla_put(skb, BRCM_ATTR_DRIVER_FEATURE_FLAGS, sizeof(supported), supported);
+	if (ret) {
+		kfree_skb(skb);
+		goto exit;
+	}
+	ret = cfg80211_vendor_cmd_reply(skb);
+exit:
+	return ret;
+}
+
+static const struct wiphy_vendor_command wl_vendor_cmds [] = {
+	{
+		{
+			.vendor_id = OUI_BRCM,
+			.subcmd = BRCM_VENDOR_SCMD_PRIV_STR
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_priv_string_handler
+	},
+#ifdef BCM_PRIV_CMD_SUPPORT
+	{
+		{
+			.vendor_id = OUI_BRCM,
+			.subcmd = BRCM_VENDOR_SCMD_BCM_STR
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_priv_bcm_handler
+	},
+#endif /* BCM_PRIV_CMD_SUPPORT */
+#ifdef WL_SAE
+	{
+		{
+			.vendor_id = OUI_BRCM,
+			.subcmd = BRCM_VENDOR_SCMD_BCM_PSK
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_sae_password
+	},
+#endif /* WL_SAE */
+#ifdef GSCAN_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_GET_CAPABILITIES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_gscan_get_capabilities
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_SET_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_scan_cfg
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_SET_SCAN_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_batch_scan_cfg
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_ENABLE_GSCAN
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_initiate_gscan
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_ENABLE_FULL_SCAN_RESULTS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_enable_full_scan_result
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_SET_HOTLIST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_hotlist_cfg
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_GET_SCAN_RESULTS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_gscan_get_batch_results
+	},
+#endif /* GSCAN_SUPPORT */
+#if defined(GSCAN_SUPPORT) || defined(DHD_GET_VALID_CHANNELS)
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_GET_CHANNEL_LIST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_gscan_get_channel_list
+	},
+#endif /* GSCAN_SUPPORT || DHD_GET_VALID_CHANNELS */
+#ifdef RTT_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = RTT_SUBCMD_SET_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_rtt_set_config
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = RTT_SUBCMD_CANCEL_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_rtt_cancel_config
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = RTT_SUBCMD_GETCAPABILITY
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_rtt_get_capability
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = RTT_SUBCMD_GETAVAILCHANNEL
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_rtt_get_responder_info
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = RTT_SUBCMD_SET_RESPONDER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_rtt_set_responder
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = RTT_SUBCMD_CANCEL_RESPONDER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_rtt_cancel_responder
+	},
+#endif /* RTT_SUPPORT */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = ANDR_WIFI_SUBCMD_GET_FEATURE_SET
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_get_feature_set
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = ANDR_WIFI_SUBCMD_GET_FEATURE_SET_MATRIX
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_get_feature_set_matrix
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = ANDR_WIFI_RANDOM_MAC_OUI
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_rand_mac_oui
+	},
+#ifdef CUSTOM_FORCE_NODFS_FLAG
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = ANDR_WIFI_NODFS_CHANNELS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_nodfs_flag
+	},
+#endif /* CUSTOM_FORCE_NODFS_FLAG */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = ANDR_WIFI_SET_COUNTRY
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_country
+	},
+#ifdef LINKSTAT_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = LSTATS_SUBCMD_GET_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_lstats_get_info
+	},
+#endif /* LINKSTAT_SUPPORT */
+
+#ifdef GSCAN_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = GSCAN_SUBCMD_SET_EPNO_SSID
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_epno_cfg
+
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_LAZY_ROAM_PARAMS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_lazy_roam_cfg
+
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_ENABLE_LAZY_ROAM
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_enable_lazy_roam
+
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_BSSID_PREF
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_bssid_pref
+
+	},
+#endif /* GSCAN_SUPPORT */
+#if defined(GSCAN_SUPPORT) || defined(ROAMEXP_SUPPORT)
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_SSID_WHITELIST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_ssid_whitelist
+
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_BSSID_BLACKLIST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_bssid_blacklist
+	},
+#endif /* GSCAN_SUPPORT || ROAMEXP_SUPPORT */
+#ifdef ROAMEXP_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_FW_ROAM_POLICY
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_fw_roaming_state
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_ROAM_CAPABILITY
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_fw_roam_get_capability
+	},
+#endif /* ROAMEXP_SUPPORT */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_VER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_version
+	},
+#ifdef DHD_LOG_DUMP
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_FILE_DUMP_BUF
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_file_dump
+	},
+#endif /* DHD_LOG_DUMP */
+
+#ifdef DEBUGABILITY
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_TRIGGER_MEM_DUMP
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_trigger_mem_dump
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_MEM_DUMP
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_mem_dump
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_START_LOGGING
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_start_logging
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_RESET_LOGGING
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_reset_logging
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_RING_STATUS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_ring_status
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_RING_DATA
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_ring_data
+	},
+#endif /* DEBUGABILITY */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_FEATURE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_feature
+	},
+#ifdef DBG_PKT_MON
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_START_PKT_FATE_MONITORING
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_start_pkt_fate_monitoring
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_TX_PKT_FATES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_tx_pkt_fates
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_RX_PKT_FATES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_dbg_get_rx_pkt_fates
+	},
+#endif /* DBG_PKT_MON */
+#ifdef KEEP_ALIVE
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_OFFLOAD_SUBCMD_START_MKEEP_ALIVE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_start_mkeep_alive
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_OFFLOAD_SUBCMD_STOP_MKEEP_ALIVE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_stop_mkeep_alive
+	},
+#endif /* KEEP_ALIVE */
+#ifdef WL_NAN
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_ENABLE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_start_handler
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DISABLE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_stop_handler
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_config_handler
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_REQUEST_PUBLISH
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_req_publish
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_req_subscribe
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_CANCEL_PUBLISH
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_cancel_publish
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_cancel_subscribe
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_TRANSMIT
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_transmit
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_GET_CAPABILITIES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_get_capablities
+	},
+
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_data_path_iface_create
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_data_path_iface_delete
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_REQUEST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_data_path_request
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_data_path_response
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_END
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_data_path_end
+	},
+#ifdef WL_NAN_DISC_CACHE
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_data_path_sec_info
+	},
+#endif /* WL_NAN_DISC_CACHE */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = NAN_WIFI_SUBCMD_VERSION_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_nan_version_info
+	},
+#endif /* WL_NAN */
+#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = APF_SUBCMD_GET_CAPABILITIES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_apf_get_capabilities
+	},
+
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = APF_SUBCMD_SET_FILTER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_apf_set_filter
+	},
+#endif /* PKT_FILTER_SUPPORT && APF */
+#ifdef NDO_CONFIG_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_CONFIG_ND_OFFLOAD
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_configure_nd_offload
+	},
+#endif /* NDO_CONFIG_SUPPORT */
+#ifdef RSSI_MONITOR_SUPPORT
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_RSSI_MONITOR
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_rssi_monitor
+	},
+#endif /* RSSI_MONITOR_SUPPORT */
+#ifdef DHD_WAKE_STATUS
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_WAKE_REASON_STATS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_get_wake_reason_stats
+	},
+#endif /* DHD_WAKE_STATUS */
+#ifdef DHDTCPACK_SUPPRESS
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_CONFIG_TCPACK_SUP
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_tcpack_sup_mode
+	},
+#endif /* DHDTCPACK_SUPPRESS */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0))
+	{
+		{
+			.vendor_id = OUI_BRCM,
+			.subcmd = BRCM_VENDOR_SCMD_SET_PMK
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_pmk
+	},
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) */
+	{
+		{
+			.vendor_id = OUI_BRCM,
+			.subcmd = BRCM_VENDOR_SCMD_GET_FEATURES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_get_driver_feature
+	},
+#if defined(WL_CFG80211) && defined(DHD_FILE_DUMP_EVENT)
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_FILE_DUMP_DONE_IND
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_notify_dump_completion
+	},
+#endif /* WL_CFG80211 && DHD_FILE_DUMP_EVENT */
+#if defined(WL_CFG80211)
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_SET_HAL_START
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_set_hal_started
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_SET_HAL_STOP
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = wl_cfgvendor_stop_hal
+	}
+#endif /* WL_CFG80211 */
+};
+
+static const struct  nl80211_vendor_cmd_info wl_vendor_events [] = {
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_UNSPEC },
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_PRIV_STR },
+		{ OUI_GOOGLE, GOOGLE_GSCAN_SIGNIFICANT_EVENT },
+		{ OUI_GOOGLE, GOOGLE_GSCAN_GEOFENCE_FOUND_EVENT },
+		{ OUI_GOOGLE, GOOGLE_GSCAN_BATCH_SCAN_EVENT },
+		{ OUI_GOOGLE, GOOGLE_SCAN_FULL_RESULTS_EVENT },
+		{ OUI_GOOGLE, GOOGLE_RTT_COMPLETE_EVENT },
+		{ OUI_GOOGLE, GOOGLE_SCAN_COMPLETE_EVENT },
+		{ OUI_GOOGLE, GOOGLE_GSCAN_GEOFENCE_LOST_EVENT },
+		{ OUI_GOOGLE, GOOGLE_SCAN_EPNO_EVENT },
+		{ OUI_GOOGLE, GOOGLE_DEBUG_RING_EVENT },
+		{ OUI_GOOGLE, GOOGLE_FW_DUMP_EVENT },
+		{ OUI_GOOGLE, GOOGLE_PNO_HOTSPOT_FOUND_EVENT },
+		{ OUI_GOOGLE, GOOGLE_RSSI_MONITOR_EVENT },
+		{ OUI_GOOGLE, GOOGLE_MKEEP_ALIVE_EVENT },
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_ENABLED},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DISABLED},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_REPLIED},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_PUBLISH_TERMINATED},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DE_EVENT},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_FOLLOWUP},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_REQUEST},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_CONFIRMATION},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_END},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_BEACON},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SDF},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_TCA},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_UNMATCH},
+		{ OUI_GOOGLE, GOOGLE_NAN_EVENT_UNKNOWN},
+		{ OUI_GOOGLE, GOOGLE_ROAM_EVENT_START},
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_HANGED},
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_SAE_KEY},
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_BEACON_RECV},
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_PORT_AUTHORIZED},
+		{ OUI_GOOGLE, GOOGLE_FILE_DUMP_EVENT },
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_CU},
+		{ OUI_BRCM, BRCM_VENDOR_EVENT_WIPS},
+		{ OUI_GOOGLE, NAN_ASYNC_RESPONSE_DISABLED}
+};
+
+int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd)
+{
+
+	WL_INFORM_MEM(("Vendor: Register BRCM cfg80211 vendor cmd(0x%x) interface \n",
+		NL80211_CMD_VENDOR));
+
+	wiphy->vendor_commands	= wl_vendor_cmds;
+	wiphy->n_vendor_commands = ARRAY_SIZE(wl_vendor_cmds);
+	wiphy->vendor_events	= wl_vendor_events;
+	wiphy->n_vendor_events	= ARRAY_SIZE(wl_vendor_events);
+
+#ifdef DEBUGABILITY
+	dhd_os_dbg_register_callback(FW_VERBOSE_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
+	dhd_os_dbg_register_callback(DHD_EVENT_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
+#endif /* DEBUGABILITY */
+#ifdef DHD_LOG_DUMP
+	dhd_os_dbg_register_urgent_notifier(dhd, wl_cfgvendor_dbg_send_file_dump_evt);
+#endif /* DHD_LOG_DUMP */
+
+	return 0;
+}
+
+int wl_cfgvendor_detach(struct wiphy *wiphy)
+{
+	WL_INFORM_MEM(("Vendor: Unregister BRCM cfg80211 vendor interface \n"));
+
+	wiphy->vendor_commands  = NULL;
+	wiphy->vendor_events    = NULL;
+	wiphy->n_vendor_commands = 0;
+	wiphy->n_vendor_events  = 0;
+
+	return 0;
+}
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
