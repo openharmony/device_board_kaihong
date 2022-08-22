@@ -1714,3 +1714,460 @@ int mpp_task_dump_hw_reg(struct mpp_dev *mpp, struct mpp_task *task)
 	return 0;
 }
 
+static int mpp_iommu_handle(struct iommu_domain *iommu,
+			    struct device *iommu_dev,
+			    unsigned long iova,
+			    int status, void *arg)
+{
+	struct mpp_taskqueue *queue = (struct mpp_taskqueue *)arg;
+	struct mpp_task *task = mpp_taskqueue_get_running_task(queue);
+	struct mpp_dev *mpp;
+
+	/*
+	 * NOTE: In link mode, this task may not be the task of the current
+	 * hardware processing error
+	 */
+	if (!task || !task->session)
+		return -EIO;
+	/* get mpp from cur task */
+	mpp = mpp_get_task_used_device(task, task->session);
+	dev_err(mpp->dev, "fault addr 0x%08lx status %x\n", iova, status);
+
+	mpp_task_dump_mem_region(mpp, task);
+	mpp_task_dump_hw_reg(mpp, task);
+
+	if (mpp->iommu_info->hdl)
+		mpp->iommu_info->hdl(iommu, iommu_dev, iova, status, arg);
+
+	return 0;
+}
+
+/* The device will do more probing work after this */
+int mpp_dev_probe(struct mpp_dev *mpp,
+		  struct platform_device *pdev)
+{
+	int ret;
+	struct resource *res = NULL;
+	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+	struct mpp_hw_info *hw_info = mpp->var->hw_info;
+
+	/* Get disable auto frequent flag from dtsi */
+	mpp->auto_freq_en = !device_property_read_bool(dev, "rockchip,disable-auto-freq");
+
+	/* read link table capacity */
+	ret = of_property_read_u32(np, "rockchip,task-capacity",
+				   &mpp->task_capacity);
+	if (ret)
+		mpp->task_capacity = 1;
+
+	mpp->dev = dev;
+	mpp->hw_ops = mpp->var->hw_ops;
+	mpp->dev_ops = mpp->var->dev_ops;
+
+	/* Get and attach to service */
+	ret = mpp_attach_service(mpp, dev);
+	if (ret) {
+		dev_err(dev, "failed to attach service\n");
+		return -ENODEV;
+	}
+
+	if (mpp->task_capacity == 1) {
+		/* power domain autosuspend delay 2s */
+		pm_runtime_set_autosuspend_delay(dev, 2000);
+		pm_runtime_use_autosuspend(dev);
+	} else {
+		dev_info(dev, "link mode task capacity %d\n",
+			 mpp->task_capacity);
+		/* do not setup autosuspend on multi task device */
+	}
+
+	kthread_init_work(&mpp->work, mpp_task_worker_default);
+
+	atomic_set(&mpp->reset_request, 0);
+	atomic_set(&mpp->session_index, 0);
+	atomic_set(&mpp->task_count, 0);
+	atomic_set(&mpp->task_index, 0);
+
+	device_init_wakeup(dev, true);
+	pm_runtime_enable(dev);
+
+	mpp->irq = platform_get_irq(pdev, 0);
+	if (mpp->irq < 0) {
+		dev_err(dev, "No interrupt resource found\n");
+		ret = -ENODEV;
+		goto failed;
+	}
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		dev_err(&pdev->dev, "no memory resource defined\n");
+		ret = -ENODEV;
+		goto failed;
+	}
+	/*
+	 * Tips: here can not use function devm_ioremap_resource. The resion is
+	 * that hevc and vdpu map the same register address region in rk3368.
+	 * However, devm_ioremap_resource will call function
+	 * devm_request_mem_region to check region. Thus, use function
+	 * devm_ioremap can avoid it.
+	 */
+	mpp->reg_base = devm_ioremap(dev, res->start, resource_size(res));
+	if (!mpp->reg_base) {
+		dev_err(dev, "ioremap failed for resource %pR\n", res);
+		ret = -ENOMEM;
+		goto failed;
+	}
+
+	pm_runtime_get_sync(dev);
+	/*
+	 * TODO: here or at the device itself, some device does not
+	 * have the iommu, maybe in the device is better.
+	 */
+	mpp->iommu_info = mpp_iommu_probe(dev);
+	if (IS_ERR(mpp->iommu_info)) {
+		dev_err(dev, "failed to attach iommu\n");
+		mpp->iommu_info = NULL;
+	}
+	if (mpp->hw_ops->init) {
+		ret = mpp->hw_ops->init(mpp);
+		if (ret)
+			goto failed_init;
+	}
+	/* set iommu fault handler */
+	if (mpp->iommu_info)
+		iommu_set_fault_handler(mpp->iommu_info->domain,
+					mpp_iommu_handle, mpp->queue);
+
+	/* read hardware id */
+	if (hw_info->reg_id >= 0) {
+		if (mpp->hw_ops->clk_on)
+			mpp->hw_ops->clk_on(mpp);
+
+		hw_info->hw_id = mpp_read(mpp, hw_info->reg_id);
+		if (mpp->hw_ops->clk_off)
+			mpp->hw_ops->clk_off(mpp);
+	}
+
+	pm_runtime_put_sync(dev);
+
+	return ret;
+failed_init:
+	pm_runtime_put_sync(dev);
+failed:
+	mpp_detach_workqueue(mpp);
+	device_init_wakeup(dev, false);
+	pm_runtime_disable(dev);
+
+	return ret;
+}
+
+int mpp_dev_remove(struct mpp_dev *mpp)
+{
+	if (mpp->hw_ops->exit)
+		mpp->hw_ops->exit(mpp);
+
+	mpp_iommu_remove(mpp->iommu_info);
+	platform_device_put(mpp->pdev_srv);
+	mpp_detach_workqueue(mpp);
+	device_init_wakeup(mpp->dev, false);
+	pm_runtime_disable(mpp->dev);
+
+	return 0;
+}
+
+int mpp_dev_register_srv(struct mpp_dev *mpp, struct mpp_service *srv)
+{
+	enum MPP_DEVICE_TYPE device_type = mpp->var->device_type;
+
+	srv->sub_devices[device_type] = mpp;
+	set_bit(device_type, &srv->hw_support);
+
+	return 0;
+}
+
+irqreturn_t mpp_dev_irq(int irq, void *param)
+{
+	struct mpp_dev *mpp = param;
+	struct mpp_task *task = mpp->cur_task;
+	irqreturn_t irq_ret = IRQ_NONE;
+
+	if (mpp->dev_ops->irq)
+		irq_ret = mpp->dev_ops->irq(mpp);
+
+	if (task) {
+		if (irq_ret != IRQ_NONE) {
+			/* if wait or delayed work timeout, abort request will turn on,
+			 * isr should not to response, and handle it in delayed work
+			 */
+			if (test_and_set_bit(TASK_STATE_HANDLE, &task->state)) {
+				mpp_err("error, task has been handled, irq_status %08x\n",
+					mpp->irq_status);
+				irq_ret = IRQ_HANDLED;
+				goto done;
+			}
+			cancel_delayed_work(&task->timeout_work);
+			/* normal condition, set state and wake up isr thread */
+			set_bit(TASK_STATE_IRQ, &task->state);
+		}
+	} else {
+		mpp_debug(DEBUG_IRQ_CHECK, "error, task is null\n");
+	}
+done:
+	return irq_ret;
+}
+
+irqreturn_t mpp_dev_isr_sched(int irq, void *param)
+{
+	irqreturn_t ret = IRQ_NONE;
+	struct mpp_dev *mpp = param;
+
+	if (mpp->auto_freq_en &&
+	    mpp->hw_ops->reduce_freq &&
+	    list_empty(&mpp->queue->pending_list))
+		mpp->hw_ops->reduce_freq(mpp);
+
+	if (mpp->dev_ops->isr)
+		ret = mpp->dev_ops->isr(mpp);
+
+	/* trigger current queue to run next task */
+	mpp_taskqueue_trigger_work(mpp);
+
+	return ret;
+}
+
+u32 mpp_get_grf(struct mpp_grf_info *grf_info)
+{
+	u32 val = 0;
+
+	if (grf_info && grf_info->grf && grf_info->val)
+		regmap_read(grf_info->grf, grf_info->offset, &val);
+
+	return (val & MPP_GRF_VAL_MASK);
+}
+
+bool mpp_grf_is_changed(struct mpp_grf_info *grf_info)
+{
+	bool changed = false;
+
+	if (grf_info && grf_info->grf && grf_info->val) {
+		u32 grf_status = mpp_get_grf(grf_info);
+		u32 grf_val = grf_info->val & MPP_GRF_VAL_MASK;
+
+		changed = (grf_status == grf_val) ? false : true;
+	}
+
+	return changed;
+}
+
+int mpp_set_grf(struct mpp_grf_info *grf_info)
+{
+	if (grf_info && grf_info->grf && grf_info->val)
+		regmap_write(grf_info->grf, grf_info->offset, grf_info->val);
+
+	return 0;
+}
+
+int mpp_time_record(struct mpp_task *task)
+{
+	if (mpp_debug_unlikely(DEBUG_TIMING) && task)
+		ktime_get_real_ts64(&task->start);
+
+	return 0;
+}
+
+int mpp_time_diff(struct mpp_task *task)
+{
+	struct timespec64 end;
+	struct mpp_dev *mpp = task->mpp ? task->mpp : task->session->mpp;
+
+	ktime_get_real_ts64(&end);
+	mpp_debug(DEBUG_TIMING, "%s: pid: %d, session: %p, time: %lld us\n",
+		  dev_name(mpp->dev), task->session->pid, task->session,
+		  (end.tv_sec  - task->start.tv_sec)  * 1000000 +
+		  (end.tv_nsec - task->start.tv_nsec)/1000);
+
+	return 0;
+}
+
+int mpp_write_req(struct mpp_dev *mpp, u32 *regs,
+		  u32 start_idx, u32 end_idx, u32 en_idx)
+{
+	int i;
+
+	for (i = start_idx; i < end_idx; i++) {
+		if (i == en_idx)
+			continue;
+		mpp_write_relaxed(mpp, i * sizeof(u32), regs[i]);
+	}
+
+	return 0;
+}
+
+int mpp_read_req(struct mpp_dev *mpp, u32 *regs,
+		 u32 start_idx, u32 end_idx)
+{
+	int i;
+
+	for (i = start_idx; i < end_idx; i++)
+		regs[i] = mpp_read_relaxed(mpp, i * sizeof(u32));
+
+	return 0;
+}
+
+int mpp_get_clk_info(struct mpp_dev *mpp,
+		     struct mpp_clk_info *clk_info,
+		     const char *name)
+{
+	int index = of_property_match_string(mpp->dev->of_node,
+					     "clock-names", name);
+
+	if (index < 0)
+		return -EINVAL;
+
+	clk_info->clk = devm_clk_get(mpp->dev, name);
+	of_property_read_u32_index(mpp->dev->of_node,
+				   "rockchip,normal-rates",
+				   index,
+				   &clk_info->normal_rate_hz);
+	of_property_read_u32_index(mpp->dev->of_node,
+				   "rockchip,advanced-rates",
+				   index,
+				   &clk_info->advanced_rate_hz);
+
+	return 0;
+}
+
+int mpp_set_clk_info_rate_hz(struct mpp_clk_info *clk_info,
+			     enum MPP_CLOCK_MODE mode,
+			     unsigned long val)
+{
+	if (!clk_info->clk || !val)
+		return 0;
+
+	switch (mode) {
+	case CLK_MODE_DEBUG:
+		clk_info->debug_rate_hz = val;
+	break;
+	case CLK_MODE_REDUCE:
+		clk_info->reduce_rate_hz = val;
+	break;
+	case CLK_MODE_NORMAL:
+		clk_info->normal_rate_hz = val;
+	break;
+	case CLK_MODE_ADVANCED:
+		clk_info->advanced_rate_hz = val;
+	break;
+	case CLK_MODE_DEFAULT:
+		clk_info->default_rate_hz = val;
+	break;
+	default:
+		mpp_err("error mode %d\n", mode);
+	break;
+	}
+
+	return 0;
+}
+
+#define MPP_REDUCE_RATE_HZ (50 * MHZ)
+
+unsigned long mpp_get_clk_info_rate_hz(struct mpp_clk_info *clk_info,
+				       enum MPP_CLOCK_MODE mode)
+{
+	unsigned long clk_rate_hz = 0;
+
+	if (!clk_info->clk)
+		return 0;
+
+	if (clk_info->debug_rate_hz)
+		return clk_info->debug_rate_hz;
+
+	switch (mode) {
+	case CLK_MODE_REDUCE: {
+		if (clk_info->reduce_rate_hz)
+			clk_rate_hz = clk_info->reduce_rate_hz;
+		else
+			clk_rate_hz = MPP_REDUCE_RATE_HZ;
+	} break;
+	case CLK_MODE_NORMAL: {
+		if (clk_info->normal_rate_hz)
+			clk_rate_hz = clk_info->normal_rate_hz;
+		else
+			clk_rate_hz = clk_info->default_rate_hz;
+	} break;
+	case CLK_MODE_ADVANCED: {
+		if (clk_info->advanced_rate_hz)
+			clk_rate_hz = clk_info->advanced_rate_hz;
+		else if (clk_info->normal_rate_hz)
+			clk_rate_hz = clk_info->normal_rate_hz;
+		else
+			clk_rate_hz = clk_info->default_rate_hz;
+	} break;
+	case CLK_MODE_DEFAULT:
+	default: {
+		clk_rate_hz = clk_info->default_rate_hz;
+	} break;
+	}
+
+	return clk_rate_hz;
+}
+
+int mpp_clk_set_rate(struct mpp_clk_info *clk_info,
+		     enum MPP_CLOCK_MODE mode)
+{
+	unsigned long clk_rate_hz;
+
+	if (!clk_info->clk)
+		return -EINVAL;
+
+	clk_rate_hz = mpp_get_clk_info_rate_hz(clk_info, mode);
+	if (clk_rate_hz) {
+		clk_info->used_rate_hz = clk_rate_hz;
+		clk_set_rate(clk_info->clk, clk_rate_hz);
+	}
+
+	return 0;
+}
+
+#ifdef CONFIG_ROCKCHIP_MPP_PROC_FS
+static int fops_show_u32(struct seq_file *file, void *v)
+{
+	u32 *val = file->private;
+
+	seq_printf(file, "%d\n", *val);
+
+	return 0;
+}
+
+static int fops_open_u32(struct inode *inode, struct file *file)
+{
+	return single_open(file, fops_show_u32, PDE_DATA(inode));
+}
+
+static ssize_t fops_write_u32(struct file *file, const char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	int rc;
+	struct seq_file *priv = file->private_data;
+
+	rc = kstrtou32_from_user(buf, count, 0, priv->private);
+	if (rc)
+		return rc;
+
+	return count;
+}
+
+static const struct proc_ops procfs_fops_u32 = {
+	.proc_open = fops_open_u32,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+	.proc_write = fops_write_u32,
+};
+
+struct proc_dir_entry *
+mpp_procfs_create_u32(const char *name, umode_t mode,
+		      struct proc_dir_entry *parent, void *data)
+{
+	return proc_create_data(name, mode, parent, &procfs_fops_u32, data);
+}
+#endif
