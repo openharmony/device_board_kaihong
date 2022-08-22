@@ -12190,3 +12190,1727 @@ fail:
 
 	return err;
 }
+
+static s32
+wl_cfg80211_stop_ap(
+	struct wiphy *wiphy,
+	struct net_device *dev)
+{
+	int err = 0;
+	u32 dev_role = 0;
+	int ap = 0;
+	s32 bssidx = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	s32 is_rsdb_supported = BCME_ERROR;
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+
+	WL_DBG(("Enter \n"));
+
+	if (wl_cfg80211_get_bus_state(cfg)) {
+		/* since bus is down, iovar will fail. recovery path will bringup the bus. */
+		WL_ERR(("bus is not ready\n"));
+		return BCME_OK;
+	}
+	is_rsdb_supported = DHD_OPMODE_SUPPORTED(cfg->pub, DHD_FLAG_RSDB_MODE);
+	if (is_rsdb_supported < 0)
+		return (-ENODEV);
+
+	wl_clr_drv_status(cfg, AP_CREATING, dev);
+	wl_clr_drv_status(cfg, AP_CREATED, dev);
+	cfg->ap_oper_channel = 0;
+
+	if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_AP) {
+		dev_role = NL80211_IFTYPE_AP;
+		WL_MSG(dev->name, "stopping AP operation\n");
+	} else if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_P2P_GO) {
+		dev_role = NL80211_IFTYPE_P2P_GO;
+		WL_MSG(dev->name, "stopping P2P GO operation\n");
+	} else {
+		WL_ERR(("no AP/P2P GO interface is operational.\n"));
+		return -EINVAL;
+	}
+
+	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+		WL_ERR(("find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
+		return BCME_ERROR;
+	}
+
+	if (!check_dev_role_integrity(cfg, dev_role)) {
+		WL_ERR(("role integrity check failed \n"));
+		err = -EINVAL;
+		goto exit;
+	}
+
+	/* Free up resources */
+	wl_cfg80211_cleanup_if(dev);
+
+	/* Clear AP/GO connected status */
+	wl_clr_drv_status(cfg, CONNECTED, dev);
+	if ((err = wl_cfg80211_bss_up(cfg, dev, bssidx, 0)) < 0) {
+		WL_ERR(("bss down error %d\n", err));
+	}
+
+	if (dev_role == NL80211_IFTYPE_AP) {
+#ifdef DISABLE_WL_FRAMEBURST_SOFTAP
+		wl_cfg80211_set_frameburst(cfg, TRUE);
+#endif /* DISABLE_WL_FRAMEBURST_SOFTAP */
+#ifdef PKT_FILTER_SUPPORT
+		/* Enable packet filter */
+		if (dhd->early_suspended) {
+			WL_ERR(("Enable pkt_filter\n"));
+			dhd_enable_packet_filter(1, dhd);
+#ifdef APF
+			dhd_dev_apf_enable_filter(dhd_linux_get_primary_netdev(dhd));
+#endif /* APF */
+		}
+#endif /* PKT_FILTER_SUPPORT */
+#ifdef ARP_OFFLOAD_SUPPORT
+		/* IF SoftAP is disabled, enable arpoe back for STA mode. */
+		if (dhd->op_mode & DHD_FLAG_STA_MODE) {
+			dhd_arp_offload_set(dhd, dhd_arp_mode);
+			dhd_arp_offload_enable(dhd, TRUE);
+		}
+#endif /* ARP_OFFLOAD_SUPPORT */
+
+		if (is_rsdb_supported == 0) {
+			/* For non-rsdb chips, we use stand alone AP. Do wl down on stop AP */
+			err = wldev_ioctl_set(dev, WLC_UP, &ap, sizeof(s32));
+			if (unlikely(err)) {
+				WL_ERR(("WLC_UP error (%d)\n", err));
+				err = -EINVAL;
+				goto exit;
+			}
+		}
+
+#ifdef WL_DISABLE_HE_SOFTAP
+		if (wl_cfg80211_set_he_mode(dev, cfg, bssidx, WL_IF_TYPE_AP, TRUE) != BCME_OK) {
+			WL_ERR(("failed to set he features\n"));
+		}
+#endif /* WL_DISABLE_HE_SOFTAP */
+
+		wl_cfg80211_clear_per_bss_ies(cfg, dev->ieee80211_ptr);
+#ifdef SUPPORT_AP_RADIO_PWRSAVE
+		if (!wl_set_ap_rps(dev, FALSE, dev->name)) {
+			wl_cfg80211_init_ap_rps(cfg);
+		} else {
+			WL_ERR(("Set rpsnoa failed \n"));
+		}
+#endif /* SUPPORT_AP_RADIO_PWRSAVE */
+	} else {
+		WL_DBG(("Stopping P2P GO \n"));
+		DHD_OS_WAKE_LOCK_CTRL_TIMEOUT_ENABLE((dhd_pub_t *)(cfg->pub),
+			DHD_EVENT_TIMEOUT_MS*3);
+		DHD_OS_WAKE_LOCK_TIMEOUT((dhd_pub_t *)(cfg->pub));
+	}
+
+	SUPP_LOG(("AP/GO Link down\n"));
+exit:
+	if (err) {
+		/* In case of failure, flush fw logs */
+		wl_flush_fw_log_buffer(dev, FW_LOGSET_MASK_ALL);
+		SUPP_LOG(("AP/GO Link down fail. err:%d\n", err));
+	}
+#ifdef WLTDLS
+	if (bssidx == 0) {
+		/* re-enable TDLS if the number of connected interfaces is less than 2 */
+		wl_cfg80211_tdls_config(cfg, TDLS_STATE_AP_DELETE, false);
+	}
+#endif /* WLTDLS */
+
+	if (dev_role == NL80211_IFTYPE_AP) {
+#ifdef WL_EXT_IAPSTA
+		if (!wl_ext_iapsta_iftype_enabled(dev, WL_IF_TYPE_AP)) {
+#endif /* WL_EXT_IAPSTA */
+		/* clear the AP mode */
+		dhd->op_mode &= ~DHD_FLAG_HOSTAP_MODE;
+		wl_wlfc_enable(cfg, FALSE);
+#ifdef WL_EXT_IAPSTA
+		}
+#endif /* WL_EXT_IAPSTA */
+	}
+	return err;
+}
+
+static s32
+wl_cfg80211_change_beacon(
+	struct wiphy *wiphy,
+	struct net_device *dev,
+	struct cfg80211_beacon_data *info)
+{
+	s32 err = BCME_OK;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct parsed_ies ies;
+	u32 dev_role = 0;
+	s32 bssidx = 0;
+	bool pbc = 0;
+
+	WL_DBG(("Enter \n"));
+
+	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+		WL_ERR(("Find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
+		return BCME_ERROR;
+	}
+
+	if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_P2P_GO) {
+		dev_role = NL80211_IFTYPE_P2P_GO;
+	} else if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_AP) {
+		dev_role = NL80211_IFTYPE_AP;
+	} else {
+		err = -EINVAL;
+		goto fail;
+	}
+
+	if (!check_dev_role_integrity(cfg, dev_role)) {
+		err = -EINVAL;
+		goto fail;
+	}
+
+	if ((dev_role == NL80211_IFTYPE_P2P_GO) && (cfg->p2p_wdev == NULL)) {
+		WL_ERR(("P2P already down status!\n"));
+		err = BCME_ERROR;
+		goto fail;
+	}
+
+	/* Parse IEs */
+	if ((err = wl_cfg80211_parse_ap_ies(dev, info, &ies)) < 0) {
+		WL_ERR(("Parse IEs failed \n"));
+		goto fail;
+	}
+
+	/* Set IEs to FW */
+	if ((err = wl_cfg80211_set_ies(dev, info, bssidx)) < 0) {
+		WL_ERR(("Set IEs failed \n"));
+		goto fail;
+	}
+
+	if (dev_role == NL80211_IFTYPE_AP) {
+		if (wl_cfg80211_hostapd_sec(dev, &ies, bssidx) < 0) {
+			WL_ERR(("Hostapd update sec failed \n"));
+			err = -EINVAL;
+			goto fail;
+		}
+		/* Enable Probe Req filter, WPS-AP certification 4.2.13 */
+		if ((dev_role == NL80211_IFTYPE_AP) && (ies.wps_ie != NULL)) {
+			wl_validate_wps_ie((const char *) ies.wps_ie, ies.wps_ie_len, &pbc);
+			WL_DBG((" WPS AP, wps_ie is exists pbc=%d\n", pbc));
+			if (pbc)
+				wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, true);
+			else
+				wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, false);
+		}
+	}
+
+fail:
+	if (err) {
+		wl_flush_fw_log_buffer(dev, FW_LOGSET_MASK_ALL);
+	}
+	return err;
+}
+#else
+static s32
+wl_cfg80211_add_set_beacon(struct wiphy *wiphy, struct net_device *dev,
+	struct beacon_parameters *info)
+{
+	s32 err = BCME_OK;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	s32 ie_offset = 0;
+	s32 bssidx = 0;
+	u32 dev_role = NL80211_IFTYPE_AP;
+	struct parsed_ies ies;
+	bcm_tlv_t *ssid_ie;
+	bool pbc = 0;
+	bool privacy;
+	bool is_bss_up = 0;
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+
+	WL_DBG(("interval (%d) dtim_period (%d) head_len (%d) tail_len (%d)\n",
+		info->interval, info->dtim_period, info->head_len, info->tail_len));
+
+	if (dev == bcmcfg_to_prmry_ndev(cfg)) {
+		dev_role = NL80211_IFTYPE_AP;
+	}
+#if defined(WL_ENABLE_P2P_IF)
+	else if (dev == cfg->p2p_net) {
+		/* Group Add request on p2p0 */
+		dev = bcmcfg_to_prmry_ndev(cfg);
+		dev_role = NL80211_IFTYPE_P2P_GO;
+	}
+#endif /* WL_ENABLE_P2P_IF */
+
+	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+		WL_ERR(("Find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
+		return BCME_ERROR;
+	}
+
+	if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_P2P_GO) {
+		dev_role = NL80211_IFTYPE_P2P_GO;
+	} else if (dev->ieee80211_ptr->iftype == NL80211_IFTYPE_AP) {
+		dhd->op_mode |= DHD_FLAG_HOSTAP_MODE;
+	}
+
+	if (!check_dev_role_integrity(cfg, dev_role)) {
+		err = -ENODEV;
+		goto fail;
+	}
+
+	if ((dev_role == NL80211_IFTYPE_P2P_GO) && (cfg->p2p_wdev == NULL)) {
+		WL_ERR(("P2P already down status!\n"));
+		err = BCME_ERROR;
+		goto fail;
+	}
+
+	ie_offset = DOT11_MGMT_HDR_LEN + DOT11_BCN_PRB_FIXED_LEN;
+	/* find the SSID */
+	if ((ssid_ie = bcm_parse_tlvs((u8 *)&info->head[ie_offset],
+		info->head_len - ie_offset,
+		DOT11_MNG_SSID_ID)) != NULL) {
+		if (dev_role == NL80211_IFTYPE_AP) {
+			/* Store the hostapd SSID */
+			bzero(&cfg->hostapd_ssid.SSID[0], DOT11_MAX_SSID_LEN);
+			cfg->hostapd_ssid.SSID_len = MIN(ssid_ie->len, DOT11_MAX_SSID_LEN);
+			memcpy(&cfg->hostapd_ssid.SSID[0], ssid_ie->data,
+				cfg->hostapd_ssid.SSID_len);
+		} else {
+			/* P2P GO */
+			bzero(&cfg->p2p->ssid.SSID[0], DOT11_MAX_SSID_LEN);
+			cfg->p2p->ssid.SSID_len = MIN(ssid_ie->len, DOT11_MAX_SSID_LEN);
+			memcpy(cfg->p2p->ssid.SSID, ssid_ie->data,
+				cfg->p2p->ssid.SSID_len);
+		}
+	}
+
+	if (wl_cfg80211_parse_ies((u8 *)info->tail,
+		info->tail_len, &ies) < 0) {
+		WL_ERR(("Beacon get IEs failed \n"));
+		err = -EINVAL;
+		goto fail;
+	}
+
+	if ((err = wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev), bssidx,
+		VNDR_IE_BEACON_FLAG, (u8 *)info->tail,
+		info->tail_len)) < 0) {
+		WL_ERR(("Beacon set IEs failed \n"));
+		goto fail;
+	} else {
+		WL_DBG(("Applied Vndr IEs for Beacon \n"));
+	}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
+	if ((err = wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev), bssidx,
+		VNDR_IE_PRBRSP_FLAG, (u8 *)info->proberesp_ies,
+		info->proberesp_ies_len)) < 0) {
+		WL_ERR(("ProbeRsp set IEs failed \n"));
+		goto fail;
+	} else {
+		WL_DBG(("Applied Vndr IEs for ProbeRsp \n"));
+	}
+#endif // endif
+
+	is_bss_up = wl_cfg80211_bss_isup(dev, bssidx);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
+	privacy = info->privacy;
+#else
+	privacy = 0;
+#endif // endif
+	if (!is_bss_up &&
+		(wl_cfg80211_bcn_validate_sec(dev, &ies, dev_role, bssidx, privacy) < 0))
+	{
+		WL_ERR(("Beacon set security failed \n"));
+		err = -EINVAL;
+		goto fail;
+	}
+
+	/* Set BI and DTIM period */
+	if (info->interval) {
+		if ((err = wldev_ioctl_set(dev, WLC_SET_BCNPRD,
+			&info->interval, sizeof(s32))) < 0) {
+			WL_ERR(("Beacon Interval Set Error, %d\n", err));
+			return err;
+		}
+	}
+	if (info->dtim_period) {
+		if ((err = wldev_ioctl_set(dev, WLC_SET_DTIMPRD,
+			&info->dtim_period, sizeof(s32))) < 0) {
+			WL_ERR(("DTIM Interval Set Error, %d\n", err));
+			return err;
+		}
+	}
+
+	/* If bss is already up, skip bring up */
+	if (!is_bss_up &&
+		(err = wl_cfg80211_bcn_bringup_ap(dev, &ies, dev_role, bssidx)) < 0)
+	{
+		WL_ERR(("Beacon bring up AP/GO failed \n"));
+		goto fail;
+	}
+
+	/* Set GC/STA SCB expiry timings. */
+	if ((err = wl_cfg80211_set_scb_timings(cfg, dev))) {
+		WL_ERR(("scb setting failed \n"));
+		if (err == BCME_UNSUPPORTED)
+			err = 0;
+//		goto fail;
+	}
+
+	if (wl_get_drv_status(cfg, AP_CREATED, dev)) {
+		/* Soft AP already running. Update changed params */
+		if (wl_cfg80211_hostapd_sec(dev, &ies, bssidx) < 0) {
+			WL_ERR(("Hostapd update sec failed \n"));
+			err = -EINVAL;
+			goto fail;
+		}
+	}
+
+	/* Enable Probe Req filter */
+	if (((dev_role == NL80211_IFTYPE_P2P_GO) ||
+		(dev_role == NL80211_IFTYPE_AP)) && (ies.wps_ie != NULL)) {
+		wl_validate_wps_ie((char *) ies.wps_ie, ies.wps_ie_len, &pbc);
+		if (pbc)
+			wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, true);
+	}
+
+	WL_DBG(("** ADD/SET beacon done **\n"));
+	wl_set_drv_status(cfg, CONNECTED, dev);
+
+fail:
+	if (err) {
+		WL_ERR(("ADD/SET beacon failed\n"));
+		if (dev_role == NL80211_IFTYPE_AP) {
+#ifdef WL_EXT_IAPSTA
+		if (!wl_ext_iapsta_iftype_enabled(dev, WL_IF_TYPE_AP)) {
+#endif /* WL_EXT_IAPSTA */
+			/* clear the AP mode */
+			dhd->op_mode &= ~DHD_FLAG_HOSTAP_MODE;
+#ifdef WL_EXT_IAPSTA
+		}
+#endif /* WL_EXT_IAPSTA */
+		}
+	}
+	return err;
+
+}
+
+static s32
+wl_cfg80211_del_beacon(struct wiphy *wiphy, struct net_device *dev)
+{
+	int err = 0;
+	s32 bssidx = 0;
+	int infra = 0;
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+
+	WL_DBG(("Enter. \n"));
+
+	if (!wdev) {
+		WL_ERR(("wdev null \n"));
+		return -EINVAL;
+	}
+
+	if ((wdev->iftype != NL80211_IFTYPE_P2P_GO) && (wdev->iftype != NL80211_IFTYPE_AP)) {
+		WL_ERR(("Unspported iface type iftype:%d \n", wdev->iftype));
+	}
+
+	wl_clr_drv_status(cfg, AP_CREATING, dev);
+	wl_clr_drv_status(cfg, AP_CREATED, dev);
+
+	/* Clear AP/GO connected status */
+	wl_clr_drv_status(cfg, CONNECTED, dev);
+
+	cfg->ap_oper_channel = 0;
+
+	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
+		WL_ERR(("find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
+		return BCME_ERROR;
+	}
+
+	/* Do bss down */
+	if ((err = wl_cfg80211_bss_up(cfg, dev, bssidx, 0)) < 0) {
+		WL_ERR(("bss down error %d\n", err));
+	}
+
+	/* fall through is intentional */
+	err = wldev_ioctl_set(dev, WLC_SET_INFRA, &infra, sizeof(s32));
+	if (err < 0) {
+		WL_ERR(("SET INFRA error %d\n", err));
+	}
+	 wl_cfg80211_clear_per_bss_ies(cfg, dev->ieee80211_ptr);
+
+	if (wdev->iftype == NL80211_IFTYPE_AP) {
+#ifdef WL_EXT_IAPSTA
+		if (!wl_ext_iapsta_iftype_enabled(dev, WL_IF_TYPE_AP)) {
+#endif /* WL_EXT_IAPSTA */
+		/* clear the AP mode */
+		dhd->op_mode &= ~DHD_FLAG_HOSTAP_MODE;
+#ifdef WL_EXT_IAPSTA
+		}
+#endif /* WL_EXT_IAPSTA */
+	}
+
+	return 0;
+}
+#endif /* LINUX_VERSION < VERSION(3,4,0) || WL_COMPAT_WIRELESS */
+
+#ifdef WL_SUPPORT_ACS
+/*
+ * Currently the dump_obss IOVAR is returning string as output so we need to
+ * parse the output buffer in an unoptimized way. Going forward if we get the
+ * IOVAR output in binary format this method can be optimized
+ */
+static int wl_parse_dump_obss(char *buf, struct wl_dump_survey *survey)
+{
+	int i;
+	char *token;
+	char delim[] = " \n";
+
+	token = strsep(&buf, delim);
+	while (token != NULL) {
+		if (!strcmp(token, "OBSS")) {
+			for (i = 0; i < OBSS_TOKEN_IDX; i++)
+				token = strsep(&buf, delim);
+			survey->obss = simple_strtoul(token, NULL, 10);
+		}
+
+		if (!strcmp(token, "IBSS")) {
+			for (i = 0; i < IBSS_TOKEN_IDX; i++)
+				token = strsep(&buf, delim);
+			survey->ibss = simple_strtoul(token, NULL, 10);
+		}
+
+		if (!strcmp(token, "TXDur")) {
+			for (i = 0; i < TX_TOKEN_IDX; i++)
+				token = strsep(&buf, delim);
+			survey->tx = simple_strtoul(token, NULL, 10);
+		}
+
+		if (!strcmp(token, "Category")) {
+			for (i = 0; i < CTG_TOKEN_IDX; i++)
+				token = strsep(&buf, delim);
+			survey->no_ctg = simple_strtoul(token, NULL, 10);
+		}
+
+		if (!strcmp(token, "Packet")) {
+			for (i = 0; i < PKT_TOKEN_IDX; i++)
+				token = strsep(&buf, delim);
+			survey->no_pckt = simple_strtoul(token, NULL, 10);
+		}
+
+		if (!strcmp(token, "Opp(time):")) {
+			for (i = 0; i < IDLE_TOKEN_IDX; i++)
+				token = strsep(&buf, delim);
+			survey->idle = simple_strtoul(token, NULL, 10);
+		}
+
+		token = strsep(&buf, delim);
+	}
+
+	return 0;
+}
+
+static int wl_dump_obss(struct net_device *ndev, cca_msrmnt_query req,
+	struct wl_dump_survey *survey)
+{
+	cca_stats_n_flags *results;
+	char *buf;
+	int retry, err;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(ndev);
+
+	buf = (char *)MALLOCZ(cfg->osh, sizeof(char) * WLC_IOCTL_MAXLEN);
+	if (unlikely(!buf)) {
+		WL_ERR(("%s: buf alloc failed\n", __func__));
+		return -ENOMEM;
+	}
+
+	retry = IOCTL_RETRY_COUNT;
+	while (retry--) {
+		err = wldev_iovar_getbuf(ndev, "dump_obss", &req, sizeof(req),
+			buf, WLC_IOCTL_MAXLEN, NULL);
+		if (err >=  0) {
+			break;
+		}
+		WL_DBG(("attempt = %d, err = %d, \n",
+			(IOCTL_RETRY_COUNT - retry), err));
+	}
+
+	if (retry <= 0)	{
+		WL_ERR(("failure, dump_obss IOVAR failed\n"));
+		err = -EINVAL;
+		goto exit;
+	}
+
+	results = (cca_stats_n_flags *)(buf);
+	wl_parse_dump_obss(results->buf, survey);
+	MFREE(cfg->osh, buf, sizeof(char) * WLC_IOCTL_MAXLEN);
+
+	return 0;
+exit:
+	MFREE(cfg->osh, buf, sizeof(char) * WLC_IOCTL_MAXLEN);
+	return err;
+}
+
+static int wl_cfg80211_dump_survey(struct wiphy *wiphy, struct net_device *ndev,
+	int idx, struct survey_info *info)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct wl_dump_survey *survey;
+	struct ieee80211_supported_band *band;
+	struct ieee80211_channel*chan;
+	cca_msrmnt_query req;
+	int val, err, noise, retry;
+
+	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
+	if (!(dhd->op_mode & DHD_FLAG_HOSTAP_MODE)) {
+		return -ENOENT;
+	}
+	band = wiphy->bands[IEEE80211_BAND_2GHZ];
+	if (band && idx >= band->n_channels) {
+		idx -= band->n_channels;
+		band = NULL;
+	}
+
+	if (!band || idx >= band->n_channels) {
+		/* Move to 5G band */
+		band = wiphy->bands[IEEE80211_BAND_5GHZ];
+		if (idx >= band->n_channels) {
+			return -ENOENT;
+		}
+	}
+
+	chan = &band->channels[idx];
+	/* Setting current channel to the requested channel */
+	if ((err = wl_cfg80211_set_channel(wiphy, ndev, chan,
+		NL80211_CHAN_HT20) < 0)) {
+		WL_ERR(("Set channel failed \n"));
+	}
+
+	if (!idx) {
+		/* Set interface up, explicitly. */
+		val = 1;
+		err = wldev_ioctl_set(ndev, WLC_UP, (void *)&val, sizeof(val));
+		if (err < 0) {
+			WL_ERR(("set interface up failed, error = %d\n", err));
+		}
+	}
+
+	/* Get noise value */
+	retry = IOCTL_RETRY_COUNT;
+	while (retry--) {
+		noise = 0;
+		err = wldev_ioctl_get(ndev, WLC_GET_PHY_NOISE, &noise,
+			sizeof(noise));
+		if (err >=  0) {
+			break;
+		}
+		WL_DBG(("attempt = %d, err = %d, \n",
+			(IOCTL_RETRY_COUNT - retry), err));
+	}
+
+	if (retry <= 0)	{
+		WL_ERR(("Get Phy Noise failed, error = %d\n", err));
+		noise = CHAN_NOISE_DUMMY;
+	}
+
+	survey = (struct wl_dump_survey *)MALLOCZ(cfg->osh,
+		sizeof(struct wl_dump_survey));
+	if (unlikely(!survey)) {
+		WL_ERR(("%s: alloc failed\n", __func__));
+		return -ENOMEM;
+	}
+
+	/* Start Measurement for obss stats on current channel */
+	req.msrmnt_query = 0;
+	req.time_req = ACS_MSRMNT_DELAY;
+	if ((err = wl_dump_obss(ndev, req, survey)) < 0) {
+		goto exit;
+	}
+
+	/*
+	 * Wait for the meaurement to complete, adding a buffer value of 10 to take
+	 * into consideration any delay in IOVAR completion
+	 */
+	msleep(ACS_MSRMNT_DELAY + 10);
+
+	/* Issue IOVAR to collect measurement results */
+	req.msrmnt_query = 1;
+	if ((err = wl_dump_obss(ndev, req, survey)) < 0) {
+		goto exit;
+	}
+
+	info->channel = chan;
+	info->noise = noise;
+	info->channel_time = ACS_MSRMNT_DELAY;
+	info->channel_time_busy = ACS_MSRMNT_DELAY - survey->idle;
+	info->channel_time_rx = survey->obss + survey->ibss + survey->no_ctg +
+		survey->no_pckt;
+	info->channel_time_tx = survey->tx;
+	info->filled = SURVEY_INFO_NOISE_DBM |SURVEY_INFO_CHANNEL_TIME |
+		SURVEY_INFO_CHANNEL_TIME_BUSY |	SURVEY_INFO_CHANNEL_TIME_RX |
+		SURVEY_INFO_CHANNEL_TIME_TX;
+	MFREE(cfg->osh, survey, sizeof(struct wl_dump_survey));
+
+	return 0;
+exit:
+	MFREE(cfg->osh, survey, sizeof(struct wl_dump_survey));
+	return err;
+}
+#endif /* WL_SUPPORT_ACS */
+
+#ifndef CONFIG_AP6XXX_WIFI6_HDF
+static 
+#endif
+struct cfg80211_ops wl_cfg80211_ops = {
+	.add_virtual_intf = wl_cfg80211_add_virtual_iface,
+	.del_virtual_intf = wl_cfg80211_del_virtual_iface,
+	.change_virtual_intf = wl_cfg80211_change_virtual_iface,
+#if defined(WL_CFG80211_P2P_DEV_IF)
+	.start_p2p_device = wl_cfgp2p_start_p2p_device,
+	.stop_p2p_device = wl_cfgp2p_stop_p2p_device,
+#endif /* WL_CFG80211_P2P_DEV_IF */
+	.scan = wl_cfg80211_scan,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0))
+	.abort_scan = wl_cfg80211_abort_scan,
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) */
+	.set_wiphy_params = wl_cfg80211_set_wiphy_params,
+	.join_ibss = wl_cfg80211_join_ibss,
+	.leave_ibss = wl_cfg80211_leave_ibss,
+	.get_station = wl_cfg80211_get_station,
+	.set_tx_power = wl_cfg80211_set_tx_power,
+	.get_tx_power = wl_cfg80211_get_tx_power,
+	.add_key = wl_cfg80211_add_key,
+	.del_key = wl_cfg80211_del_key,
+	.get_key = wl_cfg80211_get_key,
+	.set_default_key = wl_cfg80211_config_default_key,
+	.set_default_mgmt_key = wl_cfg80211_config_default_mgmt_key,
+	.set_power_mgmt = wl_cfg80211_set_power_mgmt,
+	.connect = wl_cfg80211_connect,
+	.disconnect = wl_cfg80211_disconnect,
+	.suspend = wl_cfg80211_suspend,
+	.resume = wl_cfg80211_resume,
+	.set_pmksa = wl_cfg80211_set_pmksa,
+	.del_pmksa = wl_cfg80211_del_pmksa,
+	.flush_pmksa = wl_cfg80211_flush_pmksa,
+	.remain_on_channel = wl_cfg80211_remain_on_channel,
+	.cancel_remain_on_channel = wl_cfg80211_cancel_remain_on_channel,
+	.mgmt_tx = wl_cfg80211_mgmt_tx,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
+	.mgmt_frame_register = wl_cfg80211_mgmt_frame_register,
+#else
+	.update_mgmt_frame_registrations = wl_cfg80211_mgmt_frame_register,
+#endif
+	.change_bss = wl_cfg80211_change_bss,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)) || defined(WL_COMPAT_WIRELESS)
+	.set_channel = wl_cfg80211_set_channel,
+#endif /* ((LINUX_VERSION < VERSION(3, 6, 0)) || WL_COMPAT_WIRELESS */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0)) && !defined(WL_COMPAT_WIRELESS)
+	.set_beacon = wl_cfg80211_add_set_beacon,
+	.add_beacon = wl_cfg80211_add_set_beacon,
+	.del_beacon = wl_cfg80211_del_beacon,
+#else
+	.change_beacon = wl_cfg80211_change_beacon,
+	.start_ap = wl_cfg80211_start_ap,
+	.stop_ap = wl_cfg80211_stop_ap,
+#endif /* LINUX_VERSION < KERNEL_VERSION(3,4,0) && !WL_COMPAT_WIRELESS */
+#ifdef WL_SCHED_SCAN
+	.sched_scan_start = wl_cfg80211_sched_scan_start,
+	.sched_scan_stop = wl_cfg80211_sched_scan_stop,
+#endif /* WL_SCHED_SCAN */
+#if defined(WL_SUPPORT_BACKPORTED_KPATCHES) || (LINUX_VERSION_CODE >= KERNEL_VERSION(3, \
+	2, 0))
+	.del_station = wl_cfg80211_del_station,
+	.change_station = wl_cfg80211_change_station,
+	.mgmt_tx_cancel_wait = wl_cfg80211_mgmt_tx_cancel_wait,
+#endif /* WL_SUPPORT_BACKPORTED_KPATCHES || KERNEL_VERSION >= (3,2,0) */
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 2, 0)) || defined(WL_COMPAT_WIRELESS)
+	.tdls_mgmt = wl_cfg80211_tdls_mgmt,
+	.tdls_oper = wl_cfg80211_tdls_oper,
+#endif /* LINUX_VERSION > VERSION(3, 2, 0) || WL_COMPAT_WIRELESS */
+#ifdef WL_SUPPORT_ACS
+	.dump_survey = wl_cfg80211_dump_survey,
+#endif /* WL_SUPPORT_ACS */
+#ifdef WL_CFG80211_ACL
+	.set_mac_acl = wl_cfg80211_set_mac_acl,
+#endif /* WL_CFG80211_ACL */
+#ifdef GTK_OFFLOAD_SUPPORT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
+	.set_rekey_data = wl_cfg80211_set_rekey_data,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0) */
+#endif /* GTK_OFFLOAD_SUPPORT */
+#if defined(WL_FILS)
+	/* This should be enabled from kernel version which supports this */
+	.update_connect_params = wl_cfg80211_update_connect_params,
+#endif /* WL_FILS */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0))
+	.set_pmk = wl_cfg80211_set_pmk,
+	.del_pmk = wl_cfg80211_del_pmk,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0) */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0))
+	.channel_switch = wl_cfg80211_channel_switch,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0) */
+#ifdef WL_CLIENT_SAE
+	.external_auth = wl_cfg80211_external_auth,
+#endif /* WL_CLIENT_SAE */
+};
+
+s32 wl_mode_to_nl80211_iftype(s32 mode)
+{
+	s32 err = 0;
+
+	switch (mode) {
+	case WL_MODE_BSS:
+		return NL80211_IFTYPE_STATION;
+	case WL_MODE_IBSS:
+		return NL80211_IFTYPE_ADHOC;
+	case WL_MODE_AP:
+		return NL80211_IFTYPE_AP;
+#ifdef WLMESH_CFG80211
+	case WL_MODE_MESH:
+		return NL80211_IFTYPE_MESH_POINT;
+#endif /* WLMESH_CFG80211 */
+	default:
+		return NL80211_IFTYPE_UNSPECIFIED;
+	}
+
+	return err;
+}
+
+s32
+wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
+	bool notify, bool user_enforced, int revinfo)
+{
+	s32 ret = BCME_OK;
+#ifdef WL_NAN
+	struct wireless_dev *wdev = ndev_to_wdev(net);
+	struct wiphy *wiphy = wdev->wiphy;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	if (cfg->nan_enable) {
+		mutex_lock(&cfg->if_sync);
+		cfg->nancfg.disable_reason = NAN_COUNTRY_CODE_CHANGE;
+		ret = wl_cfgnan_disable(cfg);
+		mutex_unlock(&cfg->if_sync);
+		if (ret != BCME_OK) {
+			WL_ERR(("failed to disable nan, error[%d]\n", ret));
+			return ret;
+		}
+	}
+#endif /* WL_NAN */
+	ret = wldev_set_country(net, country_code,
+		notify, user_enforced, revinfo);
+	if (ret < 0) {
+		WL_ERR(("set country Failed :%d\n", ret));
+	}
+	return ret;
+}
+
+#ifdef CONFIG_CFG80211_INTERNAL_REGDB
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+#define WL_CFG80211_REG_NOTIFIER() static int wl_cfg80211_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
+#else
+#define WL_CFG80211_REG_NOTIFIER() static void wl_cfg80211_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
+#endif /* kernel version < 3.9.0 */
+#endif
+
+#ifdef CONFIG_CFG80211_INTERNAL_REGDB
+WL_CFG80211_REG_NOTIFIER()
+{
+	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *)wiphy_priv(wiphy);
+	int ret = 0;
+	int revinfo = -1;
+
+	if (!request || !cfg) {
+		WL_ERR(("Invalid arg\n"));
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 11))
+		return -EINVAL;
+#else
+		return;
+#endif /* kernel version < 3.10.11 */
+	}
+
+	WL_DBG(("ccode: %c%c Initiator: %d\n",
+		request->alpha2[0], request->alpha2[1], request->initiator));
+
+	/* We support only REGDOM_SET_BY_USER as of now */
+	if ((request->initiator != NL80211_REGDOM_SET_BY_USER) &&
+		(request->initiator != NL80211_REGDOM_SET_BY_COUNTRY_IE)) {
+		WL_ERR(("reg_notifier for intiator:%d not supported : set default\n",
+			request->initiator));
+		/* in case of no supported country by regdb
+		     lets driver setup platform default Locale
+		*/
+	}
+
+	WL_ERR(("Set country code %c%c from %s\n",
+		request->alpha2[0], request->alpha2[1],
+		((request->initiator == NL80211_REGDOM_SET_BY_COUNTRY_IE) ? " 11d AP" : "User")));
+
+	if ((ret = wldev_set_country(bcmcfg_to_prmry_ndev(cfg), request->alpha2,
+		false, (request->initiator == NL80211_REGDOM_SET_BY_USER ? true : false),
+		revinfo)) < 0) {
+		WL_ERR(("set country Failed :%d\n", ret));
+	}
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 11))
+	return ret;
+#else
+	return;
+#endif /* kernel version < 3.10.11 */
+}
+#endif /* CONFIG_CFG80211_INTERNAL_REGDB */
+
+#ifdef CONFIG_PM
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
+static const struct wiphy_wowlan_support brcm_wowlan_support = {
+	.flags = WIPHY_WOWLAN_ANY,
+	.n_patterns = WL_WOWLAN_MAX_PATTERNS,
+	.pattern_min_len = WL_WOWLAN_MIN_PATTERN_LEN,
+	.pattern_max_len = WL_WOWLAN_MAX_PATTERN_LEN,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
+	.max_pkt_offset = WL_WOWLAN_MAX_PATTERN_LEN,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0) */
+};
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0) */
+#endif /* CONFIG_PM */
+
+int wl_features_set(u8 *array, uint8 len, u32 ftidx)
+{
+	u8* ft_byte;
+
+	if ((ftidx / 8u) >= len)
+		return BCME_BADARG;
+
+	ft_byte = &array[ftidx / 8u];
+	*ft_byte |= BIT(ftidx % 8u);
+	return BCME_OK;
+}
+
+static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev, dhd_pub_t *context)
+{
+	s32 err = 0;
+#ifdef CONFIG_PM
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
+	struct cfg80211_wowlan *brcm_wowlan_config = NULL;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0) */
+#endif /* CONFIG_PM */
+
+//#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0) || defined(WL_COMPAT_WIRELESS))
+	dhd_pub_t *dhd = (dhd_pub_t *)context;
+	BCM_REFERENCE(dhd);
+
+	if (!dhd) {
+		WL_ERR(("DHD is NULL!!"));
+		err = -ENODEV;
+		return err;
+	}
+//#endif // endif
+
+	wdev->wiphy =
+	    wiphy_new(&wl_cfg80211_ops, sizeof(struct bcm_cfg80211));
+	if (unlikely(!wdev->wiphy)) {
+		WL_ERR(("Couldn not allocate wiphy device\n"));
+		err = -ENOMEM;
+		return err;
+	}
+	set_wiphy_dev(wdev->wiphy, sdiofunc_dev);
+	wdev->wiphy->max_scan_ie_len = WL_SCAN_IE_LEN_MAX;
+	/* Report  how many SSIDs Driver can support per Scan request */
+	wdev->wiphy->max_scan_ssids = WL_SCAN_PARAMS_SSID_MAX;
+	wdev->wiphy->max_num_pmkids = WL_NUM_PMKIDS_MAX;
+#ifdef WL_SCHED_SCAN
+	wdev->wiphy->max_sched_scan_ssids = MAX_PFN_LIST_COUNT;
+	wdev->wiphy->max_match_sets = MAX_PFN_LIST_COUNT;
+	wdev->wiphy->max_sched_scan_ie_len = WL_SCAN_IE_LEN_MAX;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
+	wdev->wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
+#endif /* LINUX_VER < 4.12 */
+#endif /* WL_SCHED_SCAN */
+#ifdef WLMESH_CFG80211
+	wdev->wiphy->flags |= WIPHY_FLAG_MESH_AUTH;
+#endif /* WLMESH_CFG80211 */
+	wdev->wiphy->interface_modes =
+		BIT(NL80211_IFTYPE_STATION)
+		| BIT(NL80211_IFTYPE_ADHOC)
+#if !defined(WL_ENABLE_P2P_IF) && !defined(WL_CFG80211_P2P_DEV_IF)
+		| BIT(NL80211_IFTYPE_MONITOR)
+#endif // endif
+#if defined(WL_IFACE_COMB_NUM_CHANNELS) || defined(WL_CFG80211_P2P_DEV_IF)
+		| BIT(NL80211_IFTYPE_P2P_CLIENT)
+		| BIT(NL80211_IFTYPE_P2P_GO)
+#endif /* WL_IFACE_COMB_NUM_CHANNELS || WL_CFG80211_P2P_DEV_IF */
+#if defined(WL_CFG80211_P2P_DEV_IF)
+		| BIT(NL80211_IFTYPE_P2P_DEVICE)
+#endif /* WL_CFG80211_P2P_DEV_IF */
+#ifdef WLMESH_CFG80211
+		| BIT(NL80211_IFTYPE_MESH_POINT)
+#endif /* WLMESH_CFG80211 */
+		| BIT(NL80211_IFTYPE_AP);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0)) && \
+	(defined(WL_IFACE_COMB_NUM_CHANNELS) || defined(WL_CFG80211_P2P_DEV_IF))
+	WL_DBG(("Setting interface combinations for common mode\n"));
+	wdev->wiphy->iface_combinations = common_iface_combinations;
+	wdev->wiphy->n_iface_combinations =
+		ARRAY_SIZE(common_iface_combinations);
+#endif /* LINUX_VER >= 3.0 && (WL_IFACE_COMB_NUM_CHANNELS || WL_CFG80211_P2P_DEV_IF) */
+
+	wdev->wiphy->bands[IEEE80211_BAND_2GHZ] = &__wl_band_2ghz;
+
+	wdev->wiphy->signal_type = CFG80211_SIGNAL_TYPE_MBM;
+	wdev->wiphy->cipher_suites = __wl_cipher_suites;
+	wdev->wiphy->n_cipher_suites = ARRAY_SIZE(__wl_cipher_suites);
+	wdev->wiphy->max_remain_on_channel_duration = 5000;
+	wdev->wiphy->mgmt_stypes = wl_cfg80211_default_mgmt_stypes;
+#ifndef WL_POWERSAVE_DISABLED
+	wdev->wiphy->flags |= WIPHY_FLAG_PS_ON_BY_DEFAULT;
+#else
+	wdev->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
+#endif				/* !WL_POWERSAVE_DISABLED */
+	wdev->wiphy->flags |= WIPHY_FLAG_NETNS_OK |
+		WIPHY_FLAG_4ADDR_AP |
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 39)) && !defined(WL_COMPAT_WIRELESS)
+		WIPHY_FLAG_SUPPORTS_SEPARATE_DEFAULT_KEYS |
+#endif // endif
+		WIPHY_FLAG_4ADDR_STATION;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0))
+	/*
+	 * If FW ROAM flag is advertised, upper layer doesn't provide the
+	 * bssid & freq in the connect command. However, kernel ver >= 3.15,
+	 * provides bssid_hint & freq_hint which can be used by the firmware.
+	 * fw_ap_select variable determines whether FW selects the AP or the
+	 * user space selects the target AP within the given ESS.
+	 */
+	wdev->wiphy->flags |= WIPHY_FLAG_SUPPORTS_FW_ROAM;
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0) */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0)) || defined(WL_COMPAT_WIRELESS)
+	wdev->wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL |
+		WIPHY_FLAG_OFFCHAN_TX;
+#endif // endif
+#if defined(WL_SUPPORT_BACKPORTED_KPATCHES) || (LINUX_VERSION_CODE >= KERNEL_VERSION(3, \
+	4, 0))
+	/* From 3.4 kernel ownards AP_SME flag can be advertised
+	 * to remove the patch from supplicant
+	 */
+	wdev->wiphy->flags |= WIPHY_FLAG_HAVE_AP_SME;
+
+#ifdef WL_CFG80211_ACL
+	/* Configure ACL capabilities. */
+	wdev->wiphy->max_acl_mac_addrs = MAX_NUM_MAC_FILT;
+#endif // endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0) || defined(WL_COMPAT_WIRELESS))
+	/* Supplicant distinguish between the SoftAP mode and other
+	 * modes (e.g. P2P, WPS, HS2.0) when it builds the probe
+	 * response frame from Supplicant MR1 and Kernel 3.4.0 or
+	 * later version. To add Vendor specific IE into the
+	 * probe response frame in case of SoftAP mode,
+	 * AP_PROBE_RESP_OFFLOAD flag is set to wiphy->flags variable.
+	 */
+	if (dhd_get_fw_mode(dhd->info) == DHD_FLAG_HOSTAP_MODE) {
+		wdev->wiphy->flags |= WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD;
+		wdev->wiphy->probe_resp_offload = 0;
+	}
+#endif // endif
+#endif /* WL_SUPPORT_BACKPORTED_KPATCHES) || (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) */
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 2, 0)) || defined(WL_COMPAT_WIRELESS)
+	wdev->wiphy->flags |= WIPHY_FLAG_SUPPORTS_TDLS;
+#endif // endif
+
+#if defined(CONFIG_PM) && defined(WL_CFG80211_P2P_DEV_IF)
+	/*
+	 * From linux-3.10 kernel, wowlan packet filter is mandated to avoid the
+	 * disconnection of connected network before suspend. So a dummy wowlan
+	 * filter is configured for kernels linux-3.8 and above.
+	 */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
+	wdev->wiphy->wowlan = &brcm_wowlan_support;
+	/* If this is not provided cfg stack will get disconnect
+	* during suspend.
+	* Note: wiphy->wowlan_config is freed by cfg80211 layer.
+	* so use malloc instead of MALLOC(osh) to avoid false alarm.
+	*/
+	brcm_wowlan_config = kmalloc(sizeof(struct cfg80211_wowlan), GFP_KERNEL);
+	if (brcm_wowlan_config) {
+		brcm_wowlan_config->disconnect = true;
+		brcm_wowlan_config->gtk_rekey_failure = true;
+		brcm_wowlan_config->eap_identity_req = true;
+		brcm_wowlan_config->four_way_handshake = true;
+		brcm_wowlan_config->patterns = NULL;
+		brcm_wowlan_config->n_patterns = 0;
+		brcm_wowlan_config->tcp = NULL;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
+		brcm_wowlan_config->nd_config = NULL;
+#endif // endif
+	} else {
+		WL_ERR(("Can not allocate memory for brcm_wowlan_config,"
+			" So wiphy->wowlan_config is set to NULL\n"));
+	}
+	wdev->wiphy->wowlan_config = brcm_wowlan_config;
+#else
+	wdev->wiphy->wowlan.flags = WIPHY_WOWLAN_ANY;
+	wdev->wiphy->wowlan.n_patterns = WL_WOWLAN_MAX_PATTERNS;
+	wdev->wiphy->wowlan.pattern_min_len = WL_WOWLAN_MIN_PATTERN_LEN;
+	wdev->wiphy->wowlan.pattern_max_len = WL_WOWLAN_MAX_PATTERN_LEN;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
+	wdev->wiphy->wowlan.max_pkt_offset = WL_WOWLAN_MAX_PATTERN_LEN;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0) */
+#endif /* CONFIG_PM && WL_CFG80211_P2P_DEV_IF */
+
+	WL_DBG(("Registering custom regulatory)\n"));
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
+	wdev->wiphy->regulatory_flags |=
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
+		REGULATORY_IGNORE_STALE_KICKOFF |
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0) */
+		REGULATORY_CUSTOM_REG;
+#else
+	wdev->wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
+	wiphy_apply_custom_regulatory(wdev->wiphy, &brcm_regdom);
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
+	WL_INFORM_MEM(("Registering Vendor80211\n"));
+	err = wl_cfgvendor_attach(wdev->wiphy, dhd);
+	if (unlikely(err < 0)) {
+		WL_ERR(("Couldn not attach vendor commands (%d)\n", err));
+	}
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
+#ifdef WL_FILS
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_FILS_SK_OFFLOAD);
+#endif /* WL_FILS */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+	wdev->wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH;
+	wdev->wiphy->max_num_csa_counters = WL_MAX_NUM_CSA_COUNTERS;
+#endif /* LINUX_VERSION_CODE > KERNEL_VERSION(3, 12, 0) */
+
+	/* Now we can register wiphy with cfg80211 module */
+	err = wiphy_register(wdev->wiphy);
+	if (unlikely(err < 0)) {
+		WL_ERR(("Couldn not register wiphy device (%d)\n", err));
+		wiphy_free(wdev->wiphy);
+	}
+
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0)) && (LINUX_VERSION_CODE <= \
+	KERNEL_VERSION(3, 3, 0))) && defined(WL_IFACE_COMB_NUM_CHANNELS)
+	wdev->wiphy->flags &= ~WIPHY_FLAG_ENFORCE_COMBINATIONS;
+#endif // endif
+
+#if defined(WL_SAE) || defined(WL_CLIENT_SAE)
+	if (wl_extsae_chip(dhd))
+		wdev->wiphy->features |= NL80211_FEATURE_SAE;
+#endif /* WL_SAE || WL_CLIENT_SAE */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)) && defined(BCMSUP_4WAY_HANDSHAKE)
+	if (FW_SUPPORTED(dhd, idsup)) {
+		err = wiphy_ext_feature_set(wdev->wiphy,
+			NL80211_EXT_FEATURE_4WAY_HANDSHAKE_STA_PSK);
+		if (err) {
+			return err;
+		}
+		err = wiphy_ext_feature_set(wdev->wiphy,
+			NL80211_EXT_FEATURE_4WAY_HANDSHAKE_STA_1X);
+		if (err) {
+			return err;
+		}
+	}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0) && defined(BCMSUP_4WAY_HANDSHAKE) */
+#ifdef WL_SCAN_TYPE
+	/* These scan types will be mapped to default scan on non-supported chipset */
+	/* Advertise scan type capability. */
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_LOW_SPAN_SCAN);
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_LOW_POWER_SCAN);
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_HIGH_ACCURACY_SCAN);
+	wdev->wiphy->features |= NL80211_FEATURE_LOW_PRIORITY_SCAN;
+#endif /* WL_SCAN_TYPE */
+
+	return err;
+}
+
+static void wl_free_wdev(struct bcm_cfg80211 *cfg)
+{
+	struct wireless_dev *wdev = cfg->wdev;
+	struct wiphy *wiphy = NULL;
+	if (!wdev) {
+		WL_ERR(("wdev is invalid\n"));
+		return;
+	}
+	if (wdev->wiphy) {
+		wiphy = wdev->wiphy;
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
+		wl_cfgvendor_detach(wdev->wiphy);
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
+#if defined(CONFIG_PM) && defined(WL_CFG80211_P2P_DEV_IF)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
+		/* Reset wowlan & wowlan_config before Unregister to avoid Kernel Panic */
+		WL_DBG(("clear wowlan\n"));
+		wdev->wiphy->wowlan = NULL;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0) */
+#endif /* CONFIG_PM && WL_CFG80211_P2P_DEV_IF */
+		wiphy_unregister(wdev->wiphy);
+		wdev->wiphy->dev.parent = NULL;
+		wdev->wiphy = NULL;
+	}
+
+	wl_delete_all_netinfo(cfg);
+	if (wiphy) {
+		if (wdev->netdev)
+			wdev->netdev->ieee80211_ptr = NULL;
+		wdev->netdev = NULL;
+		MFREE(cfg->osh, wdev, sizeof(*wdev));
+		cfg->wdev = NULL;
+		wiphy_free(wiphy);
+	}
+
+	/* PLEASE do NOT call any function after wiphy_free, the driver's private structure "cfg",
+	 * which is the private part of wiphy, has been freed in wiphy_free !!!!!!!!!!!
+	 */
+}
+
+#if defined(BSSCACHE) || defined(RSSIAVG)
+void wl_cfg80211_update_bss_cache(struct bcm_cfg80211 *cfg)
+{
+#if defined(RSSIAVG)
+	int rssi;
+#endif
+	struct wl_scan_results *bss_list = cfg->bss_list;
+
+	/* Free cache in p2p scanning*/
+	if (p2p_is_on(cfg) && p2p_scan(cfg)) {
+#if defined(RSSIAVG)
+		wl_free_rssi_cache(&cfg->g_rssi_cache_ctrl);
+#endif
+#if defined(BSSCACHE)
+		wl_free_bss_cache(&cfg->g_bss_cache_ctrl);
+#endif
+	}
+
+	/* Update cache */
+#if defined(RSSIAVG)
+	wl_update_rssi_cache(&cfg->g_rssi_cache_ctrl, bss_list);
+	if (!in_atomic())
+		wl_update_connected_rssi_cache(ndev, &cfg->g_rssi_cache_ctrl, &rssi);
+#endif
+#if defined(BSSCACHE)
+	wl_update_bss_cache(&cfg->g_bss_cache_ctrl,
+#if defined(RSSIAVG)
+		&cfg->g_rssi_cache_ctrl,
+#endif
+		bss_list);
+#endif
+
+	/* delete dirty cache */
+#if defined(RSSIAVG)
+	wl_delete_dirty_rssi_cache(&cfg->g_rssi_cache_ctrl);
+	wl_reset_rssi_cache(&cfg->g_rssi_cache_ctrl);
+#endif
+#if defined(BSSCACHE)
+	wl_delete_dirty_bss_cache(&cfg->g_bss_cache_ctrl);
+	wl_reset_bss_cache(&cfg->g_bss_cache_ctrl);
+#endif
+
+}
+#endif
+
+#if defined(BSSCACHE)
+s32 wl_inform_bss_cache(struct bcm_cfg80211 *cfg)
+{
+	struct wl_scan_results *bss_list = cfg->bss_list;
+	wl_bss_info_t *bi = NULL;	/* must be initialized */
+	s32 err = 0;
+	s32 i, cnt;
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+	wl_bss_cache_t *node;
+
+	WL_SCAN(("scanned AP count (%d)\n", bss_list->count));
+	bss_list = cfg->bss_list;
+	preempt_disable();
+	bi = next_bss(bss_list, bi);
+	for_each_bss(bss_list, bi, i) {
+		err = wl_inform_single_bss(cfg, bi, false);
+		if (unlikely(err)) {
+			WL_ERR(("bss inform failed\n"));
+		}
+	}
+
+	cnt = i;	
+	node = cfg->g_bss_cache_ctrl.m_cache_head;
+	WL_SCAN(("cached AP count (%d)\n", wl_bss_cache_size(&cfg->g_bss_cache_ctrl)));
+	for (i=cnt; node && i<WL_AP_MAX; i++) {
+		if (node->dirty > 1) {
+			bi = node->results.bss_info;
+			err = wl_inform_single_bss(cfg, bi, false);
+		}
+		node = node->next;
+	}
+	preempt_enable();
+	if (cfg->autochannel)
+		wl_ext_get_best_channel(ndev, &cfg->g_bss_cache_ctrl, ioctl_version,
+			&cfg->best_2g_ch, &cfg->best_5g_ch);
+
+	return err;
+}
+#endif
+
+s32 wl_inform_bss(struct bcm_cfg80211 *cfg)
+{
+#if !defined(BSSCACHE)
+	struct wl_scan_results *bss_list;
+	wl_bss_info_t *bi = NULL;	/* must be initialized */
+	s32 i;
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+#endif
+	s32 err = 0;
+
+#ifdef WL_EXT_IAPSTA
+	wl_ext_in4way_sync(ndev, 0, WL_EXT_STATUS_SCAN_COMPLETE, NULL);
+#endif
+
+#if defined(BSSCACHE) || defined(RSSIAVG)
+	wl_cfg80211_update_bss_cache(cfg);
+#endif
+
+#if defined(BSSCACHE)
+	err = wl_inform_bss_cache(cfg);
+#else
+	bss_list = cfg->bss_list;
+	WL_SCAN(("scanned AP count (%d)\n", bss_list->count));
+#ifdef ESCAN_CHANNEL_CACHE
+	reset_roam_cache(cfg);
+#endif /* ESCAN_CHANNEL_CACHE */
+	preempt_disable();
+	bi = next_bss(bss_list, bi);
+	for_each_bss(bss_list, bi, i) {
+#ifdef ESCAN_CHANNEL_CACHE
+		add_roam_cache(cfg, bi);
+#endif /* ESCAN_CHANNEL_CACHE */
+		err = wl_inform_single_bss(cfg, bi, false);
+		if (unlikely(err)) {
+			WL_ERR(("bss inform failed\n"));
+		}
+	}
+	preempt_enable();
+	if (cfg->autochannel)
+		wl_ext_get_best_channel(ndev, bss_list, ioctl_version,
+			&cfg->best_2g_ch, &cfg->best_5g_ch);
+#endif
+
+	WL_MEM(("cfg80211 scan cache updated\n"));
+#ifdef ROAM_CHANNEL_CACHE
+	/* print_roam_cache(); */
+	update_roam_cache(cfg, ioctl_version);
+#endif /* ROAM_CHANNEL_CACHE */
+	return err;
+}
+
+static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, wl_bss_info_t *bi, bool update_ssid)
+{
+	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+	struct ieee80211_mgmt *mgmt;
+	struct ieee80211_channel *channel;
+	struct ieee80211_supported_band *band;
+	struct wl_cfg80211_bss_info *notif_bss_info;
+	struct wl_scan_req *sr = wl_to_sr(cfg);
+	struct beacon_proberesp *beacon_proberesp;
+	struct cfg80211_bss *cbss = NULL;
+	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
+	log_conn_event_t *event_data = NULL;
+	tlv_log *tlv_data = NULL;
+	u32 alloc_len, tlv_len;
+	u32 payload_len;
+	s32 mgmt_type;
+	s32 signal;
+	u32 freq;
+	s32 err = 0;
+	gfp_t aflags;
+	u8 tmp_buf[IEEE80211_MAX_SSID_LEN + 1];
+	chanspec_t chanspec;
+#ifdef CONFIG_AP6XXX_WIFI6_HDF
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+#endif
+	if (unlikely(dtoh32(bi->length) > WL_BSS_INFO_MAX)) {
+		WL_DBG(("Beacon is larger than buffer. Discarding\n"));
+		return err;
+	}
+
+	if (bi->SSID_len > IEEE80211_MAX_SSID_LEN) {
+		WL_ERR(("wrong SSID len:%d\n", bi->SSID_len));
+		return -EINVAL;
+	}
+
+	aflags = (in_atomic()) ? GFP_ATOMIC : GFP_KERNEL;
+	notif_bss_info = (struct wl_cfg80211_bss_info *)MALLOCZ(cfg->osh,
+		sizeof(*notif_bss_info) + sizeof(*mgmt) - sizeof(u8) + WL_BSS_INFO_MAX);
+	if (unlikely(!notif_bss_info)) {
+		WL_ERR(("notif_bss_info alloc failed\n"));
+		return -ENOMEM;
+	}
+	mgmt = (struct ieee80211_mgmt *)notif_bss_info->frame_buf;
+	chanspec = wl_chspec_driver_to_host(bi->chanspec);
+	notif_bss_info->channel = wf_chspec_ctlchan(chanspec);
+
+	if (notif_bss_info->channel <= CH_MAX_2G_CHANNEL)
+		band = wiphy->bands[IEEE80211_BAND_2GHZ];
+	else
+		band = wiphy->bands[IEEE80211_BAND_5GHZ];
+	if (!band) {
+		WL_ERR(("No valid band\n"));
+		MFREE(cfg->osh, notif_bss_info, sizeof(*notif_bss_info)
+			+ sizeof(*mgmt) - sizeof(u8) + WL_BSS_INFO_MAX);
+		return -EINVAL;
+	}
+	notif_bss_info->rssi = dtoh16(bi->RSSI);
+#if defined(RSSIAVG)
+	notif_bss_info->rssi = wl_get_avg_rssi(&cfg->g_rssi_cache_ctrl, &bi->BSSID);
+	if (notif_bss_info->rssi == RSSI_MINVAL)
+		notif_bss_info->rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
+#endif
+#if defined(RSSIOFFSET)
+	notif_bss_info->rssi = wl_update_rssi_offset(bcmcfg_to_prmry_ndev(cfg), notif_bss_info->rssi);
+#endif
+#if !defined(RSSIAVG) && !defined(RSSIOFFSET)
+	// terence 20150419: limit the max. rssi to -2 or the bss will be filtered out in android OS
+	notif_bss_info->rssi = MIN(notif_bss_info->rssi, RSSI_MAXVAL);
+#endif
+	memcpy(mgmt->bssid, &bi->BSSID, ETHER_ADDR_LEN);
+	mgmt_type = cfg->active_scan ?
+		IEEE80211_STYPE_PROBE_RESP : IEEE80211_STYPE_BEACON;
+	if (!memcmp(bi->SSID, sr->ssid.SSID, bi->SSID_len)) {
+	    mgmt->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT | mgmt_type);
+	}
+	beacon_proberesp = cfg->active_scan ?
+		(struct beacon_proberesp *)&mgmt->u.probe_resp :
+		(struct beacon_proberesp *)&mgmt->u.beacon;
+	beacon_proberesp->timestamp = 0;
+	beacon_proberesp->beacon_int = cpu_to_le16(bi->beacon_period);
+	beacon_proberesp->capab_info = cpu_to_le16(bi->capability);
+	wl_rst_ie(cfg);
+	wl_update_hidden_ap_ie(bi, ((u8 *) bi) + bi->ie_offset, &bi->ie_length, update_ssid);
+	wl_mrg_ie(cfg, ((u8 *) bi) + bi->ie_offset, bi->ie_length);
+	wl_cp_ie(cfg, beacon_proberesp->variable, WL_BSS_INFO_MAX -
+		offsetof(struct wl_cfg80211_bss_info, frame_buf));
+	notif_bss_info->frame_len = offsetof(struct ieee80211_mgmt,
+		u.beacon.variable) + wl_get_ielen(cfg);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39) && !defined(WL_COMPAT_WIRELESS)
+	freq = ieee80211_channel_to_frequency(notif_bss_info->channel);
+	(void)band->band;
+#else
+	freq = ieee80211_channel_to_frequency(notif_bss_info->channel, band->band);
+#endif // endif
+	if (freq == 0) {
+		WL_ERR(("Invalid channel, fail to change channel to freq\n"));
+		MFREE(cfg->osh, notif_bss_info, sizeof(*notif_bss_info)
+			+ sizeof(*mgmt) - sizeof(u8) + WL_BSS_INFO_MAX);
+		return -EINVAL;
+	}
+	channel = ieee80211_get_channel(wiphy, freq);
+	memcpy(tmp_buf, bi->SSID, bi->SSID_len);
+	tmp_buf[bi->SSID_len] = '\0';
+	WL_SCAN(("BSSID %pM, channel %3d(%3d %3sMHz), rssi %3d, capa 0x%-4x, mgmt_type %d, "
+		"frame_len %3d, SSID \"%s\"\n",
+		&bi->BSSID, notif_bss_info->channel, CHSPEC_CHANNEL(chanspec),
+		CHSPEC_IS20(chanspec)?"20":
+		CHSPEC_IS40(chanspec)?"40":
+		CHSPEC_IS80(chanspec)?"80":
+		CHSPEC_IS160(chanspec)?"160":"??",
+		notif_bss_info->rssi, mgmt->u.beacon.capab_info, mgmt_type,
+		notif_bss_info->frame_len, tmp_buf));
+	if (unlikely(!channel)) {
+		WL_ERR(("ieee80211_get_channel error, freq=%d, channel=%d\n",
+			freq, notif_bss_info->channel));
+		MFREE(cfg->osh, notif_bss_info, sizeof(*notif_bss_info)
+			+ sizeof(*mgmt) - sizeof(u8) + WL_BSS_INFO_MAX);
+		return -EINVAL;
+	}
+
+	signal = notif_bss_info->rssi * 100;
+	if (!mgmt->u.probe_resp.timestamp) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+		struct osl_timespec ts;
+		osl_get_monotonic_boottime(&ts);
+		mgmt->u.probe_resp.timestamp = ((u64)ts.tv_sec*1000000)
+				+ ts.tv_nsec / 1000;
+#else
+		struct osl_timespec tv;
+		osl_do_gettimeofday(&tv);
+		mgmt->u.probe_resp.timestamp = ((u64)tv.tv_sec*1000000)
+				+ tv.tv_usec;
+#endif // endif
+	}
+
+	cbss = cfg80211_inform_bss_frame(wiphy, channel, mgmt,
+		le16_to_cpu(notif_bss_info->frame_len), signal, aflags);
+	if (unlikely(!cbss)) {
+		WL_ERR(("cfg80211_inform_bss_frame error bssid " MACDBG " channel %d \n",
+			MAC2STRDBG((u8*)(&bi->BSSID)), notif_bss_info->channel));
+		err = -EINVAL;
+		goto out_err;
+	}
+
+	CFG80211_PUT_BSS(wiphy, cbss);
+#ifdef CONFIG_AP6XXX_WIFI6_HDF
+    //WL_ERR(("bdh6 frame_len %u == %u, netdev=%s\n", le16_to_cpu(notif_bss_info->frame_len), notif_bss_info->frame_len, ndev->name));
+	HdfInformBssFrameEventCallback(ndev, channel, signal, freq, mgmt, notif_bss_info->frame_len);
+#endif
+	if (DBG_RING_ACTIVE(dhdp, DHD_EVENT_RING_ID) &&
+			(cfg->sched_scan_req && !cfg->scan_request)) {
+		alloc_len = sizeof(log_conn_event_t) + IEEE80211_MAX_SSID_LEN + sizeof(uint16) +
+			sizeof(int16);
+		event_data = (log_conn_event_t *)MALLOCZ(dhdp->osh, alloc_len);
+		if (!event_data) {
+			WL_ERR(("%s: failed to allocate the log_conn_event_t with "
+				"length(%d)\n", __func__, alloc_len));
+			goto out_err;
+		}
+		tlv_len = 3 * sizeof(tlv_log);
+		event_data->tlvs = (tlv_log *)MALLOCZ(cfg->osh, tlv_len);
+		if (!event_data->tlvs) {
+			WL_ERR(("%s: failed to allocate the log_conn_event_t with "
+				"length(%d)\n", __func__, tlv_len));
+			goto free_evt_data;
+		}
+
+		payload_len = sizeof(log_conn_event_t);
+		event_data->event = WIFI_EVENT_DRIVER_PNO_SCAN_RESULT_FOUND;
+		tlv_data = event_data->tlvs;
+
+		/* ssid */
+		tlv_data->tag = WIFI_TAG_SSID;
+		tlv_data->len = bi->SSID_len;
+		memcpy(tlv_data->value, bi->SSID, bi->SSID_len);
+		payload_len += TLV_LOG_SIZE(tlv_data);
+		tlv_data = TLV_LOG_NEXT(tlv_data);
+
+		/* channel */
+		tlv_data->tag = WIFI_TAG_CHANNEL;
+		tlv_data->len = sizeof(uint16);
+		memcpy(tlv_data->value, &notif_bss_info->channel, sizeof(uint16));
+		payload_len += TLV_LOG_SIZE(tlv_data);
+		tlv_data = TLV_LOG_NEXT(tlv_data);
+
+		/* rssi */
+		tlv_data->tag = WIFI_TAG_RSSI;
+		tlv_data->len = sizeof(int16);
+		memcpy(tlv_data->value, &notif_bss_info->rssi, sizeof(int16));
+		payload_len += TLV_LOG_SIZE(tlv_data);
+		tlv_data = TLV_LOG_NEXT(tlv_data);
+
+		dhd_os_push_push_ring_data(dhdp, DHD_EVENT_RING_ID,
+			event_data, payload_len);
+		MFREE(dhdp->osh, event_data->tlvs, tlv_len);
+free_evt_data:
+		MFREE(dhdp->osh, event_data, alloc_len);
+	}
+
+out_err:
+	MFREE(cfg->osh, notif_bss_info, sizeof(*notif_bss_info)
+			+ sizeof(*mgmt) - sizeof(u8) + WL_BSS_INFO_MAX);
+	return err;
+}
+
+static bool wl_is_linkup(struct bcm_cfg80211 *cfg, const wl_event_msg_t *e, struct net_device *ndev)
+{
+	u32 event = ntoh32(e->event_type);
+	u32 status =  ntoh32(e->status);
+	u16 flags = ntoh16(e->flags);
+#if defined(CUSTOM_SET_ANTNPM)
+	dhd_pub_t *dhd;
+	dhd = (dhd_pub_t *)(cfg->pub);
+#endif // endif
+
+	WL_DBG(("event %d, status %d flags %x\n", event, status, flags));
+	if (event == WLC_E_SET_SSID) {
+		if (status == WLC_E_STATUS_SUCCESS) {
+#ifdef CUSTOM_SET_ANTNPM
+			if (dhd->mimo_ant_set) {
+				int err = 0;
+
+				WL_ERR(("[WIFI_SEC] mimo_ant_set = %d\n", dhd->mimo_ant_set));
+				err = wldev_iovar_setint(ndev, "txchain", dhd->mimo_ant_set);
+				if (err != 0) {
+					WL_ERR(("[WIFI_SEC] Fail set txchain\n"));
+				}
+				err = wldev_iovar_setint(ndev, "rxchain", dhd->mimo_ant_set);
+				if (err != 0) {
+					WL_ERR(("[WIFI_SEC] Fail set rxchain\n"));
+				}
+			}
+#endif /* CUSTOM_SET_ANTNPM */
+			if (!wl_is_ibssmode(cfg, ndev))
+				return true;
+		}
+	} else if (event == WLC_E_LINK) {
+		if (flags & WLC_EVENT_MSG_LINK)
+			return true;
+	}
+
+	WL_DBG(("wl_is_linkup false\n"));
+	return false;
+}
+
+static bool wl_is_linkdown(struct bcm_cfg80211 *cfg, const wl_event_msg_t *e)
+{
+	u32 event = ntoh32(e->event_type);
+	u16 flags = ntoh16(e->flags);
+
+	if (event == WLC_E_DEAUTH_IND ||
+	event == WLC_E_DISASSOC_IND ||
+	event == WLC_E_DISASSOC ||
+	event == WLC_E_DEAUTH) {
+		WL_ERR(("Link down Reason : %s\n", bcmevent_get_name(event)));
+		return true;
+	} else if (event == WLC_E_LINK) {
+		if (!(flags & WLC_EVENT_MSG_LINK)) {
+			WL_ERR(("Link down Reason : %s\n", bcmevent_get_name(event)));
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool wl_is_nonetwork(struct bcm_cfg80211 *cfg, const wl_event_msg_t *e)
+{
+	u32 event = ntoh32(e->event_type);
+	u32 status = ntoh32(e->status);
+
+	if (event == WLC_E_LINK && status == WLC_E_STATUS_NO_NETWORKS)
+		return true;
+	if (event == WLC_E_SET_SSID && status != WLC_E_STATUS_SUCCESS)
+		return true;
+	if (event == WLC_E_ASSOC_RESP_IE && status != WLC_E_STATUS_SUCCESS)
+		return true;
+
+	return false;
+}
+
+#ifdef WL_SAE
+static s32
+wl_cfg80211_event_sae_key(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	wl_sae_key_info_t *sae_key)
+{
+	struct sk_buff *skb;
+	gfp_t kflags;
+	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+	int err = BCME_OK;
+
+	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+#if (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+	skb = cfg80211_vendor_event_alloc(wiphy, ndev_to_wdev(ndev), BRCM_SAE_VENDOR_EVENT_BUF_LEN,
+		BRCM_VENDOR_EVENT_SAE_KEY, kflags);
+#else
+	skb = cfg80211_vendor_event_alloc(wiphy, BRCM_SAE_VENDOR_EVENT_BUF_LEN,
+		BRCM_VENDOR_EVENT_SAE_KEY, kflags);
+#endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
+		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
+	if (!skb) {
+		WL_ERR(("skb alloc failed"));
+		err = BCME_NOMEM;
+		goto done;
+	}
+
+	WL_INFORM_MEM(("Received Sae Key event for "MACDBG" key length %x %x",
+		MAC2STRDBG(sae_key->peer_mac), sae_key->pmk_len, sae_key->pmkid_len));
+	nla_put(skb, BRCM_SAE_KEY_ATTR_PEER_MAC, ETHER_ADDR_LEN, sae_key->peer_mac);
+	nla_put(skb, BRCM_SAE_KEY_ATTR_PMK, sae_key->pmk_len, sae_key->pmk);
+	nla_put(skb, BRCM_SAE_KEY_ATTR_PMKID, sae_key->pmkid_len, sae_key->pmkid);
+	cfg80211_vendor_event(skb, kflags);
+
+done:
+	return err;
+}
+
+static s32
+wl_bss_handle_sae_auth(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	const wl_event_msg_t *event, void *data)
+{
+	int err = BCME_OK;
+	uint status = ntoh32(event->status);
+	wl_auth_event_t *auth_data;
+	wl_sae_key_info_t sae_key;
+	uint16 tlv_buf_len;
+
+	if (status == WLC_E_STATUS_SUCCESS) {
+		auth_data = (wl_auth_event_t *)data;
+		if (auth_data->version != WL_AUTH_EVENT_DATA_V1) {
+			WL_ERR(("unknown auth event data version %x\n",
+				auth_data->version));
+			err = BCME_VERSION;
+			goto done;
+		}
+
+		tlv_buf_len = auth_data->length - WL_AUTH_EVENT_FIXED_LEN_V1;
+
+		/* check if PMK info present */
+		sae_key.pmk = bcm_get_data_from_xtlv_buf(auth_data->xtlvs, tlv_buf_len,
+			WL_AUTH_PMK_TLV_ID, &(sae_key.pmk_len), BCM_XTLV_OPTION_ALIGN32);
+		if (!sae_key.pmk || !sae_key.pmk_len) {
+			WL_ERR(("Mandatory PMK info not present"));
+			err = BCME_NOTFOUND;
+			goto done;
+		}
+		/* check if PMKID info present */
+		sae_key.pmkid = bcm_get_data_from_xtlv_buf(auth_data->xtlvs, tlv_buf_len,
+			WL_AUTH_PMKID_TLV_ID, &(sae_key.pmkid_len), BCM_XTLV_OPTION_ALIGN32);
+		if (!sae_key.pmkid || !sae_key.pmkid_len) {
+			WL_ERR(("Mandatory PMKID info not present\n"));
+			err = BCME_NOTFOUND;
+			goto done;
+		}
+		memcpy_s(sae_key.peer_mac, ETHER_ADDR_LEN, event->addr.octet, ETHER_ADDR_LEN);
+		err = wl_cfg80211_event_sae_key(cfg, ndev, &sae_key);
+		if (err) {
+			WL_ERR(("Failed to event sae key info\n"));
+		}
+	} else {
+		WL_ERR(("sae auth status failure:%d\n", status));
+	}
+done:
+	return err;
+}
+#endif /* WL_SAE */
+
+static s32
+wl_get_auth_assoc_status(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	const wl_event_msg_t *e, void *data)
+{
+	u32 reason = ntoh32(e->reason);
+	u32 event = ntoh32(e->event_type);
+	struct wl_security *sec = wl_read_prof(cfg, ndev, WL_PROF_SEC);
+	WL_DBG(("event type : %d, reason : %d\n", event, reason));
+
+	if (sec) {
+		switch (event) {
+		case WLC_E_ASSOC:
+		case WLC_E_AUTH:
+		case WLC_E_AUTH_IND:
+			sec->auth_assoc_res_status = reason;
+			if (ntoh32(e->auth_type) == DOT11_SAE) {
+#ifdef WL_CLIENT_SAE
+				if (event == WLC_E_AUTH) {
+					wl_handle_auth_event(cfg, ndev, e, data);
+				}
+#endif /* WL_CLIENT_SAE */
+#ifdef WL_SAE
+				if (event == WLC_E_AUTH || event == WLC_E_AUTH_IND) {
+					wl_bss_handle_sae_auth(cfg, ndev, e, data);
+				}
+#endif /* WL_SAE */
+			}
+			break;
+		default:
+			break;
+		}
+	} else {
+		WL_ERR(("sec is NULL\n"));
+	}
+	return 0;
+}
+
+/* The mainline kernel >= 3.2.0 has support for indicating new/del station
+ * to AP/P2P GO via events. If this change is backported to kernel for which
+ * this driver is being built, then define WL_CFG80211_STA_EVENT. You
+ * should use this new/del sta event mechanism for BRCM supplicant >= 22.
+ */
