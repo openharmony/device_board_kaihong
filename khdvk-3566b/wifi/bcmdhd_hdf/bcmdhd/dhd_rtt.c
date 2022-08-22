@@ -1923,3 +1923,1916 @@ done:
 	return ret;
 }
 #endif /* WL_NAN */
+
+#ifdef WL_CFG80211
+#ifdef WL_NAN
+static void
+dhd_rtt_retry(dhd_pub_t *dhd)
+{
+	struct net_device *dev = dhd_linux_get_primary_netdev(dhd);
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	rtt_geofence_target_info_t  *geofence_target = NULL;
+	nan_ranging_inst_t *ranging_inst = NULL;
+
+	geofence_target = dhd_rtt_get_geofence_current_target(dhd);
+	if (!geofence_target) {
+		DHD_RTT(("dhd_rtt_retry: geofence target null\n"));
+		goto exit;
+	}
+	ranging_inst = wl_cfgnan_get_ranging_inst(cfg,
+		&geofence_target->peer_addr, NAN_RANGING_ROLE_INITIATOR);
+	if (!ranging_inst) {
+		DHD_RTT(("dhd_rtt_retry: ranging instance null\n"));
+		goto exit;
+	}
+	wl_cfgnan_reset_geofence_ranging(cfg,
+		ranging_inst, RTT_SCHED_RTT_RETRY_GEOFENCE);
+
+exit:
+	return;
+}
+
+static void
+dhd_rtt_retry_work(struct work_struct *work)
+{
+	rtt_status_info_t *rtt_status = NULL;
+	dhd_pub_t *dhd = NULL;
+	struct net_device *dev = NULL;
+	struct bcm_cfg80211 *cfg = NULL;
+
+	if (!work) {
+		goto exit;
+	}
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif // endif
+	rtt_status = container_of(work, rtt_status_info_t, rtt_retry_timer.work);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif // endif
+
+	dhd = rtt_status->dhd;
+	if (dhd == NULL) {
+		DHD_RTT_ERR(("%s : dhd is NULL\n", __FUNCTION__));
+		goto exit;
+	}
+	dev = dhd_linux_get_primary_netdev(dhd);
+	cfg = wl_get_cfg(dev);
+
+	NAN_MUTEX_LOCK();
+	mutex_lock(&rtt_status->rtt_mutex);
+	(void) dhd_rtt_retry(dhd);
+	mutex_unlock(&rtt_status->rtt_mutex);
+	NAN_MUTEX_UNLOCK();
+
+exit:
+	return;
+}
+#endif /* WL_NAN */
+
+/*
+ * Return zero (0)
+ * for valid RTT state
+ * means if RTT is applicable
+ */
+uint8
+dhd_rtt_invalid_states(struct net_device *ndev, struct ether_addr *peer_addr)
+{
+	uint8 invalid_reason = RTT_STATE_VALID;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(ndev);
+
+	UNUSED_PARAMETER(cfg);
+	UNUSED_PARAMETER(invalid_reason);
+
+	/* Make sure peer addr is not NULL in caller */
+	ASSERT(peer_addr);
+	/*
+	 * Keep adding prohibited drv states here
+	 * Only generic conditions which block
+	 * All RTTs like NDP connection
+	 */
+
+#ifdef WL_NAN
+	if (wl_cfgnan_data_dp_exists_with_peer(cfg, peer_addr)) {
+		invalid_reason = RTT_STATE_INV_REASON_NDP_EXIST;
+		DHD_RTT(("NDP in progress/connected, RTT prohibited\n"));
+		goto exit;
+	}
+#endif /* WL_NAN */
+
+	/* Remove below #defines once more exit calls come */
+#ifdef WL_NAN
+exit:
+#endif /* WL_NAN */
+	return invalid_reason;
+}
+#endif /* WL_CFG80211 */
+
+void
+dhd_rtt_schedule_rtt_work_thread(dhd_pub_t *dhd, int sched_reason)
+{
+	rtt_status_info_t *rtt_status = GET_RTTSTATE(dhd);
+	if (rtt_status == NULL) {
+		ASSERT(0);
+	} else {
+		/* Cancel pending retry timer if any */
+		if (delayed_work_pending(&rtt_status->rtt_retry_timer)) {
+			cancel_delayed_work(&rtt_status->rtt_retry_timer);
+		}
+		rtt_status->rtt_sched_reason = sched_reason;
+		schedule_work(&rtt_status->work);
+	}
+	return;
+}
+
+int
+dhd_rtt_stop(dhd_pub_t *dhd, struct ether_addr *mac_list, int mac_cnt)
+{
+	int err = BCME_OK;
+#ifdef WL_CFG80211
+	int i = 0, j = 0;
+	rtt_status_info_t *rtt_status;
+	rtt_results_header_t *entry, *next;
+	rtt_result_t *rtt_result, *next2;
+	struct rtt_noti_callback *iter;
+
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	if (rtt_status->status == RTT_STOPPED) {
+		DHD_RTT_ERR(("rtt is not started\n"));
+		return BCME_OK;
+	}
+	DHD_RTT(("%s enter\n", __FUNCTION__));
+	mutex_lock(&rtt_status->rtt_mutex);
+	for (i = 0; i < mac_cnt; i++) {
+		for (j = 0; j < rtt_status->rtt_config.rtt_target_cnt; j++) {
+			if (!bcmp(&mac_list[i], &rtt_status->rtt_config.target_info[j].addr,
+				ETHER_ADDR_LEN)) {
+				rtt_status->rtt_config.target_info[j].disable = TRUE;
+			}
+		}
+	}
+	if (rtt_status->all_cancel) {
+		/* cancel all of request */
+		rtt_status->status = RTT_STOPPED;
+		DHD_RTT(("current RTT process is cancelled\n"));
+		/* remove the rtt results in cache */
+		if (!list_empty(&rtt_status->rtt_results_cache)) {
+			/* Iterate rtt_results_header list */
+			GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+			list_for_each_entry_safe(entry, next,
+				&rtt_status->rtt_results_cache, list) {
+				list_del(&entry->list);
+				/* Iterate rtt_result list */
+				list_for_each_entry_safe(rtt_result, next2,
+					&entry->result_list, list) {
+					list_del(&rtt_result->list);
+					kfree(rtt_result);
+				}
+				kfree(entry);
+			}
+			GCC_DIAGNOSTIC_POP();
+		}
+		/* send the rtt complete event to wake up the user process */
+		GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+		list_for_each_entry(iter, &rtt_status->noti_fn_list, list) {
+			GCC_DIAGNOSTIC_POP();
+			iter->noti_fn(iter->ctx, &rtt_status->rtt_results_cache);
+		}
+		/* reinitialize the HEAD */
+		INIT_LIST_HEAD(&rtt_status->rtt_results_cache);
+		/* clear information for rtt_config */
+		rtt_status->rtt_config.rtt_target_cnt = 0;
+		memset(rtt_status->rtt_config.target_info, 0,
+			TARGET_INFO_SIZE(RTT_MAX_TARGET_CNT));
+		rtt_status->cur_idx = 0;
+		/* Cancel pending proxd timeout work if any */
+		if (delayed_work_pending(&rtt_status->proxd_timeout)) {
+			cancel_delayed_work(&rtt_status->proxd_timeout);
+		}
+		dhd_rtt_delete_session(dhd, FTM_DEFAULT_SESSION);
+#ifdef WL_NAN
+		dhd_rtt_delete_nan_session(dhd);
+#endif /* WL_NAN */
+		dhd_rtt_ftm_enable(dhd, FALSE);
+	}
+	mutex_unlock(&rtt_status->rtt_mutex);
+#endif /* WL_CFG80211 */
+	return err;
+}
+
+#ifdef WL_CFG80211
+static void
+dhd_rtt_timeout(dhd_pub_t *dhd)
+{
+	rtt_status_info_t *rtt_status;
+#ifndef DHD_DUMP_ON_RTT_TIMEOUT
+	rtt_target_info_t *rtt_target = NULL;
+	rtt_target_info_t *rtt_target_info = NULL;
+#ifdef WL_NAN
+	nan_ranging_inst_t *ranging_inst = NULL;
+	int ret = BCME_OK;
+	uint32 status;
+	struct net_device *ndev = dhd_linux_get_primary_netdev(dhd);
+	struct bcm_cfg80211 *cfg =  wiphy_priv(ndev->ieee80211_ptr->wiphy);
+#endif /* WL_NAN */
+#endif /* !DHD_DUMP_ON_RTT_TIMEOUT */
+
+	rtt_status = GET_RTTSTATE(dhd);
+	if (!rtt_status) {
+		DHD_RTT_ERR(("Proxd timer expired but no RTT status\n"));
+		goto exit;
+	}
+
+	if (RTT_IS_STOPPED(rtt_status)) {
+		DHD_RTT_ERR(("Proxd timer expired but no RTT Request\n"));
+		goto exit;
+	}
+
+#ifdef DHD_DUMP_ON_RTT_TIMEOUT
+	/* Dump, and Panic depending on memdump.info */
+	if (dhd_query_bus_erros(dhd)) {
+		goto exit;
+	}
+#ifdef DHD_FW_COREDUMP
+	if (dhd->memdump_enabled) {
+		/* Behave based on user memdump info */
+		dhd->memdump_type = DUMP_TYPE_PROXD_TIMEOUT;
+		dhd_bus_mem_dump(dhd);
+	}
+#endif /* DHD_FW_COREDUMP */
+#else /* DHD_DUMP_ON_RTT_TIMEOUT */
+	/* Cancel RTT for target and proceed to next target */
+	rtt_target_info = rtt_status->rtt_config.target_info;
+	if ((!rtt_target_info) ||
+		(rtt_status->cur_idx >= rtt_status->rtt_config.rtt_target_cnt)) {
+		goto exit;
+	}
+	rtt_target = &rtt_target_info[rtt_status->cur_idx];
+	WL_ERR(("Proxd timer expired for Target: "MACDBG" \n", MAC2STRDBG(&rtt_target->addr)));
+#ifdef WL_NAN
+	if (rtt_target->peer == RTT_PEER_NAN) {
+		ranging_inst = wl_cfgnan_check_for_ranging(cfg, &rtt_target->addr);
+		if (!ranging_inst) {
+			goto exit;
+		}
+		ret =  wl_cfgnan_cancel_ranging(ndev, cfg, ranging_inst->range_id,
+				NAN_RNG_TERM_FLAG_IMMEDIATE, &status);
+		if (unlikely(ret) || unlikely(status)) {
+			WL_ERR(("%s:nan range cancel failed ret = %d status = %d\n",
+				__FUNCTION__, ret, status));
+		}
+	} else
+#endif /* WL_NAN */
+	{
+		/* For Legacy RTT */
+		dhd_rtt_delete_session(dhd, FTM_DEFAULT_SESSION);
+	}
+	dhd_rtt_create_failure_result(rtt_status, &rtt_target->addr);
+	dhd_rtt_handle_rtt_session_end(dhd);
+#endif /* DHD_DUMP_ON_RTT_TIMEOUT */
+exit:
+	return;
+}
+
+static void
+dhd_rtt_timeout_work(struct work_struct *work)
+{
+	rtt_status_info_t *rtt_status = NULL;
+	dhd_pub_t *dhd = NULL;
+
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif // endif
+	rtt_status = container_of(work, rtt_status_info_t, proxd_timeout.work);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif // endif
+
+	dhd = rtt_status->dhd;
+	if (dhd == NULL) {
+		DHD_RTT_ERR(("%s : dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+	mutex_lock(&rtt_status->rtt_mutex);
+	(void) dhd_rtt_timeout(dhd);
+	mutex_unlock(&rtt_status->rtt_mutex);
+}
+
+static int
+dhd_rtt_start(dhd_pub_t *dhd)
+{
+	int err = BCME_OK;
+	int err_at = 0;
+	char eabuf[ETHER_ADDR_STR_LEN];
+	char chanbuf[CHANSPEC_STR_LEN];
+	int pm = PM_OFF;
+	int ftm_cfg_cnt = 0;
+	int ftm_param_cnt = 0;
+	uint32 rspec = 0;
+	ftm_config_options_info_t ftm_configs[FTM_MAX_CONFIGS];
+	ftm_config_param_info_t ftm_params[FTM_MAX_PARAMS];
+	rtt_target_info_t *rtt_target;
+	rtt_status_info_t *rtt_status;
+	struct net_device *dev = dhd_linux_get_primary_netdev(dhd);
+	u8 ioctl_buf[WLC_IOCTL_SMLEN];
+	u8 rtt_invalid_reason = RTT_STATE_VALID;
+	int rtt_sched_type = RTT_TYPE_INVALID;
+
+	NULL_CHECK(dhd, "dhd is NULL", err);
+
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+
+	mutex_lock(&rtt_status->rtt_work_mutex);
+
+	DHD_RTT(("Enter %s\n", __FUNCTION__));
+
+	if (RTT_IS_STOPPED(rtt_status)) {
+		DHD_RTT(("No Directed RTT target to process, check for geofence\n"));
+		goto geofence;
+	}
+
+	if (rtt_status->cur_idx >= rtt_status->rtt_config.rtt_target_cnt) {
+		err = BCME_RANGE;
+		err_at = 1;
+		DHD_RTT(("%s : idx %d is out of range\n", __FUNCTION__, rtt_status->cur_idx));
+		if (rtt_status->flags == WL_PROXD_SESSION_FLAG_TARGET) {
+			DHD_RTT_ERR(("STA is set as Target/Responder \n"));
+			err = BCME_ERROR;
+			err_at = 1;
+		}
+		goto exit;
+	}
+
+	rtt_status->pm = PM_OFF;
+	err = wldev_ioctl_get(dev, WLC_GET_PM, &rtt_status->pm, sizeof(rtt_status->pm));
+	if (err) {
+		DHD_RTT_ERR(("Failed to get the PM value\n"));
+	} else {
+		err = wldev_ioctl_set(dev, WLC_SET_PM, &pm, sizeof(pm));
+		if (err) {
+			DHD_RTT_ERR(("Failed to set the PM\n"));
+			rtt_status->pm_restore = FALSE;
+		} else {
+			rtt_status->pm_restore = TRUE;
+		}
+	}
+
+	mutex_lock(&rtt_status->rtt_mutex);
+	/* Get a target information */
+	rtt_target = &rtt_status->rtt_config.target_info[rtt_status->cur_idx];
+	mutex_unlock(&rtt_status->rtt_mutex);
+	DHD_RTT(("%s enter\n", __FUNCTION__));
+
+	if (ETHER_ISNULLADDR(rtt_target->addr.octet)) {
+		err = BCME_BADADDR;
+		err_at = 2;
+		DHD_RTT(("RTT Target addr is NULL\n"));
+		goto exit;
+	}
+
+	/* check for dp/others concurrency */
+	rtt_invalid_reason = dhd_rtt_invalid_states(dev, &rtt_target->addr);
+	if (rtt_invalid_reason != RTT_STATE_VALID) {
+		err = BCME_BUSY;
+		err_at = 3;
+		DHD_RTT(("DRV State is not valid for RTT\n"));
+		goto exit;
+	}
+
+#ifdef WL_NAN
+	if (rtt_target->peer == RTT_PEER_NAN) {
+		rtt_sched_type = RTT_TYPE_NAN_DIRECTED;
+		rtt_status->status = RTT_ENABLED;
+		/* Ignore return value..failure taken care inside the API */
+		dhd_rtt_nan_start_session(dhd, rtt_target);
+		goto exit;
+	}
+#endif /* WL_NAN */
+	if (!RTT_IS_ENABLED(rtt_status)) {
+		/* enable ftm */
+		err = dhd_rtt_ftm_enable(dhd, TRUE);
+		if (err) {
+			DHD_RTT_ERR(("failed to enable FTM (%d)\n", err));
+			err_at = 5;
+			goto exit;
+		}
+	}
+
+	/* delete session of index default sesession  */
+	err = dhd_rtt_delete_session(dhd, FTM_DEFAULT_SESSION);
+	if (err < 0 && err != BCME_NOTFOUND) {
+		DHD_RTT_ERR(("failed to delete session of FTM (%d)\n", err));
+		err_at = 6;
+		goto exit;
+	}
+	rtt_status->status = RTT_ENABLED;
+	memset(ftm_configs, 0, sizeof(ftm_configs));
+	memset(ftm_params, 0, sizeof(ftm_params));
+
+	/* configure the session 1 as initiator */
+	ftm_configs[ftm_cfg_cnt].enable = TRUE;
+	ftm_configs[ftm_cfg_cnt++].flags =
+		WL_PROXD_SESSION_FLAG_INITIATOR | WL_PROXD_SESSION_FLAG_RANDMAC;
+	dhd_rtt_ftm_config(dhd, FTM_DEFAULT_SESSION, FTM_CONFIG_CAT_OPTIONS,
+		ftm_configs, ftm_cfg_cnt);
+
+	memset(ioctl_buf, 0, WLC_IOCTL_SMLEN);
+
+	/* Rand Mac for newer version in place of cur_eth */
+	if (dhd->wlc_ver_major < RTT_IOV_CUR_ETH_OBSOLETE) {
+		err = wldev_iovar_getbuf(dev, "cur_etheraddr", NULL, 0,
+				ioctl_buf, WLC_IOCTL_SMLEN, NULL);
+		if (err) {
+			DHD_RTT_ERR(("WLC_GET_CUR_ETHERADDR failed, error %d\n", err));
+			err_at = 7;
+			goto exit;
+		}
+		memcpy(rtt_target->local_addr.octet, ioctl_buf, ETHER_ADDR_LEN);
+
+		/* local mac address */
+		if (!ETHER_ISNULLADDR(rtt_target->local_addr.octet)) {
+			ftm_params[ftm_param_cnt].mac_addr = rtt_target->local_addr;
+			ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_CUR_ETHER_ADDR;
+			bcm_ether_ntoa(&rtt_target->local_addr, eabuf);
+			DHD_RTT((">\t local %s\n", eabuf));
+		}
+	}
+	/* target's mac address */
+	if (!ETHER_ISNULLADDR(rtt_target->addr.octet)) {
+		ftm_params[ftm_param_cnt].mac_addr = rtt_target->addr;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_PEER_MAC;
+		bcm_ether_ntoa(&rtt_target->addr, eabuf);
+		DHD_RTT((">\t target %s\n", eabuf));
+	}
+	/* target's chanspec */
+	if (rtt_target->chanspec) {
+		ftm_params[ftm_param_cnt].chanspec = htol32((uint32)rtt_target->chanspec);
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_CHANSPEC;
+		wf_chspec_ntoa(rtt_target->chanspec, chanbuf);
+		DHD_RTT((">\t chanspec : %s\n", chanbuf));
+	}
+	/* num-burst */
+	if (rtt_target->num_burst) {
+		ftm_params[ftm_param_cnt].data16 = htol16(rtt_target->num_burst);
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_NUM_BURST;
+		DHD_RTT((">\t num of burst : %d\n", rtt_target->num_burst));
+	}
+	/* number of frame per burst */
+	rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_80M;
+	if (CHSPEC_IS80(rtt_target->chanspec)) {
+		rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_80M;
+	} else if (CHSPEC_IS40(rtt_target->chanspec)) {
+		rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_40M;
+	} else if (CHSPEC_IS20(rtt_target->chanspec)) {
+		rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_20M;
+	}
+	ftm_params[ftm_param_cnt].data16 = htol16(rtt_target->num_frames_per_burst);
+	ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_BURST_NUM_FTM;
+	DHD_RTT((">\t number of frame per burst : %d\n", rtt_target->num_frames_per_burst));
+
+	/* FTM retry count */
+	if (rtt_target->num_retries_per_ftm) {
+		ftm_params[ftm_param_cnt].data8 = rtt_target->num_retries_per_ftm;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_FTM_RETRIES;
+		DHD_RTT((">\t retry count of FTM  : %d\n", rtt_target->num_retries_per_ftm));
+	}
+	/* FTM Request retry count */
+	if (rtt_target->num_retries_per_ftmr) {
+		ftm_params[ftm_param_cnt].data8 = rtt_target->num_retries_per_ftmr;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_FTM_REQ_RETRIES;
+		DHD_RTT((">\t retry count of FTM Req : %d\n", rtt_target->num_retries_per_ftmr));
+	}
+	/* burst-period */
+	if (rtt_target->burst_period) {
+		ftm_params[ftm_param_cnt].data_intvl.intvl =
+			htol32(rtt_target->burst_period); /* ms */
+		ftm_params[ftm_param_cnt].data_intvl.tmu = WL_PROXD_TMU_MILLI_SEC;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_BURST_PERIOD;
+		DHD_RTT((">\t burst period : %d ms\n", rtt_target->burst_period));
+	}
+	/* Setting both duration and timeout to MAX duration
+	 * to handle the congestion environments.
+	 * Hence ignoring the user config.
+	 */
+	/* burst-duration */
+	rtt_target->burst_duration = FTM_MAX_BURST_DUR_TMO_MS;
+	if (rtt_target->burst_duration) {
+		ftm_params[ftm_param_cnt].data_intvl.intvl =
+			htol32(rtt_target->burst_duration); /* ms */
+		ftm_params[ftm_param_cnt].data_intvl.tmu = WL_PROXD_TMU_MILLI_SEC;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_BURST_DURATION;
+		DHD_RTT((">\t burst duration : %d ms\n",
+			rtt_target->burst_duration));
+	}
+	/* burst-timeout */
+	rtt_target->burst_timeout = FTM_MAX_BURST_DUR_TMO_MS;
+	if (rtt_target->burst_timeout) {
+		ftm_params[ftm_param_cnt].data_intvl.intvl =
+			htol32(rtt_target->burst_timeout); /* ms */
+		ftm_params[ftm_param_cnt].data_intvl.tmu = WL_PROXD_TMU_MILLI_SEC;
+		ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_BURST_TIMEOUT;
+		DHD_RTT((">\t burst timeout : %d ms\n",
+			rtt_target->burst_timeout));
+	}
+	/* event_mask..applicable for only Legacy RTT.
+	* For nan-rtt config happens from firmware
+	*/
+	ftm_params[ftm_param_cnt].event_mask = ((1 << WL_PROXD_EVENT_BURST_END) |
+		(1 << WL_PROXD_EVENT_SESSION_END));
+	ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_EVENT_MASK;
+
+	if (rtt_target->bw && rtt_target->preamble) {
+		bool use_default = FALSE;
+		int nss;
+		int mcs;
+		switch (rtt_target->preamble) {
+			case RTT_PREAMBLE_LEGACY:
+				rspec |= WL_RSPEC_ENCODE_RATE; /* 11abg */
+				rspec |= WL_RATE_6M;
+				break;
+			case RTT_PREAMBLE_HT:
+				rspec |= WL_RSPEC_ENCODE_HT; /* 11n HT */
+				mcs = 0; /* default MCS 0 */
+				rspec |= mcs;
+				break;
+			case RTT_PREAMBLE_VHT:
+				rspec |= WL_RSPEC_ENCODE_VHT; /* 11ac VHT */
+				mcs = 0; /* default MCS 0 */
+				nss = 1; /* default Nss = 1  */
+				rspec |= (nss << WL_RSPEC_VHT_NSS_SHIFT) | mcs;
+				break;
+			default:
+				DHD_RTT(("doesn't support this preamble : %d\n",
+					rtt_target->preamble));
+				use_default = TRUE;
+				break;
+		}
+		switch (rtt_target->bw) {
+			case RTT_BW_20:
+				rspec |= WL_RSPEC_BW_20MHZ;
+				break;
+			case RTT_BW_40:
+				rspec |= WL_RSPEC_BW_40MHZ;
+				break;
+			case RTT_BW_80:
+				rspec |= WL_RSPEC_BW_80MHZ;
+				break;
+			default:
+				DHD_RTT(("doesn't support this BW : %d\n", rtt_target->bw));
+				use_default = TRUE;
+				break;
+		}
+		if (!use_default) {
+			ftm_params[ftm_param_cnt].data32 = htol32(rspec);
+			ftm_params[ftm_param_cnt++].tlvid = WL_PROXD_TLV_ID_RATESPEC;
+			DHD_RTT((">\t ratespec : %d\n", rspec));
+		}
+
+	}
+	dhd_set_rand_mac_oui(dhd);
+	dhd_rtt_ftm_config(dhd, FTM_DEFAULT_SESSION, FTM_CONFIG_CAT_GENERAL,
+			ftm_params, ftm_param_cnt);
+
+	rtt_sched_type = RTT_TYPE_LEGACY;
+	err = dhd_rtt_start_session(dhd, FTM_DEFAULT_SESSION, TRUE);
+	if (err) {
+		DHD_RTT_ERR(("failed to start session of FTM : error %d\n", err));
+		err_at = 8;
+	} else {
+		/* schedule proxd timeout */
+		schedule_delayed_work(&rtt_status->proxd_timeout,
+			msecs_to_jiffies(DHD_NAN_RTT_TIMER_INTERVAL_MS));
+
+	}
+
+	goto exit;
+geofence:
+#ifdef WL_NAN
+	/* sched geofencing rtt */
+	rtt_sched_type = RTT_TYPE_NAN_GEOFENCE;
+	if ((err = dhd_rtt_sched_geofencing_target(dhd)) != BCME_OK) {
+		DHD_RTT_ERR(("geofencing sched failed, err = %d\n", err));
+		err_at = 9;
+	}
+#endif /* WL_NAN */
+
+exit:
+	if (err) {
+		/* RTT Failed */
+		DHD_RTT_ERR(("dhd_rtt_start: Failed & RTT_STOPPED, err = %d,"
+			" err_at = %d, rtt_sched_type = %d, rtt_invalid_reason = %d\n"
+			" sched_reason = %d",
+			err, err_at, rtt_sched_type, rtt_invalid_reason,
+			rtt_status->rtt_sched_reason));
+		rtt_status->status = RTT_STOPPED;
+		/* disable FTM */
+		dhd_rtt_ftm_enable(dhd, FALSE);
+		if (rtt_status->pm_restore) {
+			pm = PM_FAST;
+			DHD_RTT_ERR(("pm_restore =%d func =%s \n",
+				rtt_status->pm_restore, __FUNCTION__));
+			err = wldev_ioctl_set(dev, WLC_SET_PM, &pm, sizeof(pm));
+			if (err) {
+				DHD_RTT_ERR(("Failed to set PM \n"));
+			} else {
+				rtt_status->pm_restore = FALSE;
+			}
+		}
+	}
+	mutex_unlock(&rtt_status->rtt_work_mutex);
+	return err;
+}
+#endif /* WL_CFG80211 */
+
+int
+dhd_rtt_register_noti_callback(dhd_pub_t *dhd, void *ctx, dhd_rtt_compl_noti_fn noti_fn)
+{
+	int err = BCME_OK;
+	struct rtt_noti_callback *cb = NULL, *iter;
+	rtt_status_info_t *rtt_status;
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	NULL_CHECK(noti_fn, "noti_fn is NULL", err);
+
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	spin_lock_bh(&noti_list_lock);
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	list_for_each_entry(iter, &rtt_status->noti_fn_list, list) {
+		GCC_DIAGNOSTIC_POP();
+		if (iter->noti_fn == noti_fn) {
+			goto exit;
+		}
+	}
+	cb = kmalloc(sizeof(struct rtt_noti_callback), GFP_ATOMIC);
+	if (!cb) {
+		err = -ENOMEM;
+		goto exit;
+	}
+	cb->noti_fn = noti_fn;
+	cb->ctx = ctx;
+	list_add(&cb->list, &rtt_status->noti_fn_list);
+exit:
+	spin_unlock_bh(&noti_list_lock);
+	return err;
+}
+
+int
+dhd_rtt_unregister_noti_callback(dhd_pub_t *dhd, dhd_rtt_compl_noti_fn noti_fn)
+{
+	int err = BCME_OK;
+	struct rtt_noti_callback *cb = NULL, *iter;
+	rtt_status_info_t *rtt_status;
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	NULL_CHECK(noti_fn, "noti_fn is NULL", err);
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	spin_lock_bh(&noti_list_lock);
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	list_for_each_entry(iter, &rtt_status->noti_fn_list, list) {
+		GCC_DIAGNOSTIC_POP();
+		if (iter->noti_fn == noti_fn) {
+			cb = iter;
+			list_del(&cb->list);
+			break;
+		}
+	}
+
+	spin_unlock_bh(&noti_list_lock);
+	if (cb) {
+		kfree(cb);
+	}
+	return err;
+}
+
+static wifi_rate_t
+dhd_rtt_convert_rate_to_host(uint32 rspec)
+{
+	wifi_rate_t host_rate;
+	uint32 bandwidth;
+	memset(&host_rate, 0, sizeof(wifi_rate_t));
+	if (RSPEC_ISLEGACY(rspec)) {
+		host_rate.preamble = 0;
+	} else if (RSPEC_ISHT(rspec)) {
+		host_rate.preamble = 2;
+		host_rate.rateMcsIdx = rspec & WL_RSPEC_RATE_MASK;
+	} else if (RSPEC_ISVHT(rspec)) {
+		host_rate.preamble = 3;
+		host_rate.rateMcsIdx = rspec & WL_RSPEC_VHT_MCS_MASK;
+		host_rate.nss = (rspec & WL_RSPEC_VHT_NSS_MASK) >> WL_RSPEC_VHT_NSS_SHIFT;
+	}
+
+	bandwidth = RSPEC_BW(rspec);
+	switch (bandwidth) {
+	case WL_RSPEC_BW_20MHZ:
+		host_rate.bw = RTT_RATE_20M;
+		break;
+	case WL_RSPEC_BW_40MHZ:
+		host_rate.bw = RTT_RATE_40M;
+		break;
+	case WL_RSPEC_BW_80MHZ:
+		host_rate.bw = RTT_RATE_80M;
+		break;
+	case WL_RSPEC_BW_160MHZ:
+		host_rate.bw = RTT_RATE_160M;
+		break;
+	default:
+		host_rate.bw = RTT_RATE_20M;
+		break;
+	}
+
+	host_rate.bitrate = rate_rspec2rate(rspec) / 100; /* 100kbps */
+	DHD_RTT(("bit rate : %d\n", host_rate.bitrate));
+	return host_rate;
+}
+
+#define FTM_FRAME_TYPES	{"SETUP", "TRIGGER", "TIMESTAMP"}
+static int
+dhd_rtt_convert_results_to_host_v1(rtt_result_t *rtt_result, const uint8 *p_data,
+	uint16 tlvid, uint16 len)
+{
+	int i;
+	int err = BCME_OK;
+	char eabuf[ETHER_ADDR_STR_LEN];
+	wl_proxd_result_flags_t flags;
+	wl_proxd_session_state_t session_state;
+	wl_proxd_status_t proxd_status;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+	struct osl_timespec ts;
+#endif /* LINUX_VER >= 2.6.39 */
+	uint32 ratespec;
+	uint32 avg_dist;
+	const wl_proxd_rtt_result_v1_t *p_data_info = NULL;
+	const wl_proxd_rtt_sample_v1_t *p_sample_avg = NULL;
+	const wl_proxd_rtt_sample_v1_t *p_sample = NULL;
+	wl_proxd_intvl_t rtt;
+	wl_proxd_intvl_t p_time;
+	uint16 num_rtt = 0, snr = 0, bitflips = 0;
+	wl_proxd_phy_error_t tof_phy_error = 0;
+	wl_proxd_phy_error_t tof_phy_tgt_error = 0;
+	wl_proxd_snr_t tof_target_snr = 0;
+	wl_proxd_bitflips_t tof_target_bitflips = 0;
+	int16 rssi = 0;
+	int32 dist = 0;
+	uint8 num_ftm = 0;
+	char *ftm_frame_types[] = FTM_FRAME_TYPES;
+	rtt_report_t *rtt_report = &(rtt_result->report);
+
+	BCM_REFERENCE(ftm_frame_types);
+	BCM_REFERENCE(dist);
+	BCM_REFERENCE(rssi);
+	BCM_REFERENCE(tof_target_bitflips);
+	BCM_REFERENCE(tof_target_snr);
+	BCM_REFERENCE(tof_phy_tgt_error);
+	BCM_REFERENCE(tof_phy_error);
+	BCM_REFERENCE(bitflips);
+	BCM_REFERENCE(snr);
+	BCM_REFERENCE(session_state);
+	BCM_REFERENCE(ftm_session_state_value_to_logstr);
+
+	NULL_CHECK(rtt_report, "rtt_report is NULL", err);
+	NULL_CHECK(p_data, "p_data is NULL", err);
+	DHD_RTT(("%s enter\n", __FUNCTION__));
+	p_data_info = (const wl_proxd_rtt_result_v1_t *) p_data;
+	/* unpack and format 'flags' for display */
+	flags = ltoh16_ua(&p_data_info->flags);
+
+	/* session state and status */
+	session_state = ltoh16_ua(&p_data_info->state);
+	proxd_status = ltoh32_ua(&p_data_info->status);
+	bcm_ether_ntoa((&(p_data_info->peer)), eabuf);
+	ftm_status_value_to_logstr(proxd_status);
+	DHD_RTT((">\tTarget(%s) session state=%d(%s), status=%d(%s)\n",
+		eabuf,
+		session_state,
+		ftm_session_state_value_to_logstr(session_state),
+		proxd_status,
+		ftm_status_value_to_logstr(proxd_status)));
+
+	/* show avg_dist (1/256m units), burst_num */
+	avg_dist = ltoh32_ua(&p_data_info->avg_dist);
+	if (avg_dist == 0xffffffff) {	/* report 'failure' case */
+		DHD_RTT((">\tavg_dist=-1m, burst_num=%d, valid_measure_cnt=%d\n",
+		ltoh16_ua(&p_data_info->burst_num),
+		p_data_info->num_valid_rtt)); /* in a session */
+		avg_dist = FTM_INVALID;
+	}
+	else {
+		DHD_RTT((">\tavg_dist=%d.%04dm, burst_num=%d, valid_measure_cnt=%d num_ftm=%d\n",
+			avg_dist >> 8, /* 1/256m units */
+			((avg_dist & 0xff) * 625) >> 4,
+			ltoh16_ua(&p_data_info->burst_num),
+			p_data_info->num_valid_rtt,
+			p_data_info->num_ftm)); /* in a session */
+	}
+	/* show 'avg_rtt' sample */
+	p_sample_avg = &p_data_info->avg_rtt;
+	ftm_tmu_value_to_logstr(ltoh16_ua(&p_sample_avg->rtt.tmu));
+	DHD_RTT((">\tavg_rtt sample: rssi=%d rtt=%d%s std_deviation =%d.%d ratespec=0x%08x\n",
+		(int16) ltoh16_ua(&p_sample_avg->rssi),
+		ltoh32_ua(&p_sample_avg->rtt.intvl),
+		ftm_tmu_value_to_logstr(ltoh16_ua(&p_sample_avg->rtt.tmu)),
+		ltoh16_ua(&p_data_info->sd_rtt)/10, ltoh16_ua(&p_data_info->sd_rtt)%10,
+		ltoh32_ua(&p_sample_avg->ratespec)));
+
+	/* set peer address */
+	rtt_report->addr = p_data_info->peer;
+	/* burst num */
+	rtt_report->burst_num = ltoh16_ua(&p_data_info->burst_num);
+	/* success num */
+	rtt_report->success_num = p_data_info->num_valid_rtt;
+	/* actual number of FTM supported by peer */
+	rtt_report->num_per_burst_peer = p_data_info->num_ftm;
+	rtt_report->negotiated_burst_num = p_data_info->num_ftm;
+	/* status */
+	rtt_report->status = ftm_get_statusmap_info(proxd_status,
+			&ftm_status_map_info[0], ARRAYSIZE(ftm_status_map_info));
+
+	/* rssi (0.5db) */
+	rtt_report->rssi = ABS((wl_proxd_rssi_t)ltoh16_ua(&p_data_info->avg_rtt.rssi)) * 2;
+
+	/* rx rate */
+	ratespec = ltoh32_ua(&p_data_info->avg_rtt.ratespec);
+	rtt_report->rx_rate = dhd_rtt_convert_rate_to_host(ratespec);
+	/* tx rate */
+	if (flags & WL_PROXD_RESULT_FLAG_VHTACK) {
+		rtt_report->tx_rate = dhd_rtt_convert_rate_to_host(0x2010010);
+	} else {
+		rtt_report->tx_rate = dhd_rtt_convert_rate_to_host(0xc);
+	}
+	/* rtt_sd */
+	rtt.tmu = ltoh16_ua(&p_data_info->avg_rtt.rtt.tmu);
+	rtt.intvl = ltoh32_ua(&p_data_info->avg_rtt.rtt.intvl);
+	rtt_report->rtt = (wifi_timespan)FTM_INTVL2NSEC(&rtt) * 1000; /* nano -> pico seconds */
+	rtt_report->rtt_sd = ltoh16_ua(&p_data_info->sd_rtt); /* nano -> 0.1 nano */
+	DHD_RTT(("rtt_report->rtt : %llu\n", rtt_report->rtt));
+	DHD_RTT(("rtt_report->rssi : %d (0.5db)\n", rtt_report->rssi));
+
+	/* average distance */
+	if (avg_dist != FTM_INVALID) {
+		rtt_report->distance = (avg_dist >> 8) * 1000; /* meter -> mm */
+		rtt_report->distance += (avg_dist & 0xff) * 1000 / 256;
+	} else {
+		rtt_report->distance = FTM_INVALID;
+	}
+	/* time stamp */
+	/* get the time elapsed from boot time */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+	osl_get_monotonic_boottime(&ts);
+	rtt_report->ts = (uint64)TIMESPEC_TO_US(ts);
+#endif /* LINUX_VER >= 2.6.39 */
+
+	if (proxd_status == WL_PROXD_E_REMOTE_FAIL) {
+		/* retry time  after failure */
+		p_time.intvl = ltoh32_ua(&p_data_info->u.retry_after.intvl);
+		p_time.tmu = ltoh16_ua(&p_data_info->u.retry_after.tmu);
+		rtt_report->retry_after_duration = FTM_INTVL2SEC(&p_time); /* s -> s */
+		DHD_RTT((">\tretry_after: %d%s\n",
+			ltoh32_ua(&p_data_info->u.retry_after.intvl),
+			ftm_tmu_value_to_logstr(ltoh16_ua(&p_data_info->u.retry_after.tmu))));
+	} else {
+		/* burst duration */
+		p_time.intvl = ltoh32_ua(&p_data_info->u.retry_after.intvl);
+		p_time.tmu = ltoh16_ua(&p_data_info->u.retry_after.tmu);
+		rtt_report->burst_duration =  FTM_INTVL2MSEC(&p_time); /* s -> ms */
+		DHD_RTT((">\tburst_duration: %d%s\n",
+			ltoh32_ua(&p_data_info->u.burst_duration.intvl),
+			ftm_tmu_value_to_logstr(ltoh16_ua(&p_data_info->u.burst_duration.tmu))));
+		DHD_RTT(("rtt_report->burst_duration : %d\n", rtt_report->burst_duration));
+	}
+
+	/* display detail if available */
+	num_rtt = ltoh16_ua(&p_data_info->num_rtt);
+	if (num_rtt > 0) {
+		DHD_RTT((">\tnum rtt: %d samples\n", num_rtt));
+		p_sample = &p_data_info->rtt[0];
+		for (i = 0; i < num_rtt; i++) {
+			snr = 0;
+			bitflips = 0;
+			tof_phy_error = 0;
+			tof_phy_tgt_error = 0;
+			tof_target_snr = 0;
+			tof_target_bitflips = 0;
+			rssi = 0;
+			dist = 0;
+			num_ftm = p_data_info->num_ftm;
+			/* FTM frames 1,4,7,11 have valid snr, rssi and bitflips */
+			if ((i % num_ftm) == 1) {
+				rssi = (wl_proxd_rssi_t) ltoh16_ua(&p_sample->rssi);
+				snr = (wl_proxd_snr_t) ltoh16_ua(&p_sample->snr);
+				bitflips = (wl_proxd_bitflips_t) ltoh16_ua(&p_sample->bitflips);
+				tof_phy_error =
+					(wl_proxd_phy_error_t)
+					ltoh32_ua(&p_sample->tof_phy_error);
+				tof_phy_tgt_error =
+					(wl_proxd_phy_error_t)
+					ltoh32_ua(&p_sample->tof_tgt_phy_error);
+				tof_target_snr =
+					(wl_proxd_snr_t)
+					ltoh16_ua(&p_sample->tof_tgt_snr);
+				tof_target_bitflips =
+					(wl_proxd_bitflips_t)
+					ltoh16_ua(&p_sample->tof_tgt_bitflips);
+				dist = ltoh32_ua(&p_sample->distance);
+			} else {
+				rssi = -1;
+				snr = 0;
+				bitflips = 0;
+				dist = 0;
+				tof_target_bitflips = 0;
+				tof_target_snr = 0;
+				tof_phy_tgt_error = 0;
+			}
+			DHD_RTT((">\t sample[%d]: id=%d rssi=%d snr=0x%x bitflips=%d"
+				" tof_phy_error %x tof_phy_tgt_error %x target_snr=0x%x"
+				" target_bitflips=%d dist=%d rtt=%d%s status %s"
+				" Type %s coreid=%d\n",
+				i, p_sample->id, rssi, snr,
+				bitflips, tof_phy_error, tof_phy_tgt_error,
+				tof_target_snr,
+				tof_target_bitflips, dist,
+				ltoh32_ua(&p_sample->rtt.intvl),
+				ftm_tmu_value_to_logstr(ltoh16_ua(&p_sample->rtt.tmu)),
+				ftm_status_value_to_logstr(ltoh32_ua(&p_sample->status)),
+				ftm_frame_types[i % num_ftm], p_sample->coreid));
+			p_sample++;
+		}
+	}
+	return err;
+}
+
+static int
+dhd_rtt_convert_results_to_host_v2(rtt_result_t *rtt_result, const uint8 *p_data,
+	uint16 tlvid, uint16 len)
+{
+	int i;
+	int err = BCME_OK;
+	char eabuf[ETHER_ADDR_STR_LEN];
+	wl_proxd_result_flags_t flags;
+	wl_proxd_session_state_t session_state;
+	wl_proxd_status_t proxd_status;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+	struct osl_timespec ts;
+#endif /* LINUX_VER >= 2.6.39 */
+	uint32 ratespec;
+	uint32 avg_dist;
+	const wl_proxd_rtt_result_v2_t *p_data_info = NULL;
+	const wl_proxd_rtt_sample_v2_t *p_sample_avg = NULL;
+	const wl_proxd_rtt_sample_v2_t *p_sample = NULL;
+	uint16 num_rtt = 0;
+	wl_proxd_intvl_t rtt;
+	wl_proxd_intvl_t p_time;
+	uint16 snr = 0, bitflips = 0;
+	wl_proxd_phy_error_t tof_phy_error = 0;
+	wl_proxd_phy_error_t tof_phy_tgt_error = 0;
+	wl_proxd_snr_t tof_target_snr = 0;
+	wl_proxd_bitflips_t tof_target_bitflips = 0;
+	int16 rssi = 0;
+	int32 dist = 0;
+	uint32 chanspec = 0;
+	uint8 num_ftm = 0;
+	char *ftm_frame_types[] =  FTM_FRAME_TYPES;
+	rtt_report_t *rtt_report = &(rtt_result->report);
+
+	BCM_REFERENCE(ftm_frame_types);
+	BCM_REFERENCE(dist);
+	BCM_REFERENCE(rssi);
+	BCM_REFERENCE(tof_target_bitflips);
+	BCM_REFERENCE(tof_target_snr);
+	BCM_REFERENCE(tof_phy_tgt_error);
+	BCM_REFERENCE(tof_phy_error);
+	BCM_REFERENCE(bitflips);
+	BCM_REFERENCE(snr);
+	BCM_REFERENCE(chanspec);
+	BCM_REFERENCE(session_state);
+	BCM_REFERENCE(ftm_session_state_value_to_logstr);
+
+	NULL_CHECK(rtt_report, "rtt_report is NULL", err);
+	NULL_CHECK(p_data, "p_data is NULL", err);
+	DHD_RTT(("%s enter\n", __FUNCTION__));
+	p_data_info = (const wl_proxd_rtt_result_v2_t *) p_data;
+	/* unpack and format 'flags' for display */
+	flags = ltoh16_ua(&p_data_info->flags);
+	/* session state and status */
+	session_state = ltoh16_ua(&p_data_info->state);
+	proxd_status = ltoh32_ua(&p_data_info->status);
+	bcm_ether_ntoa((&(p_data_info->peer)), eabuf);
+
+	if (proxd_status != BCME_OK) {
+		DHD_RTT_ERR((">\tTarget(%s) session state=%d(%s), status=%d(%s) "
+			"num_meas_ota %d num_valid_rtt %d result_flags %x\n",
+			eabuf, session_state,
+			ftm_session_state_value_to_logstr(session_state),
+			proxd_status, ftm_status_value_to_logstr(proxd_status),
+			p_data_info->num_meas, p_data_info->num_valid_rtt,
+			p_data_info->flags));
+	} else {
+		DHD_RTT((">\tTarget(%s) session state=%d(%s), status=%d(%s)\n",
+		eabuf, session_state,
+		ftm_session_state_value_to_logstr(session_state),
+		proxd_status, ftm_status_value_to_logstr(proxd_status)));
+	}
+	/* show avg_dist (1/256m units), burst_num */
+	avg_dist = ltoh32_ua(&p_data_info->avg_dist);
+	if (avg_dist == 0xffffffff) {	/* report 'failure' case */
+		DHD_RTT((">\tavg_dist=-1m, burst_num=%d, valid_measure_cnt=%d\n",
+		ltoh16_ua(&p_data_info->burst_num),
+		p_data_info->num_valid_rtt)); /* in a session */
+		avg_dist = FTM_INVALID;
+	} else {
+		DHD_RTT((">\tavg_dist=%d.%04dm, burst_num=%d, valid_measure_cnt=%d num_ftm=%d "
+			"num_meas_ota=%d, result_flags=%x\n", avg_dist >> 8, /* 1/256m units */
+			((avg_dist & 0xff) * 625) >> 4,
+			ltoh16_ua(&p_data_info->burst_num),
+			p_data_info->num_valid_rtt,
+			p_data_info->num_ftm, p_data_info->num_meas,
+			p_data_info->flags)); /* in a session */
+	}
+	rtt_result->rtt_detail.num_ota_meas = p_data_info->num_meas;
+	rtt_result->rtt_detail.result_flags = p_data_info->flags;
+	/* show 'avg_rtt' sample */
+	/* in v2, avg_rtt is the first element of the variable rtt[] */
+	p_sample_avg = &p_data_info->rtt[0];
+	ftm_tmu_value_to_logstr(ltoh16_ua(&p_sample_avg->rtt.tmu));
+	DHD_RTT((">\tavg_rtt sample: rssi=%d rtt=%d%s std_deviation =%d.%d"
+		"ratespec=0x%08x chanspec=0x%08x\n",
+		(int16) ltoh16_ua(&p_sample_avg->rssi),
+		ltoh32_ua(&p_sample_avg->rtt.intvl),
+		ftm_tmu_value_to_logstr(ltoh16_ua(&p_sample_avg->rtt.tmu)),
+		ltoh16_ua(&p_data_info->sd_rtt)/10, ltoh16_ua(&p_data_info->sd_rtt)%10,
+		ltoh32_ua(&p_sample_avg->ratespec),
+		ltoh32_ua(&p_sample_avg->chanspec)));
+
+	/* set peer address */
+	rtt_report->addr = p_data_info->peer;
+
+	/* burst num */
+	rtt_report->burst_num = ltoh16_ua(&p_data_info->burst_num);
+
+	/* success num */
+	rtt_report->success_num = p_data_info->num_valid_rtt;
+
+	/* num-ftm configured */
+	rtt_report->ftm_num = p_data_info->num_ftm;
+
+	/* actual number of FTM supported by peer */
+	rtt_report->num_per_burst_peer = p_data_info->num_ftm;
+	rtt_report->negotiated_burst_num = p_data_info->num_ftm;
+
+	/* status */
+	rtt_report->status = ftm_get_statusmap_info(proxd_status,
+			&ftm_status_map_info[0], ARRAYSIZE(ftm_status_map_info));
+
+	/* Framework expects status as SUCCESS else all results will be
+	* set to zero even if we have partial valid result.
+	* So setting status as SUCCESS if we have a valid_rtt
+	* On burst timeout we stop burst with "timeout" reason and
+	* on msch end we set status as "cancel"
+	*/
+	if ((proxd_status == WL_PROXD_E_TIMEOUT ||
+		proxd_status == WL_PROXD_E_CANCELED) &&
+		rtt_report->success_num) {
+		rtt_report->status = RTT_STATUS_SUCCESS;
+	}
+
+	/* rssi (0.5db) */
+	rtt_report->rssi = ABS((wl_proxd_rssi_t)ltoh16_ua(&p_sample_avg->rssi)) * 2;
+
+	/* rx rate */
+	ratespec = ltoh32_ua(&p_sample_avg->ratespec);
+	rtt_report->rx_rate = dhd_rtt_convert_rate_to_host(ratespec);
+
+	/* tx rate */
+	if (flags & WL_PROXD_RESULT_FLAG_VHTACK) {
+		rtt_report->tx_rate = dhd_rtt_convert_rate_to_host(0x2010010);
+	} else {
+		rtt_report->tx_rate = dhd_rtt_convert_rate_to_host(0xc);
+	}
+
+	/* rtt_sd */
+	rtt.tmu = ltoh16_ua(&p_sample_avg->rtt.tmu);
+	rtt.intvl = ltoh32_ua(&p_sample_avg->rtt.intvl);
+	rtt_report->rtt = (wifi_timespan)FTM_INTVL2NSEC(&rtt) * 1000; /* nano -> pico seconds */
+	rtt_report->rtt_sd = ltoh16_ua(&p_data_info->sd_rtt); /* nano -> 0.1 nano */
+	DHD_RTT(("rtt_report->rtt : %llu\n", rtt_report->rtt));
+	DHD_RTT(("rtt_report->rssi : %d (0.5db)\n", rtt_report->rssi));
+
+	/* average distance */
+	if (avg_dist != FTM_INVALID) {
+		rtt_report->distance = (avg_dist >> 8) * 1000; /* meter -> mm */
+		rtt_report->distance += (avg_dist & 0xff) * 1000 / 256;
+		/* rtt_sd is in 0.1 ns.
+		* host needs distance_sd in milli mtrs
+		* (0.1 * rtt_sd/2 * 10^-9) * C * 1000
+		*/
+		rtt_report->distance_sd = rtt_report->rtt_sd * 15; /* mm */
+	} else {
+		rtt_report->distance = FTM_INVALID;
+	}
+	/* time stamp */
+	/* get the time elapsed from boot time */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
+	osl_get_monotonic_boottime(&ts);
+	rtt_report->ts = (uint64)TIMESPEC_TO_US(ts);
+#endif /* LINUX_VER >= 2.6.39 */
+
+	if (proxd_status == WL_PROXD_E_REMOTE_FAIL) {
+		/* retry time  after failure */
+		p_time.intvl = ltoh32_ua(&p_data_info->u.retry_after.intvl);
+		p_time.tmu = ltoh16_ua(&p_data_info->u.retry_after.tmu);
+		rtt_report->retry_after_duration = FTM_INTVL2SEC(&p_time); /* s -> s */
+		DHD_RTT((">\tretry_after: %d%s\n",
+			ltoh32_ua(&p_data_info->u.retry_after.intvl),
+			ftm_tmu_value_to_logstr(ltoh16_ua(&p_data_info->u.retry_after.tmu))));
+	} else {
+		/* burst duration */
+		p_time.intvl = ltoh32_ua(&p_data_info->u.retry_after.intvl);
+		p_time.tmu = ltoh16_ua(&p_data_info->u.retry_after.tmu);
+		rtt_report->burst_duration =  FTM_INTVL2MSEC(&p_time); /* s -> ms */
+		DHD_RTT((">\tburst_duration: %d%s\n",
+			ltoh32_ua(&p_data_info->u.burst_duration.intvl),
+			ftm_tmu_value_to_logstr(ltoh16_ua(&p_data_info->u.burst_duration.tmu))));
+		DHD_RTT(("rtt_report->burst_duration : %d\n", rtt_report->burst_duration));
+	}
+	/* display detail if available */
+	num_rtt = ltoh16_ua(&p_data_info->num_rtt);
+	if (num_rtt > 0) {
+		DHD_RTT((">\tnum rtt: %d samples\n", num_rtt));
+		p_sample = &p_data_info->rtt[1];
+		for (i = 0; i < num_rtt; i++) {
+			snr = 0;
+			bitflips = 0;
+			tof_phy_error = 0;
+			tof_phy_tgt_error = 0;
+			tof_target_snr = 0;
+			tof_target_bitflips = 0;
+			rssi = 0;
+			dist = 0;
+			num_ftm = p_data_info->num_ftm;
+			/* FTM frames 1,4,7,11 have valid snr, rssi and bitflips */
+			if ((i % num_ftm) == 1) {
+				rssi = (wl_proxd_rssi_t) ltoh16_ua(&p_sample->rssi);
+				snr = (wl_proxd_snr_t) ltoh16_ua(&p_sample->snr);
+				bitflips = (wl_proxd_bitflips_t) ltoh16_ua(&p_sample->bitflips);
+				tof_phy_error =
+					(wl_proxd_phy_error_t)
+					ltoh32_ua(&p_sample->tof_phy_error);
+				tof_phy_tgt_error =
+					(wl_proxd_phy_error_t)
+					ltoh32_ua(&p_sample->tof_tgt_phy_error);
+				tof_target_snr =
+					(wl_proxd_snr_t)
+					ltoh16_ua(&p_sample->tof_tgt_snr);
+				tof_target_bitflips =
+					(wl_proxd_bitflips_t)
+					ltoh16_ua(&p_sample->tof_tgt_bitflips);
+				dist = ltoh32_ua(&p_sample->distance);
+				chanspec = ltoh32_ua(&p_sample->chanspec);
+			} else {
+				rssi = -1;
+				snr = 0;
+				bitflips = 0;
+				dist = 0;
+				tof_target_bitflips = 0;
+				tof_target_snr = 0;
+				tof_phy_tgt_error = 0;
+			}
+			DHD_RTT((">\t sample[%d]: id=%d rssi=%d snr=0x%x bitflips=%d"
+				" tof_phy_error %x tof_phy_tgt_error %x target_snr=0x%x"
+				" target_bitflips=%d dist=%d rtt=%d%s status %s Type %s"
+				" coreid=%d chanspec=0x%08x\n",
+				i, p_sample->id, rssi, snr,
+				bitflips, tof_phy_error, tof_phy_tgt_error,
+				tof_target_snr,
+				tof_target_bitflips, dist,
+				ltoh32_ua(&p_sample->rtt.intvl),
+				ftm_tmu_value_to_logstr(ltoh16_ua(&p_sample->rtt.tmu)),
+				ftm_status_value_to_logstr(ltoh32_ua(&p_sample->status)),
+				ftm_frame_types[i % num_ftm], p_sample->coreid,
+				chanspec));
+			p_sample++;
+		}
+	}
+	return err;
+}
+#ifdef WL_CFG80211
+/* Common API for handling Session End.
+* This API will flush out the results for a peer MAC.
+*
+* @For legacy FTM session, this API will be called
+* when legacy FTM_SESSION_END event is received.
+* @For legacy Nan-RTT , this API will be called when
+* we are cancelling the nan-ranging session or on
+* nan-ranging-end event.
+*/
+static void
+dhd_rtt_handle_rtt_session_end(dhd_pub_t *dhd)
+{
+
+	int idx;
+	struct rtt_noti_callback *iter;
+	rtt_results_header_t *entry, *next;
+	rtt_result_t *next2;
+	rtt_result_t *rtt_result;
+	rtt_status_info_t *rtt_status = GET_RTTSTATE(dhd);
+
+	/* Cancel pending proxd timeout work if any */
+	if (delayed_work_pending(&rtt_status->proxd_timeout)) {
+		cancel_delayed_work(&rtt_status->proxd_timeout);
+	}
+
+	/* find next target to trigger RTT */
+	for (idx = (rtt_status->cur_idx + 1);
+		idx < rtt_status->rtt_config.rtt_target_cnt; idx++) {
+		/* skip the disabled device */
+		if (rtt_status->rtt_config.target_info[idx].disable) {
+			continue;
+		} else {
+			/* set the idx to cur_idx */
+			rtt_status->cur_idx = idx;
+			break;
+		}
+	}
+	if (idx < rtt_status->rtt_config.rtt_target_cnt) {
+		/* restart to measure RTT from next device */
+		DHD_INFO(("restart to measure rtt\n"));
+		schedule_work(&rtt_status->work);
+	} else {
+		DHD_RTT(("RTT_STOPPED\n"));
+		rtt_status->status = RTT_STOPPED;
+		/* notify the completed information to others */
+		GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+		list_for_each_entry(iter, &rtt_status->noti_fn_list, list) {
+			iter->noti_fn(iter->ctx, &rtt_status->rtt_results_cache);
+		}
+		/* remove the rtt results in cache */
+		if (!list_empty(&rtt_status->rtt_results_cache)) {
+			/* Iterate rtt_results_header list */
+			list_for_each_entry_safe(entry, next,
+				&rtt_status->rtt_results_cache, list) {
+				list_del(&entry->list);
+				/* Iterate rtt_result list */
+				list_for_each_entry_safe(rtt_result, next2,
+					&entry->result_list, list) {
+					list_del(&rtt_result->list);
+					kfree(rtt_result);
+				}
+				kfree(entry);
+			}
+		}
+		GCC_DIAGNOSTIC_POP();
+		/* reinitialize the HEAD */
+		INIT_LIST_HEAD(&rtt_status->rtt_results_cache);
+		/* clear information for rtt_config */
+		rtt_status->rtt_config.rtt_target_cnt = 0;
+		memset_s(rtt_status->rtt_config.target_info, TARGET_INFO_SIZE(RTT_MAX_TARGET_CNT),
+			0, TARGET_INFO_SIZE(RTT_MAX_TARGET_CNT));
+		rtt_status->cur_idx = 0;
+	}
+}
+#endif /* WL_CFG80211 */
+
+#ifdef WL_CFG80211
+static int
+dhd_rtt_create_failure_result(rtt_status_info_t *rtt_status,
+	struct ether_addr *addr)
+{
+	rtt_results_header_t *rtt_results_header = NULL;
+	rtt_target_info_t *rtt_target_info;
+	int ret = BCME_OK;
+	rtt_result_t *rtt_result;
+
+	/* allocate new header for rtt_results */
+	rtt_results_header = (rtt_results_header_t *)MALLOCZ(rtt_status->dhd->osh,
+		sizeof(rtt_results_header_t));
+	if (!rtt_results_header) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+	rtt_target_info = &rtt_status->rtt_config.target_info[rtt_status->cur_idx];
+	/* Initialize the head of list for rtt result */
+	INIT_LIST_HEAD(&rtt_results_header->result_list);
+	/* same src and dest len */
+	(void)memcpy_s(&rtt_results_header->peer_mac,
+		ETHER_ADDR_LEN, addr, ETHER_ADDR_LEN);
+	list_add_tail(&rtt_results_header->list, &rtt_status->rtt_results_cache);
+
+	/* allocate rtt_results for new results */
+	rtt_result = (rtt_result_t *)MALLOCZ(rtt_status->dhd->osh,
+		sizeof(rtt_result_t));
+	if (!rtt_result) {
+		ret = -ENOMEM;
+		kfree(rtt_results_header);
+		goto exit;
+	}
+	/* fill out the results from the configuration param */
+	rtt_result->report.ftm_num = rtt_target_info->num_frames_per_burst;
+	rtt_result->report.type = RTT_TWO_WAY;
+	DHD_RTT(("report->ftm_num : %d\n", rtt_result->report.ftm_num));
+	rtt_result->report_len = RTT_REPORT_SIZE;
+	rtt_result->report.status = RTT_STATUS_FAIL_NO_RSP;
+	/* same src and dest len */
+	(void)memcpy_s(&rtt_result->report.addr, ETHER_ADDR_LEN,
+		&rtt_target_info->addr, ETHER_ADDR_LEN);
+	rtt_result->report.distance = FTM_INVALID;
+	list_add_tail(&rtt_result->list, &rtt_results_header->result_list);
+	rtt_results_header->result_cnt++;
+	rtt_results_header->result_tot_len += rtt_result->report_len;
+exit:
+	return ret;
+}
+
+static bool
+dhd_rtt_get_report_header(rtt_status_info_t *rtt_status,
+	rtt_results_header_t **rtt_results_header, struct ether_addr *addr)
+{
+	rtt_results_header_t *entry;
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	/* find a rtt_report_header for this mac address */
+	list_for_each_entry(entry, &rtt_status->rtt_results_cache, list) {
+		GCC_DIAGNOSTIC_POP();
+		if (!memcmp(&entry->peer_mac, addr, ETHER_ADDR_LEN))  {
+			/* found a rtt_report_header for peer_mac in the list */
+			if (rtt_results_header) {
+				*rtt_results_header = entry;
+			}
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+int
+dhd_rtt_handle_nan_rtt_session_end(dhd_pub_t *dhd, struct ether_addr *peer)
+{
+	bool is_new = TRUE;
+	rtt_status_info_t *rtt_status = GET_RTTSTATE(dhd);
+	mutex_lock(&rtt_status->rtt_mutex);
+	is_new = !dhd_rtt_get_report_header(rtt_status, NULL, peer);
+
+	if (is_new) { /* no FTM result..create failure result */
+		dhd_rtt_create_failure_result(rtt_status, peer);
+	}
+	dhd_rtt_handle_rtt_session_end(dhd);
+	mutex_unlock(&rtt_status->rtt_mutex);
+	return BCME_OK;
+}
+#endif /* WL_CFG80211 */
+
+static bool
+dhd_rtt_is_valid_measurement(rtt_result_t *rtt_result)
+{
+	bool ret = FALSE;
+
+	if (rtt_result && (rtt_result->report.success_num != 0)) {
+		ret = TRUE;
+	}
+	return ret;
+}
+
+static int
+dhd_rtt_parse_result_event(wl_proxd_event_t *proxd_ev_data,
+	int tlvs_len, rtt_result_t *rtt_result)
+{
+	int ret = BCME_OK;
+
+	/* unpack TLVs and invokes the cbfn to print the event content TLVs */
+	ret = bcm_unpack_xtlv_buf((void *) rtt_result,
+			(uint8 *)&proxd_ev_data->tlvs[0], tlvs_len,
+			BCM_XTLV_OPTION_ALIGN32, rtt_unpack_xtlv_cbfn);
+	if (ret != BCME_OK) {
+		DHD_RTT_ERR(("%s : Failed to unpack xtlv for an event\n",
+			__FUNCTION__));
+		goto exit;
+	}
+	/* fill out the results from the configuration param */
+	rtt_result->report.type = RTT_TWO_WAY;
+	DHD_RTT(("report->ftm_num : %d\n", rtt_result->report.ftm_num));
+	rtt_result->report_len = RTT_REPORT_SIZE;
+	rtt_result->detail_len = sizeof(rtt_result->rtt_detail);
+
+exit:
+	return ret;
+
+}
+
+static int
+dhd_rtt_handle_directed_rtt_burst_end(dhd_pub_t *dhd, struct ether_addr *peer_addr,
+        wl_proxd_event_t *proxd_ev_data, int tlvs_len, rtt_result_t *rtt_result, bool is_nan)
+{
+	rtt_status_info_t *rtt_status;
+	rtt_results_header_t *rtt_results_header = NULL;
+	bool is_new = TRUE;
+	int ret = BCME_OK;
+	int err_at = 0;
+
+	rtt_status = GET_RTTSTATE(dhd);
+	is_new = !dhd_rtt_get_report_header(rtt_status,
+		&rtt_results_header, peer_addr);
+
+	if (tlvs_len > 0) {
+		if (is_new) {
+			/* allocate new header for rtt_results */
+			rtt_results_header = (rtt_results_header_t *)MALLOCZ(rtt_status->dhd->osh,
+				sizeof(rtt_results_header_t));
+			if (!rtt_results_header) {
+				ret = BCME_NORESOURCE;
+				err_at = 1;
+				goto exit;
+			}
+			/* Initialize the head of list for rtt result */
+			INIT_LIST_HEAD(&rtt_results_header->result_list);
+			/* same src and header len */
+			(void)memcpy_s(&rtt_results_header->peer_mac, ETHER_ADDR_LEN,
+				peer_addr, ETHER_ADDR_LEN);
+			list_add_tail(&rtt_results_header->list, &rtt_status->rtt_results_cache);
+		}
+
+		ret = dhd_rtt_parse_result_event(proxd_ev_data, tlvs_len, rtt_result);
+		if ((ret == BCME_OK) && ((!is_nan) ||
+			dhd_rtt_is_valid_measurement(rtt_result))) {
+			/*
+			 * Add to list, if non-nan RTT (legacy) or
+			 * valid measurement in nan rtt case
+			 */
+			list_add_tail(&rtt_result->list, &rtt_results_header->result_list);
+			rtt_results_header->result_cnt++;
+			rtt_results_header->result_tot_len += rtt_result->report_len +
+				rtt_result->detail_len;
+		} else {
+			err_at = 2;
+			if (ret == BCME_OK) {
+				/* Case for nan rtt invalid measurement */
+				ret = BCME_ERROR;
+				err_at = 3;
+			}
+			goto exit;
+		}
+	} else {
+		ret = BCME_ERROR;
+		err_at = 4;
+		goto exit;
+	}
+
+exit:
+	if (ret != BCME_OK) {
+		DHD_RTT_ERR(("dhd_rtt_handle_directed_rtt_burst_end: failed, "
+			" ret = %d, err_at = %d\n", ret, err_at));
+		if (rtt_results_header) {
+			list_del(&rtt_results_header->list);
+			kfree(rtt_results_header);
+			rtt_results_header = NULL;
+		}
+	}
+	return ret;
+}
+
+#ifdef WL_NAN
+static	void
+dhd_rtt_nan_range_report(struct bcm_cfg80211 *cfg,
+		rtt_result_t *rtt_result)
+{
+	wl_nan_ev_rng_rpt_ind_t range_res;
+
+	UNUSED_PARAMETER(range_res);
+	if (!dhd_rtt_is_valid_measurement(rtt_result)) {
+		/* Drop Invalid Measurements for NAN RTT report */
+		DHD_RTT(("dhd_rtt_nan_range_report: Drop Invalid Measurements\n"));
+		goto exit;
+	}
+	bzero(&range_res, sizeof(range_res));
+	range_res.indication = 0;
+	range_res.dist_mm = rtt_result->report.distance;
+	/* same src and header len, ignoring ret val here */
+	(void)memcpy_s(&range_res.peer_m_addr, ETHER_ADDR_LEN,
+		&rtt_result->report.addr, ETHER_ADDR_LEN);
+	wl_cfgnan_process_range_report(cfg, &range_res);
+
+exit:
+	return;
+}
+
+static int
+dhd_rtt_handle_nan_burst_end(dhd_pub_t *dhd, struct ether_addr *peer_addr,
+	wl_proxd_event_t *proxd_ev_data, int tlvs_len)
+{
+	struct net_device *ndev = NULL;
+	struct bcm_cfg80211 *cfg = NULL;
+	nan_ranging_inst_t *rng_inst = NULL;
+	rtt_status_info_t *rtt_status = NULL;
+	rtt_result_t *rtt_result = NULL;
+	bool is_geofence = FALSE;
+	int ret = BCME_OK;
+
+	ndev = dhd_linux_get_primary_netdev(dhd);
+	cfg =  wiphy_priv(ndev->ieee80211_ptr->wiphy);
+
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", ret);
+	NAN_MUTEX_LOCK();
+	mutex_lock(&rtt_status->rtt_mutex);
+
+	if ((cfg->nan_enable == FALSE) ||
+		ETHER_ISNULLADDR(peer_addr)) {
+		DHD_RTT_ERR(("Received Burst End with NULL ether addr, "
+			"or nan disable, nan_enable = %d\n", cfg->nan_enable));
+		ret = BCME_UNSUPPORTED;
+		goto exit;
+	}
+
+	rng_inst = wl_cfgnan_check_for_ranging(cfg, peer_addr);
+	if (rng_inst) {
+		is_geofence = (rng_inst->range_type
+			== RTT_TYPE_NAN_GEOFENCE);
+	} else {
+		DHD_RTT_ERR(("Received Burst End without Ranging Instance\n"));
+		ret = BCME_ERROR;
+		goto exit;
+	}
+
+	/* allocate rtt_results for new results */
+	rtt_result = (rtt_result_t *)MALLOCZ(dhd->osh, sizeof(rtt_result_t));
+	if (!rtt_result) {
+		ret = BCME_NORESOURCE;
+		goto exit;
+	}
+
+	if (is_geofence) {
+		ret = dhd_rtt_parse_result_event(proxd_ev_data, tlvs_len, rtt_result);
+		if (ret != BCME_OK) {
+			DHD_RTT_ERR(("dhd_rtt_handle_nan_burst_end: "
+				"dhd_rtt_parse_result_event failed\n"));
+			goto exit;
+		}
+	} else {
+		if (RTT_IS_STOPPED(rtt_status)) {
+			/* Ignore the Proxd event */
+			DHD_RTT((" event handler rtt is stopped \n"));
+			if (rtt_status->flags == WL_PROXD_SESSION_FLAG_TARGET) {
+				DHD_RTT(("Device is target/Responder. Recv the event. \n"));
+			} else {
+				ret = BCME_UNSUPPORTED;
+				goto exit;
+			}
+		}
+		ret = dhd_rtt_handle_directed_rtt_burst_end(dhd, peer_addr,
+			proxd_ev_data, tlvs_len, rtt_result, TRUE);
+		if (ret != BCME_OK) {
+			goto exit;
+		}
+
+	}
+
+exit:
+	mutex_unlock(&rtt_status->rtt_mutex);
+	if (ret == BCME_OK) {
+		dhd_rtt_nan_range_report(cfg, rtt_result);
+	}
+	if (rtt_result &&
+		((ret != BCME_OK) || is_geofence)) {
+		kfree(rtt_result);
+		rtt_result = NULL;
+	}
+	NAN_MUTEX_UNLOCK();
+	return ret;
+}
+#endif /* WL_NAN */
+
+int
+dhd_rtt_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event, void *event_data)
+{
+	int ret = BCME_OK;
+	int tlvs_len;
+	uint16 version;
+	wl_proxd_event_t *p_event;
+	wl_proxd_event_type_t event_type;
+	wl_proxd_ftm_session_status_t session_status;
+	const ftm_strmap_entry_t *p_loginfo;
+	rtt_result_t *rtt_result;
+#ifdef WL_CFG80211
+	rtt_status_info_t *rtt_status;
+	rtt_results_header_t *rtt_results_header = NULL;
+	bool is_new = TRUE;
+#endif /* WL_CFG80211 */
+
+	DHD_RTT(("Enter %s \n", __FUNCTION__));
+	NULL_CHECK(dhd, "dhd is NULL", ret);
+
+	if (ntoh32_ua((void *)&event->datalen) < OFFSETOF(wl_proxd_event_t, tlvs)) {
+		DHD_RTT(("%s: wrong datalen:%d\n", __FUNCTION__,
+			ntoh32_ua((void *)&event->datalen)));
+		return -EINVAL;
+	}
+	event_type = ntoh32_ua((void *)&event->event_type);
+	if (event_type != WLC_E_PROXD) {
+		DHD_RTT_ERR((" failed event \n"));
+		return -EINVAL;
+	}
+
+	if (!event_data) {
+		DHD_RTT_ERR(("%s: event_data:NULL\n", __FUNCTION__));
+		return -EINVAL;
+	}
+	p_event = (wl_proxd_event_t *) event_data;
+	version = ltoh16(p_event->version);
+	if (version < WL_PROXD_API_VERSION) {
+		DHD_RTT_ERR(("ignore non-ftm event version = 0x%0x < WL_PROXD_API_VERSION (0x%x)\n",
+			version, WL_PROXD_API_VERSION));
+		return ret;
+	}
+
+	event_type = (wl_proxd_event_type_t) ltoh16(p_event->type);
+
+	DHD_RTT(("event_type=0x%x, ntoh16()=0x%x, ltoh16()=0x%x\n",
+		p_event->type, ntoh16(p_event->type), ltoh16(p_event->type)));
+	p_loginfo = ftm_get_event_type_loginfo(event_type);
+	if (p_loginfo == NULL) {
+		DHD_RTT_ERR(("receive an invalid FTM event %d\n", event_type));
+		ret = -EINVAL;
+		return ret;	/* ignore this event */
+	}
+	/* get TLVs len, skip over event header */
+	if (ltoh16(p_event->len) < OFFSETOF(wl_proxd_event_t, tlvs)) {
+		DHD_RTT_ERR(("invalid FTM event length:%d\n", ltoh16(p_event->len)));
+		ret = -EINVAL;
+		return ret;
+	}
+	tlvs_len = ltoh16(p_event->len) - OFFSETOF(wl_proxd_event_t, tlvs);
+	DHD_RTT(("receive '%s' event: version=0x%x len=%d method=%d sid=%d tlvs_len=%d\n",
+		p_loginfo->text,
+		version,
+		ltoh16(p_event->len),
+		ltoh16(p_event->method),
+		ltoh16(p_event->sid),
+		tlvs_len));
+#ifdef WL_CFG80211
+#ifdef WL_NAN
+	if ((event_type == WL_PROXD_EVENT_BURST_END) &&
+			dhd_rtt_is_nan_peer(dhd, &event->addr)) {
+		DHD_RTT(("WL_PROXD_EVENT_BURST_END for NAN RTT\n"));
+		ret = dhd_rtt_handle_nan_burst_end(dhd, &event->addr, p_event, tlvs_len);
+		return ret;
+	}
+#endif /* WL_NAN */
+
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", ret);
+	mutex_lock(&rtt_status->rtt_mutex);
+
+	if (RTT_IS_STOPPED(rtt_status)) {
+		/* Ignore the Proxd event */
+		DHD_RTT((" event handler rtt is stopped \n"));
+		if (rtt_status->flags == WL_PROXD_SESSION_FLAG_TARGET) {
+			DHD_RTT(("Device is target/Responder. Recv the event. \n"));
+		} else {
+			ret = BCME_NOTREADY;
+			goto exit;
+		}
+	}
+#endif /* WL_CFG80211 */
+
+#ifdef WL_CFG80211
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	is_new = !dhd_rtt_get_report_header(rtt_status,
+		&rtt_results_header, &event->addr);
+	GCC_DIAGNOSTIC_POP();
+#endif /* WL_CFG80211 */
+	switch (event_type) {
+	case WL_PROXD_EVENT_SESSION_CREATE:
+		DHD_RTT(("WL_PROXD_EVENT_SESSION_CREATE\n"));
+		break;
+	case WL_PROXD_EVENT_SESSION_START:
+		DHD_RTT(("WL_PROXD_EVENT_SESSION_START\n"));
+		break;
+	case WL_PROXD_EVENT_BURST_START:
+		DHD_RTT(("WL_PROXD_EVENT_BURST_START\n"));
+		break;
+	case WL_PROXD_EVENT_BURST_END:
+		DHD_RTT(("WL_PROXD_EVENT_BURST_END for Legacy RTT\n"));
+		/* allocate rtt_results for new legacy rtt results */
+		rtt_result = (rtt_result_t *)MALLOCZ(dhd->osh, sizeof(rtt_result_t));
+		if (!rtt_result) {
+			ret = -ENOMEM;
+			goto exit;
+		}
+		ret = dhd_rtt_handle_directed_rtt_burst_end(dhd, &event->addr,
+			p_event, tlvs_len, rtt_result, FALSE);
+		if (rtt_result && (ret != BCME_OK)) {
+			kfree(rtt_result);
+			rtt_result = NULL;
+			goto exit;
+		}
+		break;
+	case WL_PROXD_EVENT_SESSION_END:
+		DHD_RTT(("WL_PROXD_EVENT_SESSION_END\n"));
+		if (dhd_rtt_is_nan_peer(dhd, &event->addr)) {
+			/*
+			 * Nothing to do for session end for nan peer
+			 * All taken care in burst end and nan rng rep
+			 */
+			break;
+		}
+#ifdef WL_CFG80211
+		if (!RTT_IS_ENABLED(rtt_status)) {
+			DHD_RTT(("Ignore the session end evt\n"));
+			goto exit;
+		}
+#endif /* WL_CFG80211 */
+		if (tlvs_len > 0) {
+			/* unpack TLVs and invokes the cbfn to print the event content TLVs */
+			ret = bcm_unpack_xtlv_buf((void *) &session_status,
+				(uint8 *)&p_event->tlvs[0], tlvs_len,
+				BCM_XTLV_OPTION_ALIGN32, rtt_unpack_xtlv_cbfn);
+			if (ret != BCME_OK) {
+				DHD_RTT_ERR(("%s : Failed to unpack xtlv for an event\n",
+					__FUNCTION__));
+				goto exit;
+			}
+		}
+#ifdef WL_CFG80211
+		/* In case of no result for the peer device, make fake result for error case */
+		if (is_new) {
+			dhd_rtt_create_failure_result(rtt_status, &event->addr);
+		}
+		DHD_RTT(("\n Not Nan peer..proceed to notify result and restart\n"));
+		dhd_rtt_handle_rtt_session_end(dhd);
+#endif /* WL_CFG80211 */
+		break;
+	case WL_PROXD_EVENT_SESSION_RESTART:
+		DHD_RTT(("WL_PROXD_EVENT_SESSION_RESTART\n"));
+		break;
+	case WL_PROXD_EVENT_BURST_RESCHED:
+		DHD_RTT(("WL_PROXD_EVENT_BURST_RESCHED\n"));
+		break;
+	case WL_PROXD_EVENT_SESSION_DESTROY:
+		DHD_RTT(("WL_PROXD_EVENT_SESSION_DESTROY\n"));
+		break;
+	case WL_PROXD_EVENT_FTM_FRAME:
+		DHD_RTT(("WL_PROXD_EVENT_FTM_FRAME\n"));
+		break;
+	case WL_PROXD_EVENT_DELAY:
+		DHD_RTT(("WL_PROXD_EVENT_DELAY\n"));
+		break;
+	case WL_PROXD_EVENT_VS_INITIATOR_RPT:
+		DHD_RTT(("WL_PROXD_EVENT_VS_INITIATOR_RPT\n "));
+		break;
+	case WL_PROXD_EVENT_RANGING:
+		DHD_RTT(("WL_PROXD_EVENT_RANGING\n"));
+		break;
+	case WL_PROXD_EVENT_COLLECT:
+		DHD_RTT(("WL_PROXD_EVENT_COLLECT\n"));
+		if (tlvs_len > 0) {
+			void *buffer = NULL;
+			if (!(buffer = (void *)MALLOCZ(dhd->osh, tlvs_len))) {
+				ret = -ENOMEM;
+				goto exit;
+			}
+			/* unpack TLVs and invokes the cbfn to print the event content TLVs */
+			ret = bcm_unpack_xtlv_buf(buffer,
+				(uint8 *)&p_event->tlvs[0], tlvs_len,
+				BCM_XTLV_OPTION_NONE, rtt_unpack_xtlv_cbfn);
+			kfree(buffer);
+			if (ret != BCME_OK) {
+				DHD_RTT_ERR(("%s : Failed to unpack xtlv for event %d\n",
+					__FUNCTION__, event_type));
+				goto exit;
+			}
+		}
+		break;
+	case WL_PROXD_EVENT_MF_STATS:
+		DHD_RTT(("WL_PROXD_EVENT_MF_STATS\n"));
+		if (tlvs_len > 0) {
+			void *buffer = NULL;
+			if (!(buffer = (void *)MALLOCZ(dhd->osh, tlvs_len))) {
+				ret = -ENOMEM;
+				goto exit;
+			}
+			/* unpack TLVs and invokes the cbfn to print the event content TLVs */
+			ret = bcm_unpack_xtlv_buf(buffer,
+				(uint8 *)&p_event->tlvs[0], tlvs_len,
+				BCM_XTLV_OPTION_NONE, rtt_unpack_xtlv_cbfn);
+			kfree(buffer);
+			if (ret != BCME_OK) {
+				DHD_RTT_ERR(("%s : Failed to unpack xtlv for event %d\n",
+					__FUNCTION__, event_type));
+				goto exit;
+			}
+		}
+		break;
+
+	default:
+		DHD_RTT_ERR(("WLC_E_PROXD: not supported EVENT Type:%d\n", event_type));
+		break;
+	}
+exit:
+#ifdef WL_CFG80211
+	mutex_unlock(&rtt_status->rtt_mutex);
+#endif /* WL_CFG80211 */
+
+	return ret;
+}
+
+#ifdef WL_CFG80211
+static void
+dhd_rtt_work(struct work_struct *work)
+{
+	rtt_status_info_t *rtt_status;
+	dhd_pub_t *dhd;
+
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	rtt_status = container_of(work, rtt_status_info_t, work);
+	GCC_DIAGNOSTIC_POP();
+
+	dhd = rtt_status->dhd;
+	if (dhd == NULL) {
+		DHD_RTT_ERR(("%s : dhd is NULL\n", __FUNCTION__));
+		return;
+	}
+	(void) dhd_rtt_start(dhd);
+}
+#endif /* WL_CFG80211 */
+
+int
+dhd_rtt_capability(dhd_pub_t *dhd, rtt_capabilities_t *capa)
+{
+	rtt_status_info_t *rtt_status;
+	int err = BCME_OK;
+	NULL_CHECK(dhd, "dhd is NULL", err);
+	rtt_status = GET_RTTSTATE(dhd);
+	NULL_CHECK(rtt_status, "rtt_status is NULL", err);
+	NULL_CHECK(capa, "capa is NULL", err);
+	bzero(capa, sizeof(rtt_capabilities_t));
+
+	/* set rtt capabilities */
+	if (rtt_status->rtt_capa.proto & RTT_CAP_ONE_WAY)
+		capa->rtt_one_sided_supported = 1;
+	if (rtt_status->rtt_capa.proto & RTT_CAP_FTM_WAY)
+		capa->rtt_ftm_supported = 1;
+
+	if (rtt_status->rtt_capa.feature & RTT_FEATURE_LCI)
+		capa->lci_support = 1;
+	if (rtt_status->rtt_capa.feature & RTT_FEATURE_LCR)
+		capa->lcr_support = 1;
+	if (rtt_status->rtt_capa.feature & RTT_FEATURE_PREAMBLE)
+		capa->preamble_support = 1;
+	if (rtt_status->rtt_capa.feature & RTT_FEATURE_BW)
+		capa->bw_support = 1;
+
+	/* bit mask */
+	capa->preamble_support = rtt_status->rtt_capa.preamble;
+	capa->bw_support = rtt_status->rtt_capa.bw;
+
+	return err;
+}
+
+#ifdef WL_CFG80211
+int
+dhd_rtt_avail_channel(dhd_pub_t *dhd, wifi_channel_info *channel_info)
+{
+	u32 chanspec = 0;
+	int err = BCME_OK;
+	chanspec_t c = 0;
+	u32 channel;
+	struct net_device *dev = dhd_linux_get_primary_netdev(dhd);
+
+	if ((err = wldev_iovar_getint(dev, "chanspec",
+		(s32 *)&chanspec)) == BCME_OK) {
+		c = (chanspec_t)dtoh32(chanspec);
+		c = wl_chspec_driver_to_host(c);
+		channel  = wf_chspec_ctlchan(c);
+		DHD_RTT((" control channel is %d \n", channel));
+		if (CHSPEC_IS20(c)) {
+			channel_info->width = WIFI_CHAN_WIDTH_20;
+			DHD_RTT((" band is 20 \n"));
+		} else if (CHSPEC_IS40(c)) {
+			channel_info->width = WIFI_CHAN_WIDTH_40;
+			DHD_RTT(("band is 40 \n"));
+		} else {
+			channel_info->width = WIFI_CHAN_WIDTH_80;
+			DHD_RTT(("band is 80 \n"));
+		}
+		if (CHSPEC_IS2G(c) && (channel >= CH_MIN_2G_CHANNEL) &&
+			(channel <= CH_MAX_2G_CHANNEL)) {
+			channel_info->center_freq =
+				ieee80211_channel_to_frequency(channel, IEEE80211_BAND_2GHZ);
+		} else if (CHSPEC_IS5G(c) && channel >= CH_MIN_5G_CHANNEL) {
+			channel_info->center_freq =
+				ieee80211_channel_to_frequency(channel, IEEE80211_BAND_5GHZ);
+		}
+		if ((channel_info->width == WIFI_CHAN_WIDTH_80) ||
+			(channel_info->width == WIFI_CHAN_WIDTH_40)) {
+			channel = CHSPEC_CHANNEL(c);
+			channel_info->center_freq0 =
+				ieee80211_channel_to_frequency(channel, IEEE80211_BAND_5GHZ);
+		}
+	} else {
+		DHD_RTT_ERR(("Failed to get the chanspec \n"));
+	}
+	return err;
+}
+
+
