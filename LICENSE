@@ -1,8 +1,6 @@
 device_board_kaihong
 Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
 
-The khdvk_3566b/kernel/sdk-linux directory is dual licensed: you can use it either under the terms of the GPL V2, or the BSD license, at your option.
-The khdvk_3566b/kernel/vendor subdirectory is dual licensed: you can use it either under the terms of the GPL V2, or the BSD license, at your option.
 The khdvk_3566b/wifi and khdvk_3566b/bluetooth and others subdirectories are licensed under Apache License, Version 2.0.
 
 a) The 3-Clause BSD License, (https://opensource.org/licenses/BSD-3-Clause)
