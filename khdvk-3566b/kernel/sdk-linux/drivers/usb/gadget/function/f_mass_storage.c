@@ -3352,3 +3352,135 @@ static void fsg_free_inst(struct usb_function_instance *fi)
 	kfree(opts);
 }
 
+static struct usb_function_instance *fsg_alloc_inst(void)
+{
+	struct fsg_opts *opts;
+	struct fsg_lun_config config;
+	int rc;
+
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
+	if (!opts)
+		return ERR_PTR(-ENOMEM);
+	mutex_init(&opts->lock);
+	opts->func_inst.free_func_inst = fsg_free_inst;
+	opts->common = fsg_common_setup(opts->common);
+	if (IS_ERR(opts->common)) {
+		rc = PTR_ERR(opts->common);
+		goto release_opts;
+	}
+
+	rc = fsg_common_set_num_buffers(opts->common,
+					CONFIG_USB_GADGET_STORAGE_NUM_BUFFERS);
+	if (rc)
+		goto release_common;
+
+	pr_info(FSG_DRIVER_DESC ", version: " FSG_DRIVER_VERSION "\n");
+
+	memset(&config, 0, sizeof(config));
+	config.removable = true;
+	rc = fsg_common_create_lun(opts->common, &config, 0, "lun.0",
+			(const char **)&opts->func_inst.group.cg_item.ci_name);
+	if (rc)
+		goto release_buffers;
+
+	opts->lun0.lun = opts->common->luns[0];
+	opts->lun0.lun_id = 0;
+
+	config_group_init_type_name(&opts->func_inst.group, "", &fsg_func_type);
+
+	config_group_init_type_name(&opts->lun0.group, "lun.0", &fsg_lun_type);
+	configfs_add_default_group(&opts->lun0.group, &opts->func_inst.group);
+
+	return &opts->func_inst;
+
+release_buffers:
+	fsg_common_free_buffers(opts->common);
+release_common:
+	kfree(opts->common);
+release_opts:
+	kfree(opts);
+	return ERR_PTR(rc);
+}
+
+static void fsg_free(struct usb_function *f)
+{
+	struct fsg_dev *fsg;
+	struct fsg_opts *opts;
+
+	fsg = container_of(f, struct fsg_dev, function);
+	opts = container_of(f->fi, struct fsg_opts, func_inst);
+
+	mutex_lock(&opts->lock);
+	opts->refcnt--;
+	mutex_unlock(&opts->lock);
+
+	kfree(fsg);
+}
+
+static struct usb_function *fsg_alloc(struct usb_function_instance *fi)
+{
+	struct fsg_opts *opts = fsg_opts_from_func_inst(fi);
+	struct fsg_common *common = opts->common;
+	struct fsg_dev *fsg;
+
+	fsg = kzalloc(sizeof(*fsg), GFP_KERNEL);
+	if (unlikely(!fsg))
+		return ERR_PTR(-ENOMEM);
+
+	mutex_lock(&opts->lock);
+	opts->refcnt++;
+	mutex_unlock(&opts->lock);
+
+	fsg->function.name	= FSG_DRIVER_DESC;
+	fsg->function.bind	= fsg_bind;
+	fsg->function.unbind	= fsg_unbind;
+	fsg->function.setup	= fsg_setup;
+	fsg->function.set_alt	= fsg_set_alt;
+	fsg->function.disable	= fsg_disable;
+	fsg->function.free_func	= fsg_free;
+
+	fsg->common               = common;
+
+	return &fsg->function;
+}
+
+DECLARE_USB_FUNCTION_INIT(mass_storage, fsg_alloc_inst, fsg_alloc);
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Michal Nazarewicz");
+
+/************************* Module parameters *************************/
+
+
+void fsg_config_from_params(struct fsg_config *cfg,
+		       const struct fsg_module_parameters *params,
+		       unsigned int fsg_num_buffers)
+{
+	struct fsg_lun_config *lun;
+	unsigned i;
+
+	/* Configure LUNs */
+	cfg->nluns =
+		min(params->luns ?: (params->file_count ?: 1u),
+		    (unsigned)FSG_MAX_LUNS);
+	for (i = 0, lun = cfg->luns; i < cfg->nluns; ++i, ++lun) {
+		lun->ro = !!params->ro[i];
+		lun->cdrom = !!params->cdrom[i];
+		lun->removable = !!params->removable[i];
+		lun->filename =
+			params->file_count > i && params->file[i][0]
+			? params->file[i]
+			: NULL;
+	}
+
+	/* Let MSF use defaults */
+	cfg->vendor_name = NULL;
+	cfg->product_name = NULL;
+
+	cfg->ops = NULL;
+	cfg->private_data = NULL;
+
+	/* Finalise */
+	cfg->can_stall = params->stall;
+	cfg->fsg_num_buffers = fsg_num_buffers;
+}
+EXPORT_SYMBOL_GPL(fsg_config_from_params);
