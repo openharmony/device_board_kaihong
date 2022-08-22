@@ -5127,3 +5127,296 @@ int dwc2_backup_device_registers(struct dwc2_hsotg *hsotg)
 
 		dr->doeptsiz[i] = dwc2_readl(hsotg, DOEPTSIZ(i));
 		dr->doepdma[i] = dwc2_readl(hsotg, DOEPDMA(i));
+		dr->dtxfsiz[i] = dwc2_readl(hsotg, DPTXFSIZN(i));
+	}
+	dr->valid = true;
+	return 0;
+}
+
+/**
+ * dwc2_restore_device_registers() - Restore controller device registers.
+ * When resuming usb bus, device registers needs to be restored
+ * if controller power were disabled.
+ *
+ * @hsotg: Programming view of the DWC_otg controller
+ * @remote_wakeup: Indicates whether resume is initiated by Device or Host.
+ *
+ * Return: 0 if successful, negative error code otherwise
+ */
+int dwc2_restore_device_registers(struct dwc2_hsotg *hsotg, int remote_wakeup)
+{
+	struct dwc2_dregs_backup *dr;
+	int i;
+
+	dev_dbg(hsotg->dev, "%s\n", __func__);
+
+	/* Restore dev regs */
+	dr = &hsotg->dr_backup;
+	if (!dr->valid) {
+		dev_err(hsotg->dev, "%s: no device registers to restore\n",
+			__func__);
+		return -EINVAL;
+	}
+	dr->valid = false;
+
+	if (!remote_wakeup)
+		dwc2_writel(hsotg, dr->dctl, DCTL);
+
+	dwc2_writel(hsotg, dr->daintmsk, DAINTMSK);
+	dwc2_writel(hsotg, dr->diepmsk, DIEPMSK);
+	dwc2_writel(hsotg, dr->doepmsk, DOEPMSK);
+
+	for (i = 0; i < hsotg->num_of_eps; i++) {
+		/* Restore IN EPs */
+		dwc2_writel(hsotg, dr->dieptsiz[i], DIEPTSIZ(i));
+		dwc2_writel(hsotg, dr->diepdma[i], DIEPDMA(i));
+		dwc2_writel(hsotg, dr->doeptsiz[i], DOEPTSIZ(i));
+		/** WA for enabled EPx's IN in DDMA mode. On entering to
+		 * hibernation wrong value read and saved from DIEPDMAx,
+		 * as result BNA interrupt asserted on hibernation exit
+		 * by restoring from saved area.
+		 */
+		if (hsotg->params.g_dma_desc &&
+		    (dr->diepctl[i] & DXEPCTL_EPENA))
+			dr->diepdma[i] = hsotg->eps_in[i]->desc_list_dma;
+		dwc2_writel(hsotg, dr->dtxfsiz[i], DPTXFSIZN(i));
+		dwc2_writel(hsotg, dr->diepctl[i], DIEPCTL(i));
+		/* Restore OUT EPs */
+		dwc2_writel(hsotg, dr->doeptsiz[i], DOEPTSIZ(i));
+		/* WA for enabled EPx's OUT in DDMA mode. On entering to
+		 * hibernation wrong value read and saved from DOEPDMAx,
+		 * as result BNA interrupt asserted on hibernation exit
+		 * by restoring from saved area.
+		 */
+		if (hsotg->params.g_dma_desc &&
+		    (dr->doepctl[i] & DXEPCTL_EPENA))
+			dr->doepdma[i] = hsotg->eps_out[i]->desc_list_dma;
+		dwc2_writel(hsotg, dr->doepdma[i], DOEPDMA(i));
+		dwc2_writel(hsotg, dr->doepctl[i], DOEPCTL(i));
+	}
+
+	return 0;
+}
+
+/**
+ * dwc2_gadget_init_lpm - Configure the core to support LPM in device mode
+ *
+ * @hsotg: Programming view of DWC_otg controller
+ *
+ */
+void dwc2_gadget_init_lpm(struct dwc2_hsotg *hsotg)
+{
+	u32 val;
+
+	if (!hsotg->params.lpm)
+		return;
+
+	val = GLPMCFG_LPMCAP | GLPMCFG_APPL1RES;
+	val |= hsotg->params.hird_threshold_en ? GLPMCFG_HIRD_THRES_EN : 0;
+	val |= hsotg->params.lpm_clock_gating ? GLPMCFG_ENBLSLPM : 0;
+	val |= hsotg->params.hird_threshold << GLPMCFG_HIRD_THRES_SHIFT;
+	val |= hsotg->params.besl ? GLPMCFG_ENBESL : 0;
+	val |= GLPMCFG_LPM_REJECT_CTRL_CONTROL;
+	val |= GLPMCFG_LPM_ACCEPT_CTRL_ISOC;
+	dwc2_writel(hsotg, val, GLPMCFG);
+	dev_dbg(hsotg->dev, "GLPMCFG=0x%08x\n", dwc2_readl(hsotg, GLPMCFG));
+
+	/* Unmask WKUP_ALERT Interrupt */
+	if (hsotg->params.service_interval)
+		dwc2_set_bit(hsotg, GINTMSK2, GINTMSK2_WKUP_ALERT_INT_MSK);
+}
+
+/**
+ * dwc2_gadget_program_ref_clk - Program GREFCLK register in device mode
+ *
+ * @hsotg: Programming view of DWC_otg controller
+ *
+ */
+void dwc2_gadget_program_ref_clk(struct dwc2_hsotg *hsotg)
+{
+	u32 val = 0;
+
+	val |= GREFCLK_REF_CLK_MODE;
+	val |= hsotg->params.ref_clk_per << GREFCLK_REFCLKPER_SHIFT;
+	val |= hsotg->params.sof_cnt_wkup_alert <<
+	       GREFCLK_SOF_CNT_WKUP_ALERT_SHIFT;
+
+	dwc2_writel(hsotg, val, GREFCLK);
+	dev_dbg(hsotg->dev, "GREFCLK=0x%08x\n", dwc2_readl(hsotg, GREFCLK));
+}
+
+/**
+ * dwc2_gadget_enter_hibernation() - Put controller in Hibernation.
+ *
+ * @hsotg: Programming view of the DWC_otg controller
+ *
+ * Return non-zero if failed to enter to hibernation.
+ */
+int dwc2_gadget_enter_hibernation(struct dwc2_hsotg *hsotg)
+{
+	u32 gpwrdn;
+	int ret = 0;
+
+	/* Change to L2(suspend) state */
+	hsotg->lx_state = DWC2_L2;
+	dev_dbg(hsotg->dev, "Start of hibernation completed\n");
+	ret = dwc2_backup_global_registers(hsotg);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to backup global registers\n",
+			__func__);
+		return ret;
+	}
+	ret = dwc2_backup_device_registers(hsotg);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to backup device registers\n",
+			__func__);
+		return ret;
+	}
+
+	gpwrdn = GPWRDN_PWRDNRSTN;
+	gpwrdn |= GPWRDN_PMUACTV;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+	udelay(10);
+
+	/* Set flag to indicate that we are in hibernation */
+	hsotg->hibernated = 1;
+
+	/* Enable interrupts from wake up logic */
+	gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	gpwrdn |= GPWRDN_PMUINTSEL;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+	udelay(10);
+
+	/* Unmask device mode interrupts in GPWRDN */
+	gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	gpwrdn |= GPWRDN_RST_DET_MSK;
+	gpwrdn |= GPWRDN_LNSTSCHG_MSK;
+	gpwrdn |= GPWRDN_STS_CHGINT_MSK;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+	udelay(10);
+
+	/* Enable Power Down Clamp */
+	gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	gpwrdn |= GPWRDN_PWRDNCLMP;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+	udelay(10);
+
+	/* Switch off VDD */
+	gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	gpwrdn |= GPWRDN_PWRDNSWTCH;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+	udelay(10);
+
+	/* Save gpwrdn register for further usage if stschng interrupt */
+	hsotg->gr_backup.gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	dev_dbg(hsotg->dev, "Hibernation completed\n");
+
+	return ret;
+}
+
+/**
+ * dwc2_gadget_exit_hibernation()
+ * This function is for exiting from Device mode hibernation by host initiated
+ * resume/reset and device initiated remote-wakeup.
+ *
+ * @hsotg: Programming view of the DWC_otg controller
+ * @rem_wakeup: indicates whether resume is initiated by Device or Host.
+ * @reset: indicates whether resume is initiated by Reset.
+ *
+ * Return non-zero if failed to exit from hibernation.
+ */
+int dwc2_gadget_exit_hibernation(struct dwc2_hsotg *hsotg,
+				 int rem_wakeup, int reset)
+{
+	u32 pcgcctl;
+	u32 gpwrdn;
+	u32 dctl;
+	int ret = 0;
+	struct dwc2_gregs_backup *gr;
+	struct dwc2_dregs_backup *dr;
+
+	gr = &hsotg->gr_backup;
+	dr = &hsotg->dr_backup;
+
+	if (!hsotg->hibernated) {
+		dev_dbg(hsotg->dev, "Already exited from Hibernation\n");
+		return 1;
+	}
+	dev_dbg(hsotg->dev,
+		"%s: called with rem_wakeup = %d reset = %d\n",
+		__func__, rem_wakeup, reset);
+
+	dwc2_hib_restore_common(hsotg, rem_wakeup, 0);
+
+	if (!reset) {
+		/* Clear all pending interupts */
+		dwc2_writel(hsotg, 0xffffffff, GINTSTS);
+	}
+
+	/* De-assert Restore */
+	gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	gpwrdn &= ~GPWRDN_RESTORE;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+	udelay(10);
+
+	if (!rem_wakeup) {
+		pcgcctl = dwc2_readl(hsotg, PCGCTL);
+		pcgcctl &= ~PCGCTL_RSTPDWNMODULE;
+		dwc2_writel(hsotg, pcgcctl, PCGCTL);
+	}
+
+	/* Restore GUSBCFG, DCFG and DCTL */
+	dwc2_writel(hsotg, gr->gusbcfg, GUSBCFG);
+	dwc2_writel(hsotg, dr->dcfg, DCFG);
+	dwc2_writel(hsotg, dr->dctl, DCTL);
+
+	/* De-assert Wakeup Logic */
+	gpwrdn = dwc2_readl(hsotg, GPWRDN);
+	gpwrdn &= ~GPWRDN_PMUACTV;
+	dwc2_writel(hsotg, gpwrdn, GPWRDN);
+
+	if (rem_wakeup) {
+		udelay(10);
+		/* Start Remote Wakeup Signaling */
+		dwc2_writel(hsotg, dr->dctl | DCTL_RMTWKUPSIG, DCTL);
+	} else {
+		udelay(50);
+		/* Set Device programming done bit */
+		dctl = dwc2_readl(hsotg, DCTL);
+		dctl |= DCTL_PWRONPRGDONE;
+		dwc2_writel(hsotg, dctl, DCTL);
+	}
+	/* Wait for interrupts which must be cleared */
+	mdelay(2);
+	/* Clear all pending interupts */
+	dwc2_writel(hsotg, 0xffffffff, GINTSTS);
+
+	/* Restore global registers */
+	ret = dwc2_restore_global_registers(hsotg);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to restore registers\n",
+			__func__);
+		return ret;
+	}
+
+	/* Restore device registers */
+	ret = dwc2_restore_device_registers(hsotg, rem_wakeup);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to restore device registers\n",
+			__func__);
+		return ret;
+	}
+
+	if (rem_wakeup) {
+		mdelay(10);
+		dctl = dwc2_readl(hsotg, DCTL);
+		dctl &= ~DCTL_RMTWKUPSIG;
+		dwc2_writel(hsotg, dctl, DCTL);
+	}
+
+	hsotg->hibernated = 0;
+	hsotg->lx_state = DWC2_L0;
+	dev_dbg(hsotg->dev, "Hibernation recovery completes here\n");
+
+	return ret;
+}
