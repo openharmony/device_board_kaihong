@@ -1197,3 +1197,163 @@ enum factor_mode {
 };
 
 enum src_factor_mode {
+	SRC_FAC_ALPHA_ZERO,
+	SRC_FAC_ALPHA_ONE,
+	SRC_FAC_ALPHA_DST,
+	SRC_FAC_ALPHA_DST_INVERSE,
+	SRC_FAC_ALPHA_SRC,
+	SRC_FAC_ALPHA_SRC_GLOBAL,
+};
+
+enum dst_factor_mode {
+	DST_FAC_ALPHA_ZERO,
+	DST_FAC_ALPHA_ONE,
+	DST_FAC_ALPHA_SRC,
+	DST_FAC_ALPHA_SRC_INVERSE,
+	DST_FAC_ALPHA_DST,
+	DST_FAC_ALPHA_DST_GLOBAL,
+};
+
+enum scale_mode {
+	SCALE_NONE = 0x0,
+	SCALE_UP   = 0x1,
+	SCALE_DOWN = 0x2
+};
+
+enum lb_mode {
+	LB_YUV_3840X5 = 0x0,
+	LB_YUV_2560X8 = 0x1,
+	LB_RGB_3840X2 = 0x2,
+	LB_RGB_2560X4 = 0x3,
+	LB_RGB_1920X5 = 0x4,
+	LB_RGB_1280X8 = 0x5
+};
+
+enum sacle_up_mode {
+	SCALE_UP_BIL = 0x0,
+	SCALE_UP_BIC = 0x1
+};
+
+enum scale_down_mode {
+	SCALE_DOWN_BIL = 0x0,
+	SCALE_DOWN_AVG = 0x1
+};
+
+enum vop2_scale_up_mode {
+	VOP2_SCALE_UP_NRST_NBOR,
+	VOP2_SCALE_UP_BIL,
+	VOP2_SCALE_UP_BIC,
+};
+
+enum vop2_scale_down_mode {
+	VOP2_SCALE_DOWN_NRST_NBOR,
+	VOP2_SCALE_DOWN_BIL,
+	VOP2_SCALE_DOWN_AVG,
+};
+
+enum dither_down_mode {
+	RGB888_TO_RGB565 = 0x0,
+	RGB888_TO_RGB666 = 0x1
+};
+
+enum dither_down_mode_sel {
+	DITHER_DOWN_ALLEGRO = 0x0,
+	DITHER_DOWN_FRC = 0x1
+};
+
+enum vop_pol {
+	HSYNC_POSITIVE = 0,
+	VSYNC_POSITIVE = 1,
+	DEN_NEGATIVE   = 2,
+	DCLK_INVERT    = 3
+};
+
+
+#define FRAC_16_16(mult, div)    (((mult) << 16) / (div))
+#define SCL_FT_DEFAULT_FIXPOINT_SHIFT	12
+#define SCL_MAX_VSKIPLINES		4
+#define MIN_SCL_FT_AFTER_VSKIP		1
+
+static inline uint16_t scl_cal_scale(int src, int dst, int shift)
+{
+	return ((src * 2 - 3) << (shift - 1)) / (dst - 1);
+}
+
+static inline uint16_t scl_cal_scale2(int src, int dst)
+{
+	return ((src - 1) << 12) / (dst - 1);
+}
+
+#define GET_SCL_FT_BILI_DN(src, dst)	scl_cal_scale(src, dst, 12)
+#define GET_SCL_FT_BILI_UP(src, dst)	scl_cal_scale(src, dst, 16)
+#define GET_SCL_FT_BIC(src, dst)	scl_cal_scale(src, dst, 16)
+
+static inline uint16_t scl_get_bili_dn_vskip(int src_h, int dst_h,
+					     int vskiplines)
+{
+	int act_height;
+
+	act_height = (src_h + vskiplines - 1) / vskiplines;
+
+	if (act_height == dst_h)
+		return GET_SCL_FT_BILI_DN(src_h, dst_h) / vskiplines;
+
+	return GET_SCL_FT_BILI_DN(act_height, dst_h);
+}
+
+static inline enum scale_mode scl_get_scl_mode(int src, int dst)
+{
+	if (src < dst)
+		return SCALE_UP;
+	else if (src > dst)
+		return SCALE_DOWN;
+
+	return SCALE_NONE;
+}
+
+static inline int scl_get_vskiplines(uint32_t srch, uint32_t dsth)
+{
+	uint32_t vskiplines;
+
+	for (vskiplines = SCL_MAX_VSKIPLINES; vskiplines > 1; vskiplines /= 2)
+		if (srch >= vskiplines * dsth * MIN_SCL_FT_AFTER_VSKIP)
+			break;
+
+	return vskiplines;
+}
+
+static inline int scl_vop_cal_lb_mode(int width, bool is_yuv)
+{
+	int lb_mode;
+
+	if (is_yuv) {
+		if (width > 1280)
+			lb_mode = LB_YUV_3840X5;
+		else
+			lb_mode = LB_YUV_2560X8;
+	} else {
+		if (width > 2560)
+			lb_mode = LB_RGB_3840X2;
+		else if (width > 1920)
+			lb_mode = LB_RGB_2560X4;
+		else
+			lb_mode = LB_RGB_1920X5;
+	}
+
+	return lb_mode;
+}
+
+static inline int us_to_vertical_line(struct drm_display_mode *mode, int us)
+{
+	return us * mode->clock / mode->htotal / 1000;
+}
+
+static inline int interpolate(int x1, int y1, int x2, int y2, int x)
+{
+	return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+}
+
+extern void vop2_standby(struct drm_crtc *crtc, bool standby);
+extern const struct component_ops vop_component_ops;
+extern const struct component_ops vop2_component_ops;
+#endif /* _ROCKCHIP_DRM_VOP_H */
