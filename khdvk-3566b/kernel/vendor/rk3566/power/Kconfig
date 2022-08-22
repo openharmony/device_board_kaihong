@@ -1,0 +1,4 @@
+config VENDOR_RK3566_DRIVER_POWER_SUPPLY_RK817
+	bool "rk3566 Device drivers power supply"
+	default y
+
