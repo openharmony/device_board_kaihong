@@ -1855,3 +1855,1867 @@ static void hw_netif_trans_update(struct net_device *dev)
 #endif
 
 /*-------------------------------------------------------------------------*/
+
+static int hw_start_xmit (struct sk_buff *skb, struct net_device *net)
+{
+    struct hw_cdc_net        *dev = netdev_priv(net);
+    int            length;
+    int            retval = NET_XMIT_SUCCESS;
+    struct urb        *urb = NULL;
+    struct skb_data        *entry;
+    unsigned long        flags;
+
+    if (dev->is_ncm ) {
+        skb = cdc_ncm_tx_fixup (dev, skb, GFP_ATOMIC);
+        if (!skb) {
+            if (netif_msg_tx_err (dev)){
+                devdbg (dev, "can't tx_fixup skb");
+            }
+            goto drop;
+        }
+    }
+    
+    length = skb->len;
+
+    if (!(urb = usb_alloc_urb (0, GFP_ATOMIC))) {
+        if (netif_msg_tx_err (dev)){
+            devdbg (dev, "no urb");
+        }
+        goto drop;
+    }
+
+    entry = (struct skb_data *) skb->cb;
+    entry->urb = urb;
+    entry->dev = dev;
+    entry->state = tx_start;
+    entry->length = length;
+
+    usb_fill_bulk_urb (urb, dev->udev, dev->out,
+            skb->data, skb->len, tx_complete, skb);
+
+    /* don't assume the hardware handles USB_ZERO_PACKET
+     * NOTE:  strictly conforming cdc-ether devices should expect
+     * the ZLP here, but ignore the one-byte packet.
+     */
+    if ((length % dev->maxpacket) == 0) {
+        urb->transfer_buffer_length++;
+        if (skb_tailroom(skb)) {
+            skb->data[skb->len] = 0;
+            __skb_put(skb, 1);
+        }
+    }
+
+    devdbg(dev,"hw_start_xmit ,usb_submit_urb,len:%d, time:%ld-%ld",
+           skb->len,current_kernel_time().tv_sec,current_kernel_time().tv_nsec);
+
+    spin_lock_irqsave (&dev->txq.lock, flags);
+
+    switch ((retval = usb_submit_urb (urb, GFP_ATOMIC))) {
+    case -EPIPE:
+        netif_stop_queue (net);
+        hw_defer_kevent (dev, EVENT_TX_HALT);
+        break;
+    default:
+        if (netif_msg_tx_err (dev)){
+            devdbg (dev, "tx: submit urb err %d", retval);
+        }
+        break;
+    case 0:
+        #if LINUX_VERSION37_LATER
+            hw_netif_trans_update(net);
+        #else
+            net->trans_start = jiffies;
+        #endif
+        __skb_queue_tail (&dev->txq, skb);
+        if (dev->txq.qlen >= TX_QLEN (dev)){
+            netif_stop_queue (net);
+        }
+    }
+    spin_unlock_irqrestore (&dev->txq.lock, flags);
+
+    if (retval) {
+        if (netif_msg_tx_err (dev)){
+            devdbg (dev, "drop, code %d", retval);
+        }
+drop:
+        retval = NET_XMIT_SUCCESS;
+        dev->stats.tx_dropped++;
+        if (skb){
+            dev_kfree_skb_any (skb);
+        }
+        usb_free_urb (urb);
+    } else if (netif_msg_tx_queued (dev)) {
+        devdbg (dev, "> tx, len %d, type 0x%x",
+            length, skb->protocol);
+    }
+
+    return retval;
+}
+
+
+/*-------------------------------------------------------------------------*/
+
+// tasklet (work deferred from completions, in_irq) or timer
+static void hw_bh (unsigned long param)
+{
+    struct hw_cdc_net        *dev = (struct hw_cdc_net *) param;
+    struct sk_buff        *skb;
+    struct skb_data        *entry;
+
+    while ((skb = skb_dequeue (&dev->done))) {
+        entry = (struct skb_data *) skb->cb;
+        switch (entry->state) {
+        case rx_done:
+            entry->state = rx_cleanup;
+            rx_process (dev, skb);
+            continue;
+        case tx_done:
+        case rx_cleanup:
+            usb_free_urb (entry->urb);
+            dev_kfree_skb (skb);
+            continue;
+        default:
+            devdbg (dev, "bogus skb state %d", entry->state);
+        }
+    }
+
+    // waiting for all pending urbs to complete?
+    if (dev->wait) {
+        if ((dev->txq.qlen + dev->rxq.qlen + dev->done.qlen) == 0) {
+            wake_up (dev->wait);
+        }
+
+    // or are we maybe short a few urbs?
+    } else if (netif_running (dev->net)
+            && netif_device_present (dev->net)
+            && !timer_pending (&dev->delay)
+            && !test_bit (EVENT_RX_HALT, &dev->flags)) {
+        int    temp = dev->rxq.qlen;
+        int    qlen = dev->is_ncm ? RX_QLEN_NCM : RX_QLEN (dev);
+
+
+        if (temp < qlen) {
+            struct urb    *urb;
+            int        i;
+
+            // don't refill the queue all at once
+            for (i = 0; i < 10 && dev->rxq.qlen < qlen; i++) {
+                urb = usb_alloc_urb (0, GFP_ATOMIC);
+                if (urb != NULL){
+                    rx_submit (dev, urb, GFP_ATOMIC);
+                }
+            }
+            if (temp != dev->rxq.qlen && netif_msg_link (dev)){
+                devdbg (dev, "rxqlen %d --> %d",
+                        temp, dev->rxq.qlen);
+            }
+            if (dev->rxq.qlen < qlen){
+                tasklet_schedule (&dev->bh);
+            }
+        }
+        if (dev->txq.qlen < (dev->is_ncm ? TX_QLEN_NCM :TX_QLEN (dev))){
+            netif_wake_queue (dev->net);
+        }
+    }
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0))
+static void hw_bh_timer_call(struct timer_list *t) {
+
+        struct hw_cdc_net *dev = from_timer(dev, t, delay);
+        hw_bh((unsigned long)dev);
+}
+#endif
+
+
+/*-------------------------------------------------------------------------
+ *
+ * USB Device Driver support
+ *
+ *-------------------------------------------------------------------------*/
+
+// precondition: never called in_interrupt
+
+void hw_disconnect (struct usb_interface *intf)
+{
+    struct hw_cdc_net        *dev;
+    struct usb_device    *xdev;
+    struct net_device    *net;
+
+    dev = usb_get_intfdata(intf);
+    usb_set_intfdata(intf, NULL);
+    if (!dev){
+        return;
+    }
+
+    xdev = interface_to_usbdev (intf);
+
+    if (netif_msg_probe (dev)){
+        devinfo (dev, "unregister '%s' usb-%s-%s, %s",
+            intf->dev.driver->name,
+            xdev->bus->bus_name, xdev->devpath,
+            dev->driver_desc);
+    }
+
+    /*[zhaopf@meigsmart-2020-1127] balong device ignore cancel delayed work { */
+    if (deviceisBalong){
+        devinfo(dev,"balong device ignore cancel delayed work");
+    } else {
+        cancel_delayed_work_sync(&dev->status_work);
+    }
+     /*[zhaopf@meigsmart-2020-1127] balong device ignore cancel delayed work } */
+    net = dev->net;
+    unregister_netdev (net);
+
+    /* we don't hold rtnl here ... */
+    flush_scheduled_work ();
+
+    hw_cdc_unbind(dev, intf);
+
+    free_netdev(net);
+    usb_put_dev (xdev);
+}
+EXPORT_SYMBOL_GPL(hw_disconnect);
+
+
+/*-------------------------------------------------------------------------*/
+#if !(LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30))
+static int hw_eth_mac_addr(struct net_device *dev, void *p)
+{
+    dev->dev_addr[0] = 0x00;
+    dev->dev_addr[1] = 0x1e;
+    dev->dev_addr[2] = 0x10;
+    dev->dev_addr[3] = 0x1f;
+    dev->dev_addr[4] = 0x00;
+    dev->dev_addr[5] = 0x01;
+
+    return 0;
+}
+static const struct net_device_ops hw_netdev_ops = {
+    .ndo_open = hw_open,
+    .ndo_stop = hw_stop,
+    .ndo_start_xmit = hw_start_xmit,
+    .ndo_tx_timeout = hw_tx_timeout,
+    .ndo_change_mtu = hw_change_mtu,
+    .ndo_set_mac_address = hw_eth_mac_addr,
+    .ndo_validate_addr = eth_validate_addr,
+    .ndo_get_stats = hw_get_stats, //��������ͳ��
+};
+#endif
+
+int hw_send_tlp_download_request(struct usb_interface *intf);
+// precondition: never called in_interrupt
+int hw_check_conn_status(struct usb_interface *intf);
+
+
+static int is_ncm_interface(struct usb_interface *intf)
+{
+    u8 bif_class;
+    u8 bif_subclass;
+    u8 bif_protocol;
+    bif_class = intf->cur_altsetting->desc.bInterfaceClass;
+    bif_subclass = intf->cur_altsetting->desc.bInterfaceSubClass;
+    bif_protocol = intf->cur_altsetting->desc.bInterfaceProtocol;
+
+    
+    if(( bif_class == 0x02 && bif_subclass == 0x0d)  
+       ||( bif_class == 0xff && (bif_subclass == 0x02 || bif_subclass == BINTERFACESUBCLASS_HW) && bif_protocol == 0x16) 
+       ||( bif_class == 0xff && (bif_subclass == 0x02 || bif_subclass == BINTERFACESUBCLASS_HW) && bif_protocol == 0x46)
+       ||( bif_class == 0xff && (bif_subclass == 0x02 || bif_subclass == BINTERFACESUBCLASS_HW) && bif_protocol == 0x76)
+      ){
+        return 1;
+    }
+    
+    return 0;
+        
+}
+
+
+static int cdc_ncm_config(struct ncm_ctx *ctx)
+{
+    int                     err;
+    struct usb_device             *udev = ctx->ndev->udev;
+    u8                    net_caps;
+    u8                     control_if;
+    unsigned int                tx_pipe;
+    unsigned int                rx_pipe;
+    struct usb_cdc_ncm_ntb_parameter_hw     *ntb_params;
+    u8                    *b;
+
+#define NCM_MAX_CONTROL_MSG sizeof (*ntb_params)
+
+    b = kmalloc(NCM_MAX_CONTROL_MSG, GFP_KERNEL);
+    if (unlikely(b == NULL)){
+        return -ENOMEM;
+    }
+
+    net_caps = ctx->ncm_desc->bmNetworkCapabilities; 
+    control_if = ctx->control->cur_altsetting->desc.bInterfaceNumber;
+    tx_pipe = usb_sndctrlpipe(udev, 0);
+    rx_pipe = usb_rcvctrlpipe(udev, 0);
+
+    err = usb_control_msg(udev, rx_pipe, USB_CDC_GET_NTB_PARAMETERS,
+        USB_TYPE_CLASS | USB_RECIP_INTERFACE | USB_DIR_IN, 0,
+        control_if, b, sizeof(*ntb_params), NCM_CONTROL_TIMEOUT);
+    if (err < 0) {
+        dev_dbg(&udev->dev, "cannot read NTB params\n");
+        goto exit;
+    }
+    if (err < sizeof(*ntb_params)) {
+        dev_dbg(&udev->dev, "the read NTB params block is too short\n");
+        err = -EINVAL;
+        goto exit;
+    }
+
+    ntb_params = (void *)b;
+    ctx->formats = le16_to_cpu(ntb_params->bmNtbFormatSupported);
+    ctx->rx_max_ntb = le32_to_cpu(ntb_params->dwNtbInMaxSize);
+    ctx->tx_max_ntb = le32_to_cpu(ntb_params->dwNtbOutMaxSize);
+    ctx->tx_divisor = le16_to_cpu(ntb_params->wNdpOutDivisor);
+    ctx->tx_remainder = le16_to_cpu(ntb_params->wNdpOutPayloadRemainder);
+    ctx->tx_align = le16_to_cpu(ntb_params->wNdpOutAlignment);
+
+    devdbg(ctx->ndev,"rx_max_ntb:%d,tx_max_ntb:%d,tx_align:%d",
+           ctx->rx_max_ntb,ctx->tx_max_ntb,ctx->tx_align);
+
+    if (unlikely(!(ctx->formats & NTB_FORMAT_SUPPORTED_16BIT))) {
+        deverr(ctx->ndev, "device does not support 16-bit mode\n");
+        err = -EINVAL;
+        goto exit;
+    }
+
+    if (unlikely(ctx->tx_align < NCM_NDP_MIN_ALIGNMENT)) {
+        deverr(ctx->ndev, "wNdpOutAlignment (%u) must be at least "
+            "%u\n", ctx->tx_align, NCM_NDP_MIN_ALIGNMENT);
+        err = -EINVAL;
+        goto exit;
+    }
+
+    if (unlikely(!IS_POWER2(ctx->tx_align))) {
+        deverr(ctx->ndev, "wNdpOutAlignment (%u) must be a power of "
+            "2\n", ctx->tx_align);
+        err = -EINVAL;
+        goto exit;
+    }
+
+    if (unlikely(ctx->rx_max_ntb < NCM_NTB_MIN_IN_SIZE)) {
+        deverr(ctx->ndev, "dwNtbInMaxSize (%u) must be at least "
+            "%u\n", ctx->rx_max_ntb, NCM_NTB_MIN_IN_SIZE);
+        err = -EINVAL;
+        goto exit;
+    }
+
+    if (ctx->rx_max_ntb > (u32)NCM_NTB_HARD_MAX_IN_SIZE) {
+        devdbg(ctx->ndev, "dwNtbInMaxSize (%u) must be at most %u "
+            ", setting the device to %u\n",
+            ctx->rx_max_ntb, NCM_NTB_HARD_MAX_IN_SIZE,
+            NCM_NTB_HARD_MAX_IN_SIZE);
+        ctx->rx_max_ntb = NCM_NTB_HARD_MAX_IN_SIZE;
+        put_unaligned_le32(ctx->rx_max_ntb, b);
+        err = usb_control_msg(udev, tx_pipe,
+            USB_CDC_SET_NTB_INPUT_SIZE,
+            USB_TYPE_CLASS | USB_RECIP_INTERFACE | USB_DIR_OUT,
+            0, control_if, b, 4,
+            NCM_CONTROL_TIMEOUT);
+        if (err < 0) {
+            deverr(ctx->ndev, "failed setting NTB input size\n");
+            goto exit;
+        }
+    }
+    
+
+    
+    if (unlikely(ctx->tx_max_ntb < NCM_NTB_MIN_OUT_SIZE)) {
+        deverr(ctx->ndev, "dwNtbOutMaxSize (%u) must be at least "
+            "%u\n", ctx->tx_max_ntb, (u32)NCM_NTB_MIN_OUT_SIZE);
+        err = -EINVAL;
+        goto exit;
+    }
+
+    ctx->bit_mode = NCM_BIT_MODE_16;
+    if (ncm_prefer_32) {
+        if (ctx->formats & NTB_FORMAT_SUPPORTED_32BIT) {
+            ctx->bit_mode = NCM_BIT_MODE_32;
+        }
+        else {
+            devinfo(ctx->ndev, "device does not support 32-bit "
+                "mode, using 16-bit mode\n");
+        }
+    }
+
+    /* The spec defines a USB_CDC_SET_NTB_FORMAT as an optional feature.
+     * The test for 32-bit support is actually a test if the device
+     * implements this request
+     */
+    if (ctx->formats & NTB_FORMAT_SUPPORTED_32BIT) {
+        err = usb_control_msg(udev, tx_pipe,
+            USB_CDC_SET_NTB_FORMAT,
+            USB_TYPE_CLASS | USB_RECIP_INTERFACE | USB_DIR_OUT,
+            ctx->bit_mode, control_if, NULL, 0,
+            NCM_CONTROL_TIMEOUT);
+        if (err < 0) {
+            deverr(ctx->ndev, "failed setting bit-mode\n");
+            goto exit;
+        }
+    }
+
+    ctx->crc_mode = NCM_CRC_MODE_NO;
+    if (ncm_prefer_crc && (net_caps & NCM_NCAP_CRC_MODE)) {
+        ctx->crc_mode = NCM_CRC_MODE_YES;
+        err = usb_control_msg(udev, tx_pipe,
+            USB_CDC_SET_CRC_MODE,
+            USB_TYPE_CLASS | USB_RECIP_INTERFACE | USB_DIR_OUT,
+            NCM_CRC_MODE_YES, control_if, NULL, 0,
+            NCM_CONTROL_TIMEOUT);
+        if (err < 0) {
+            deverr(ctx->ndev, "failed setting crc-mode\n");
+            goto exit;
+        }
+    }
+
+    switch (ctx->bit_mode)
+    {
+    case NCM_BIT_MODE_16:
+        memcpy(&ctx->popts, &ndp16_opts,
+            sizeof (struct ndp_parser_opts_hw));
+        if (ctx->crc_mode == NCM_CRC_MODE_YES){
+            ctx->popts.ndp_sign = NCM_NDP16_CRC_SIGN;
+        }
+        break;
+    case NCM_BIT_MODE_32:
+        memcpy(&ctx->popts, &ndp32_opts,
+            sizeof (struct ndp_parser_opts_hw));
+        if (ctx->crc_mode == NCM_CRC_MODE_YES){
+            ctx->popts.ndp_sign = NCM_NDP32_CRC_SIGN;
+        }
+        break;
+    }
+
+exit:
+    kfree(b);
+    return err;
+#undef NCM_MAX_CONTROL_MSG
+}
+
+/* TODO: add crc support */
+static int cdc_ncm_rx_fixup(struct hw_cdc_net *dev, struct sk_buff *skb)
+{
+#define NCM_BITS(ctx) (((ctx)->bit_mode == NCM_BIT_MODE_16) ? 16 : 32)
+/* Minimal NDP has a header and two entries (each entry has 2 items). */
+#define MIN_NDP_LEN(ndp_hdr_size, item_len) ((ndp_hdr_size) + \
+    2 * 2 * (sizeof(__le16) * (item_len)))
+    struct ncm_ctx        *ctx = dev->ncm_ctx;
+    struct usb_device     *udev = dev->udev;
+    struct ndp_parser_opts_hw    *popts = &ctx->popts;
+    struct sk_buff         *skb2;
+    unsigned        skb_len = skb->len;
+    __le16            *p = (void *)skb->data;
+    __le32            idx;
+    __le16            ndp_len;
+    unsigned        dgram_item_len = popts->dgram_item_len;
+    unsigned         curr_dgram_idx;
+    unsigned         curr_dgram_len;
+    unsigned        next_dgram_idx;
+    unsigned        next_dgram_len;
+
+    u32 rx_len;
+    u32 rep_len;
+    rx_len = skb->len;
+    
+
+
+    if (unlikely(skb_len < popts->nth_size)) {
+        dev_dbg(&udev->dev, "skb len (%u) is shorter than NTH%u len "
+            "(%u)\n", skb_len, NCM_BITS(ctx), popts->nth_size);
+        goto error;
+    }
+
+    if (get_ncm_le32(p) != popts->nth_sign) {
+        dev_dbg(&udev->dev, "corrupt NTH%u signature\n", NCM_BITS(ctx));
+        goto error;
+    }
+    
+    if (get_ncm_le16(p) != popts->nth_size) {
+        dev_dbg(&udev->dev, "wrong NTH%u len\n", NCM_BITS(ctx));
+        goto error;
+    }
+
+    /* skip sequence num */
+    p += 1;
+
+    if (unlikely(get_ncm(&p, popts->block_length) > skb_len)) {
+        dev_dbg(&udev->dev, "bogus NTH%u block length\n",
+            NCM_BITS(ctx));
+        goto error;
+    }
+
+    idx = get_ncm(&p, popts->fp_index);
+    if (unlikely(idx > skb_len)) {
+        dev_dbg(&udev->dev, "NTH%u fp_index (%u) bigger than skb len "
+            "(%u)\n", NCM_BITS(ctx), idx, skb_len);
+        goto error;
+    }
+
+    p = (void *)(skb->data + idx);
+    
+    if (get_ncm_le32(p) != popts->ndp_sign) {
+        dev_dbg(&udev->dev, "corrupt NDP%u signature\n", NCM_BITS(ctx));
+        goto error;
+    }
+
+    ndp_len = get_ncm_le16(p);
+    if (((ndp_len + popts->nth_size) > skb_len)
+        || (ndp_len < (MIN_NDP_LEN(popts->ndp_size, dgram_item_len)))) {
+        dev_dbg(&udev->dev, "bogus NDP%u len (%u)\n", NCM_BITS(ctx),
+            ndp_len);
+        goto error;
+    }
+
+    p += popts->reserved1;
+    /* next_fp_index is defined as reserved in the spec */
+    p += popts->next_fp_index;
+    p += popts->reserved2;
+
+    curr_dgram_idx = get_ncm(&p, dgram_item_len);
+    curr_dgram_len = get_ncm(&p, dgram_item_len);
+    next_dgram_idx = get_ncm(&p, dgram_item_len);
+    next_dgram_len = get_ncm(&p, dgram_item_len);
+
+
+    /* Parse all the datagrams in the NTB except for the last one. Pass
+     * all the parsed datagrams to the networking stack directly
+     */
+    rep_len = 0;
+    while (next_dgram_idx && next_dgram_len) {
+        if (unlikely((curr_dgram_idx + curr_dgram_len) > skb_len)){
+            goto error;
+        }
+        #if 1
+        skb2 = skb_clone(skb, GFP_ATOMIC);
+        if (unlikely(!skb2)){
+            goto error;
+        }
+
+        if (unlikely(!skb_pull(skb2, curr_dgram_idx))){
+            goto error2;
+        }
+        skb_trim(skb2, curr_dgram_len);
+        #else
+        /* create a fresh copy to reduce truesize */
+		skb2 = netdev_alloc_skb_ip_align(dev->net, curr_dgram_len);
+		if (!skb2)
+			goto error;
+		skb_put_data(skb2, skb->data + curr_dgram_idx, curr_dgram_len);
+        #endif
+
+        rep_len += skb2->len;
+        hw_skb_return(dev, skb2);
+
+        curr_dgram_idx = next_dgram_idx;
+        curr_dgram_len = next_dgram_len;
+        next_dgram_idx = get_ncm(&p, dgram_item_len);
+        next_dgram_len = get_ncm(&p, dgram_item_len);
+    }
+
+    /* Update 'skb' to represent the last datagram in the NTB and forward
+     * it to usbnet which in turn will push it up to the networking stack.
+     */
+    if (unlikely((curr_dgram_idx + curr_dgram_len) > skb_len)){
+        goto error;
+    }
+    if (unlikely(!skb_pull(skb, curr_dgram_idx))){
+        goto error;
+    }
+    skb_trim(skb, curr_dgram_len);
+    rep_len += skb->len;
+
+    return 1;
+error2:
+    dev_kfree_skb(skb2);
+error:
+    devdbg(dev,"cdc_ncm_rx_fixup error\n");
+    return 0;
+#undef NCM_BITS
+#undef MIN_NDP_LEN
+}
+
+static inline unsigned ndp_dgram_pad(struct ncm_ctx *ctx, unsigned dgram_off)
+{
+    unsigned rem = dgram_off % ctx->tx_divisor;
+    unsigned tmp = ctx->tx_remainder;
+    if (rem > ctx->tx_remainder){
+        tmp += ctx->tx_divisor;
+    }
+    return tmp - rem;
+}
+
+static inline void ntb_clear(struct ntb *n)
+{
+    n->ndgrams = 0;
+    n->skb = NULL;
+    INIT_LIST_HEAD(&n->entries);
+}
+
+static inline int ntb_init(struct ncm_ctx *ctx, struct ntb *n, unsigned size)
+{
+    struct ndp_parser_opts_hw *popts = &ctx->popts;
+    unsigned dgrams_end;
+
+    n->max_len = size;
+    dgrams_end = popts->nth_size;
+
+    n->ndp_off = ALIGN(dgrams_end, ctx->tx_align);
+    n->ndp_len = popts->ndp_size + 2 * 2 * popts->dgram_item_len;
+    n->dgrams_end = dgrams_end;
+
+    if (NTB_LEN(n)> n->max_len){
+        return -EINVAL;
+    }
+
+    ntb_clear(n);
+    return 0;
+}
+
+static inline int ntb_add_dgram(struct ncm_ctx *ctx, struct ntb *n,
+    unsigned dgram_len, u8 *data, gfp_t flags)
+{
+    struct ndp_parser_opts_hw *popts = &ctx->popts;
+    unsigned new_ndp_off;
+    unsigned new_ndp_len;
+    unsigned new_dgrams_end;
+    unsigned dgram_off;
+    struct ndp_entry *entry;
+
+    dgram_off = n->dgrams_end + ndp_dgram_pad(ctx, n->dgrams_end);
+    new_dgrams_end = dgram_off + dgram_len;
+
+    new_ndp_off = ALIGN(new_dgrams_end, ctx->tx_align);
+    new_ndp_len = n->ndp_len + 2 * 2 * popts->dgram_item_len;
+
+    if ((new_ndp_off + new_ndp_len) > n->max_len){
+        return -EINVAL;
+    }
+
+    /* TODO: optimize to use a kernel lookaside cache (kmem_cache) */
+    entry = kmalloc(sizeof(*entry), flags);
+    if (unlikely(entry == NULL)){
+        return -ENOMEM;
+    }
+
+    entry->idx = dgram_off;
+    entry->len = dgram_len;
+    list_add_tail(&entry->list, &n->entries);
+
+    memcpy(n->skb->data + dgram_off, data, dgram_len);
+
+    n->ndgrams++;
+
+    n->ndp_off = new_ndp_off;
+    n->ndp_len = new_ndp_len;
+    n->dgrams_end = new_dgrams_end;
+
+    return 0;
+}
+
+
+static inline void ntb_free_dgram_list(struct ntb *n)
+{
+    struct list_head *p;
+    struct list_head *tmp;
+
+    list_for_each_safe(p, tmp, &n->entries) {
+        struct ndp_entry *e = list_entry(p, struct ndp_entry, list);
+        list_del(p);
+        kfree(e);
+    }
+}
+
+static struct sk_buff *ntb_finalize(struct ncm_ctx *ctx, struct ntb *n)
+{
+    struct ndp_parser_opts_hw    *popts = &ctx->popts;
+    __le16            *p = (void *)n->skb->data;
+    struct ndp_entry     *entry;
+    struct sk_buff        *skb;
+
+    put_ncm_le32(popts->nth_sign, p);
+    put_ncm_le16(popts->nth_size, p);
+
+    /* TODO: add sequence numbers */
+    put_ncm_le16(0, p);
+
+    put_ncm(&p, popts->block_length, NTB_LEN(n));
+    put_ncm(&p, popts->fp_index, n->ndp_off);
+
+    p = (void *)(n->skb->data + n->ndp_off);
+    memset(p, 0, popts->ndp_size);
+
+    put_ncm_le32(popts->ndp_sign, p);
+    put_ncm_le16(n->ndp_len, p);
+
+    p += popts->reserved1;
+    p += popts->next_fp_index;
+    p += popts->reserved2;
+
+    list_for_each_entry(entry, &n->entries, list) {
+        put_ncm(&p, popts->dgram_item_len, entry->idx);
+        put_ncm(&p, popts->dgram_item_len, entry->len);
+    }
+
+    put_ncm(&p, popts->dgram_item_len, 0);
+    put_ncm(&p, popts->dgram_item_len, 0);
+
+    ntb_free_dgram_list(n);
+    __skb_put(n->skb, NTB_LEN(n));
+
+    skb = n->skb;
+    ntb_clear(n);
+    
+    return skb;
+}
+
+
+static inline struct sk_buff *ncm_get_skb(struct ncm_ctx *ctx)
+{
+    struct sk_buff         *skb = NULL;
+    unsigned         i;
+
+    /* 'skb_shared' will return 0 for an SKB after this SKB was
+     * deallocated by usbnet 
+     */
+    for (i = 0; i < ctx->skb_pool_size && skb_shared(ctx->skb_pool[i]);
+        i++);
+
+    if (likely(i < ctx->skb_pool_size)){
+        skb = skb_get(ctx->skb_pool[i]);
+    }
+
+    if (likely(skb != NULL)){
+        __skb_trim(skb, 0);
+    }
+
+    return skb;
+}
+
+
+/* Must be run with tx_lock held */
+static inline int ncm_init_curr_ntb(struct ncm_ctx *ctx)
+{
+    struct usb_device     *udev = ctx->ndev->udev;
+    int             err;
+
+    err = ntb_init(ctx, &ctx->curr_ntb, ctx->tx_max_ntb);
+    if (unlikely(err < 0)) {
+        dev_dbg(&udev->dev, "error initializing current-NTB with size "
+            "%u\n", ctx->tx_max_ntb);
+        return err;
+    }
+
+    ctx->curr_ntb.skb = ncm_get_skb(ctx);
+    if (unlikely(ctx->curr_ntb.skb == NULL)) {
+        dev_dbg(&udev->dev, "failed getting an SKB from the pool\n");
+        return -ENOMEM;
+    }
+
+    return 0;
+}
+
+
+static inline void ncm_uninit_curr_ntb(struct ncm_ctx *ctx)
+{
+    dev_kfree_skb_any(ctx->curr_ntb.skb);
+    ntb_clear(&ctx->curr_ntb);
+}
+
+
+/* if 'skb' is NULL (timer context), we will finish the current ntb and
+ * return it to usbnet
+ */
+static struct sk_buff * cdc_ncm_tx_fixup(struct hw_cdc_net *dev, struct sk_buff *skb,
+    gfp_t mem_flags)
+{
+    struct ncm_ctx         *ctx = dev->ncm_ctx;
+    struct ntb            *curr_ntb = &ctx->curr_ntb;
+    struct sk_buff         *skb2 = NULL;
+    int             err = 0;
+    unsigned long        flags;
+    unsigned        ndgrams = 0;
+    unsigned        is_skb_added = 0;
+    unsigned        is_curr_ntb_new = 0;
+    u32             sn;
+
+    spin_lock_irqsave(&ctx->tx_lock, flags);
+
+    if (skb == NULL) {
+        /* Timer context */
+        if (NTB_IS_EMPTY(curr_ntb)) {
+            /* we have nothing to send */
+            goto exit;
+        }
+        ndgrams = curr_ntb->ndgrams;
+        skb2 = ntb_finalize(ctx, curr_ntb);
+        goto exit;
+    }
+
+    /* non-timer context */
+    if (NTB_IS_EMPTY(curr_ntb)) {
+        err = ncm_init_curr_ntb(ctx);
+        if (unlikely(err < 0)){
+            goto exit;
+        }
+        is_curr_ntb_new = 1;
+    }
+
+
+    if(skb->len < 128)
+    {
+        sn = be32_to_cpu(*(u32 *)(skb->data + 0x2a));
+        devdbg(dev, "get pc ACK SN:%x  time:%ld-%ld", 
+               sn,current_kernel_time().tv_sec,current_kernel_time().tv_nsec);
+    }
+    else
+    {
+        sn = be32_to_cpu(*(u32 *)(skb->data + 0x26));        
+        devdbg(dev, "get pc PACKETS SN:%x,   time:%ld-%ld", 
+               sn,current_kernel_time().tv_sec,current_kernel_time().tv_nsec);
+    }
+
+    err = ntb_add_dgram(ctx, curr_ntb, skb->len, skb->data, GFP_ATOMIC);
+    switch (err) {
+    case 0:
+        /* The datagram was successfully added to the current-NTB */
+        is_skb_added = 1;
+        if(!ctx->tx_timeout_jiffies)
+        {
+            ndgrams = curr_ntb->ndgrams;
+            skb2 = ntb_finalize(ctx, curr_ntb);    
+        }
+        break;
+    case -EINVAL:
+        /* not enough space in current-NTB */
+        ndgrams = curr_ntb->ndgrams;
+        /* finalize the current-NTB */
+        skb2 = ntb_finalize(ctx, curr_ntb);
+        /* setup a new current-NTB */
+        err = ncm_init_curr_ntb(ctx);
+        if (unlikely(err < 0)){
+            break;
+        }
+
+        is_curr_ntb_new = 1;
+
+        err = ntb_add_dgram(ctx, curr_ntb, skb->len, skb->data,
+            GFP_ATOMIC);
+        if (unlikely(err < 0)) {
+            ncm_uninit_curr_ntb(ctx);
+            break;
+        }
+
+        is_skb_added = 1;
+        break;
+    default:
+        if (is_curr_ntb_new){
+            ncm_uninit_curr_ntb(ctx);
+        }
+        break;
+    }
+
+exit:
+    if (err){
+        devdbg(dev, "tx fixup failed (err %d)\n", err);
+    }
+
+    if (skb){
+        dev_kfree_skb_any(skb);
+    }
+
+    /* When NULL is returned, usbnet will increment the drop count of the
+     * net device. If 'skb' was successfully added to the current-NTB,
+     * decrement the drop-count ahead
+     */
+    if (skb2 == NULL && (is_skb_added || skb == NULL))
+    {
+        if(is_skb_added){
+            dev->stats.tx_dropped--;
+        }
+    }
+    /* If a finished NTB is returned to usbnet, it will add 1 to packet
+     * count. All other packets that we previously 'dropped' by usbnet must
+     * be compensated
+     */
+    if (skb2 != NULL){
+        dev->stats.tx_packets += ndgrams - 1;
+    }
+
+    /* reschedule the timer if successfully added a first datagram to a
+     * newly allocated current-NTB
+     */
+    if (is_curr_ntb_new && is_skb_added && ctx->tx_timeout_jiffies){
+        mod_timer(&ctx->tx_timer, jiffies + ctx->tx_timeout_jiffies);
+    }
+
+    spin_unlock_irqrestore(&ctx->tx_lock, flags);
+
+    return skb2;
+}
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0))
+
+static void ncm_tx_timer_cb(unsigned long param)
+{
+    struct ncm_ctx *ctx = (void *)param;
+
+#else	
+static void ncm_tx_timer_cb(struct timer_list *t)
+{
+    struct ncm_ctx *ctx = from_timer(ctx, t, tx_timer);
+
+#endif	
+    if (!netif_queue_stopped(ctx->ndev->net)){
+        hw_start_xmit(NULL, ctx->ndev->net);
+    }
+
+}
+
+
+int
+hw_cdc_probe (struct usb_interface *udev, const struct usb_device_id *prod)
+{
+    struct hw_cdc_net            *dev;
+    struct net_device        *net;
+    struct usb_host_interface    *interface;
+    struct usb_device        *xdev;
+    int                status;
+    const char            *name;
+
+#if LINUX_VERSION37_LATER
+    struct usb_driver  *driver = NULL;
+
+    if(NULL == udev)
+    {
+        return -EINVAL;
+    }
+
+    driver = to_usb_driver(udev->dev.driver);
+    if(NULL == driver)
+    {
+        return -EINVAL;
+    }
+
+    if (!driver->supports_autosuspend)
+    {
+         driver->supports_autosuspend = 1;
+         pm_runtime_enable(&udev->dev);
+    }
+#endif
+    printk("Meig NCM driver version:%s\n", DRIVER_VERSION);
+//    DECLARE_MAC_BUF(mac);
+    deviceisBalong = false; 
+
+    name = udev->dev.driver->name;
+    xdev = interface_to_usbdev (udev);
+    interface = udev->cur_altsetting;
+
+    usb_get_dev (xdev);
+
+    status = -ENOMEM;
+
+    // set up our own records
+    net = alloc_etherdev(sizeof(*dev));
+    if (!net) {
+        //dbg ("can't kmalloc dev");
+        goto out;
+    }
+
+    dev = netdev_priv(net);
+    dev->udev = xdev;
+    dev->intf = udev;
+
+/* linux kernel > 2.6.37: PowerManager needs disable_depth ==0 */
+#ifdef  CONFIG_PM_RUNTIME
+        if(LINUX_VERSION37_LATER)
+        {
+          dev->intf->dev.power.disable_depth = 0;
+        }
+#endif
+
+
+    dev->driver_name = name;
+    dev->driver_desc = "Meig NCM Ethernet Device";
+    dev->msg_enable = netif_msg_init (msg_level, NETIF_MSG_DRV
+                | NETIF_MSG_PROBE | NETIF_MSG_LINK);
+    skb_queue_head_init (&dev->rxq);
+    skb_queue_head_init (&dev->txq);
+    skb_queue_head_init (&dev->done);
+    dev->bh.func = hw_bh;
+    dev->bh.data = (unsigned long) dev;
+    INIT_WORK (&dev->kevent, kevent);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0))
+    dev->delay.function = hw_bh;
+    dev->delay.data = (unsigned long) dev;
+    init_timer (&dev->delay);
+#else	
+    timer_setup(&dev->delay, hw_bh_timer_call, 0);
+#endif	
+    mutex_init (&dev->phy_mutex);
+
+    dev->net = net;
+    //strcpy (net->name, "eth%d");
+    memcpy (net->dev_addr, node_id, sizeof node_id);
+
+    /* rx and tx sides can use different message sizes;
+     * bind() should set rx_urb_size in that case.
+     */
+    dev->hard_mtu = net->mtu + net->hard_header_len;
+
+#if !(LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30))
+    net->netdev_ops = &hw_netdev_ops;
+#else
+    net->change_mtu = hw_change_mtu;
+    net->get_stats = hw_get_stats;
+    net->hard_start_xmit = hw_start_xmit;
+    net->open = hw_open;
+    net->stop = hw_stop;
+    net->tx_timeout = hw_tx_timeout;
+#endif
+    net->watchdog_timeo = TX_TIMEOUT_JIFFIES;
+    net->ethtool_ops = &hw_ethtool_ops;
+
+    
+    status = hw_cdc_bind (dev, udev);
+    if (status < 0){
+        goto out1;
+    }
+
+    
+    strcpy (net->name, "usb%d"); //name
+    
+
+    /* maybe the remote can't receive an Ethernet MTU */
+    if (net->mtu > (dev->hard_mtu - net->hard_header_len)){
+        net->mtu = dev->hard_mtu - net->hard_header_len;
+    }
+
+    if (status >= 0 && dev->status){
+        status = init_status (dev, udev);
+    }
+    if (status < 0){
+        goto out3;
+    }
+    
+    if (dev->is_ncm){
+           dev->rx_urb_size = dev->ncm_ctx->rx_max_ntb;
+    }else if (!dev->rx_urb_size){
+        dev->rx_urb_size = dev->hard_mtu;
+    }
+
+    dev->maxpacket = usb_maxpacket (dev->udev, dev->out, 1);
+
+    SET_NETDEV_DEV(net, &udev->dev);
+    status = register_netdev (net);
+    if (status){
+        goto out3;
+    }
+    printk("register meig net device:%s\n", net->name);
+    // ok, it's ready to go.
+    usb_set_intfdata (udev, dev);
+
+
+    /*activate the download tlp feature*/
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+	dev->hw_tlp_download_is_actived = 0;//activated failed
+	devdbg(dev, "kernel-4.14.x later default not active tlp");
+#else
+    if (0 < hw_send_tlp_download_request(udev)){
+        devdbg(dev, "%s: The tlp is activated", __FUNCTION__);
+        dev->hw_tlp_download_is_actived = 1;//activated successfully
+    }else{
+        dev->hw_tlp_download_is_actived = 0;//activated failed
+    }
+#endif
+    
+    netif_device_attach (net);
+
+    //kernel_thread(hw_check_conn_status, (void *)net, 0);
+    
+    /*set the carrier off as default*/
+    netif_carrier_off(net);
+
+     if(!deviceisBalong) 
+    {
+        dev->qmi_sync = 0;
+        INIT_DELAYED_WORK(&dev->status_work, hw_cdc_check_status_work);
+            schedule_delayed_work(&dev->status_work, 10*HZ);
+    }
+    //hw_check_conn_status(udev);
+    //
+        
+    return 0;
+
+out3:
+    hw_cdc_unbind (dev, udev);
+out1:
+    free_netdev(net);
+out:
+    usb_put_dev(xdev);
+    return status;
+}
+EXPORT_SYMBOL_GPL(hw_cdc_probe);
+
+/*-------------------------------------------------------------------------*/
+
+/*
+ * suspend the whole driver as soon as the first interface is suspended
+ * resume only when the last interface is resumed
+ */
+
+int hw_suspend (struct usb_interface *intf, pm_message_t message)
+{
+    struct hw_cdc_net        *dev = usb_get_intfdata(intf);
+
+    if (!dev->suspend_count++) {
+        /*
+         * accelerate emptying of the rx and queues, to avoid
+         * having everything error out.
+         */
+        netif_device_detach (dev->net);
+        (void) unlink_urbs (dev, &dev->rxq);
+        (void) unlink_urbs (dev, &dev->txq);
+        /*
+         * reattach so runtime management can use and
+         * wake the device
+         */
+        netif_device_attach (dev->net);
+    }
+    return 0;
+}
+EXPORT_SYMBOL_GPL(hw_suspend);
+
+int hw_resume (struct usb_interface *intf)
+{
+    struct hw_cdc_net        *dev = usb_get_intfdata(intf);
+
+    if (!--dev->suspend_count){
+        tasklet_schedule (&dev->bh);
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL_GPL(hw_resume);
+
+static int hw_cdc_reset_resume(struct usb_interface *intf)
+{
+    return hw_resume (intf);
+}
+
+int hw_send_tlp_download_request(struct usb_interface *intf)
+{
+    struct usb_device *udev = interface_to_usbdev(intf);
+    struct usb_host_interface *interface = intf->cur_altsetting;
+    struct usbdevfs_ctrltransfer req = {0};
+    unsigned char buf[256] = {0};
+    int retval = 0;
+    req.bRequestType = 0xC0;
+    req.bRequest = 0x02;//activating the download tlp feature request
+    req.wIndex = interface->desc.bInterfaceNumber;
+    req.wValue = 1;
+    req.wLength = 1;
+    //req.data = buf;
+    req.timeout = 1000;
+    retval = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), req.bRequest,  
+        req.bRequestType, req.wValue, req.wIndex, 
+                buf, req.wLength, req.timeout);
+    /*check the TLP feature is activated or not, response value 0x01 indicates success*/
+    if (0 < retval && 0x01 == buf[0]){
+        return retval;
+    }else{
+        return 0;
+    }
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+ * probes control interface, claims data interface, collects the bulk
+ * endpoints, activates data interface (if needed), maybe sets MTU.
+ * all pure cdc
+ */
+//int hw_generic_cdc_bind(struct hw_cdc_net *dev, struct usb_interface *intf)
+#define USB_DEVICE_HUAWEI_DATA 0xFF
+static int hw_cdc_bind(struct hw_cdc_net *dev, struct usb_interface *intf)
+{
+    u8                *buf = intf->cur_altsetting->extra;
+    int                len = intf->cur_altsetting->extralen;
+    struct usb_interface_descriptor    *d;
+    struct hw_dev_state        *info = (void *) &dev->data;
+    int                status;
+    struct usb_driver        *driver = driver_of(intf);
+    int i;
+    struct ncm_ctx *ctx = NULL;
+
+    devdbg(dev, "hw_cdc_bind enter\n");
+    
+    if (sizeof dev->data < sizeof *info){
+        return -EDOM;
+    }
+
+    dev->ncm_ctx = NULL;
+    dev->is_ncm = is_ncm_interface(intf);
+
+    if(dev->is_ncm)
+    {
+        devdbg(dev, "this is ncm interface\n");
+        dev->ncm_ctx = kzalloc(sizeof(struct ncm_ctx), GFP_KERNEL);
+        if (dev->ncm_ctx == NULL){
+            return -ENOMEM;
+        }
+        ctx = dev->ncm_ctx;
+        ctx->ndev = dev;
+
+        spin_lock_init(&ctx->tx_lock);
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0))
+        ctx->tx_timer.function = ncm_tx_timer_cb;
+        ctx->tx_timer.data = (unsigned long)ctx;
+        init_timer(&ctx->tx_timer);
+#else
+        timer_setup(&ctx->tx_timer, ncm_tx_timer_cb, 0);
+#endif		
+
+
+    if(ncm_tx_timeout){
+            ctx->tx_timeout_jiffies = msecs_to_jiffies(ncm_tx_timeout);
+    }else{
+        ctx->tx_timeout_jiffies = 0;
+    }
+
+    devdbg(dev,"ctx->tx_timeout_jiffies:%ld",ctx->tx_timeout_jiffies);
+    }
+
+    
+    memset(info, 0, sizeof *info);
+    info->control = intf;
+    while (len > 3) {
+        if (buf [1] != USB_DT_CS_INTERFACE){
+            goto next_desc;
+        }
+
+        switch (buf [2]) {
+        case USB_CDC_HEADER_TYPE:
+            if (info->header) {
+                dev_dbg(&intf->dev, "extra CDC header\n");
+                goto bad_desc;
+            }
+            info->header = (void *) buf;
+            if (info->header->bLength != sizeof *info->header) {
+                dev_dbg(&intf->dev, "CDC header len %u\n",
+                    info->header->bLength);
+                goto bad_desc;
+            }
+            break;
+        case USB_CDC_UNION_TYPE:
+            if (info->u) {
+                dev_dbg(&intf->dev, "extra CDC union\n");
+                goto bad_desc;
+            }
+            info->u = (void *) buf;
+            if (info->u->bLength != sizeof *info->u) {
+                dev_dbg(&intf->dev, "CDC union len %u\n",
+                    info->u->bLength);
+                goto bad_desc;
+            }
+
+            /* we need a master/control interface (what we're
+             * probed with) and a slave/data interface; union
+             * descriptors sort this all out.
+             */
+            info->control = usb_ifnum_to_if(dev->udev,
+                        info->u->bMasterInterface0);
+            info->data = usb_ifnum_to_if(dev->udev,
+                        info->u->bSlaveInterface0);
+            if (!info->control || !info->data) {
+                dev_dbg(&intf->dev,
+                    "master #%u/%p slave #%u/%p\n",
+                    info->u->bMasterInterface0,
+                    info->control,
+                    info->u->bSlaveInterface0,
+                    info->data);
+                goto bad_desc;
+            }
+            if (info->control != intf) {
+                dev_dbg(&intf->dev, "bogus CDC Union\n");
+                /* Ambit USB Cable Modem (and maybe others)
+                 * interchanges master and slave interface.
+                 */
+                if (info->data == intf) {
+                    info->data = info->control;
+                    info->control = intf;
+                } else{
+                    goto bad_desc;
+                }
+            }
+        
+		    
+            /*For Jungo solution, the NDIS device has no data interface, so needn't detect data interface*/
+            if ((HW_JUNGO_BCDDEVICE_VALUE != dev->udev->descriptor.bcdDevice 
+             && BINTERFACESUBCLASS != intf->cur_altsetting->desc.bInterfaceSubClass
+        	 && BINTERFACESUBCLASS_HW != intf->cur_altsetting->desc.bInterfaceSubClass)
+	         || ((NULL != info->u)&&(info->u->bMasterInterface0 != info->u->bSlaveInterface0)))
+           {
+			            printk("L[%d]",__LINE__);
+                /* a data interface altsetting does the real i/o */
+                d = &info->data->cur_altsetting->desc;
+            //if (d->bInterfaceClass != USB_CLASS_CDC_DATA) { /*delete the standard CDC slave class detect*/
+            if (d->bInterfaceClass !=  USB_DEVICE_HUAWEI_DATA 
+             && d->bInterfaceClass != USB_CLASS_CDC_DATA) {  
+               /*Add to detect CDC slave class either Huawei defined or standard*/
+                    dev_dbg(&intf->dev, "slave class %u\n",
+                        d->bInterfaceClass);
+                    goto bad_desc;
+                }
+            }
+            break;
+        case USB_CDC_ETHERNET_TYPE:
+            if (info->ether) {
+                dev_dbg(&intf->dev, "extra CDC ether\n");
+                goto bad_desc;
+            }
+            info->ether = (void *) buf;
+            if (info->ether->bLength != sizeof *info->ether) {
+                dev_dbg(&intf->dev, "CDC ether len %u\n",
+                    info->ether->bLength);
+                goto bad_desc;
+            }
+            dev->hard_mtu = le16_to_cpu(
+                        info->ether->wMaxSegmentSize);
+            /* because of Zaurus, we may be ignoring the host
+             * side link address we were given.
+             */
+            break;
+        case USB_CDC_NCM_TYPE:
+            if (dev->ncm_ctx->ncm_desc){
+                dev_dbg(&intf->dev, "extra NCM descriptor\n");
+            }else{
+                dev->ncm_ctx->ncm_desc = (void *)buf;
+            }
+            break;
+        }
+next_desc:
+        len -= buf [0];    /* bLength */
+        buf += buf [0];
+    }
+
+    if (!info->header || !info->u || (!dev->is_ncm &&!info->ether) ||
+        (dev->is_ncm && !dev->ncm_ctx->ncm_desc)) {
+        dev_dbg(&intf->dev, "missing cdc %s%s%s%sdescriptor\n",
+            info->header ? "" : "header ",
+            info->u ? "" : "union ",
+            info->ether ? "" : "ether ",
+            dev->ncm_ctx->ncm_desc ? "" : "ncm ");
+        goto bad_desc;
+    }
+    if(dev->is_ncm)
+    {
+        ctx = dev->ncm_ctx;
+        ctx->control = info->control;
+        ctx->data = info->data;
+        status = cdc_ncm_config(ctx);
+        if (status < 0){
+            goto error2;
+        }
+
+        dev->rx_urb_size = ctx->rx_max_ntb;
+
+        /* We must always have one spare SKB for the current-NTB (of which
+         * usbnet has no account)
+         */
+        ctx->skb_pool_size = TX_QLEN_NCM;
+
+        ctx->skb_pool = kzalloc(sizeof(struct sk_buff *) * ctx->skb_pool_size,
+            GFP_KERNEL);
+        if (ctx->skb_pool == NULL) {
+            dev_dbg(&intf->dev, "failed allocating the SKB pool\n");
+            goto error2;
+        }
+
+        for (i = 0; i < ctx->skb_pool_size; i++) {
+            ctx->skb_pool[i] = alloc_skb(ctx->tx_max_ntb, GFP_KERNEL);
+            if (ctx->skb_pool[i] == NULL) {
+                dev_dbg(&intf->dev, "failed allocating an SKB for the "
+                    "SKB pool\n");
+                goto error3;
+            }
+        }
+        
+        ntb_clear(&ctx->curr_ntb);
+    
+    }
+
+    
+    /*if the NDIS device is not Jungo solution, then assume that it has the data interface, and claim for it*/
+    if ((HW_JUNGO_BCDDEVICE_VALUE != dev->udev->descriptor.bcdDevice 
+     && BINTERFACESUBCLASS != intf->cur_altsetting->desc.bInterfaceSubClass
+	 && BINTERFACESUBCLASS_HW != intf->cur_altsetting->desc.bInterfaceSubClass)
+	 || ((NULL != info->u)&&(info->u->bMasterInterface0 != info->u->bSlaveInterface0)))
+
+    {
+        /* claim data interface and set it up ... with side effects.
+          * network traffic can't flow until an altsetting is enabled.
+          */
+          
+        
+        if(info->data->dev.driver != NULL)
+        {
+            usb_driver_release_interface(driver, info->data);
+        }
+                
+
+        status = usb_driver_claim_interface(driver, info->data, dev);
+        if (status < 0){
+            return status;
+        }
+    }
+
+    status = hw_get_endpoints(dev, info->data);
+    if (status < 0) {
+        /* ensure immediate exit from hw_disconnect */
+        goto error3;
+    }
+
+    /* status endpoint: optional for CDC Ethernet, */
+    dev->status = NULL;
+
+    if (HW_JUNGO_BCDDEVICE_VALUE == dev->udev->descriptor.bcdDevice 
+     || BINTERFACESUBCLASS == intf->cur_altsetting->desc.bInterfaceSubClass 
+	 || BINTERFACESUBCLASS_HW == intf->cur_altsetting->desc.bInterfaceSubClass 
+     || info->control->cur_altsetting->desc.bNumEndpoints == 1
+	 || ((NULL != info->u)&&(info->u->bMasterInterface0 == info->u->bSlaveInterface0)))
+    {
+        struct usb_endpoint_descriptor    *desc;
+        dev->status = &info->control->cur_altsetting->endpoint [0];
+        desc = &dev->status->desc;
+        if (((desc->bmAttributes  & USB_ENDPOINT_XFERTYPE_MASK) != USB_ENDPOINT_XFER_INT)
+                || ((desc->bEndpointAddress & USB_ENDPOINT_DIR_MASK) != USB_DIR_IN)
+                || (le16_to_cpu(desc->wMaxPacketSize)
+                    < sizeof(struct usb_cdc_notification))
+                || !desc->bInterval) {
+            printk(KERN_ERR"fxz-%s:bad notification endpoint\n", __func__);
+            dev->status = NULL;
+        }
+    }
+	
+	 
+     if ((HW_JUNGO_BCDDEVICE_VALUE != dev->udev->descriptor.bcdDevice 
+     && BINTERFACESUBCLASS != intf->cur_altsetting->desc.bInterfaceSubClass
+	 && BINTERFACESUBCLASS_HW != intf->cur_altsetting->desc.bInterfaceSubClass)
+	 || ((NULL != info->u)&&(info->u->bMasterInterface0 != info->u->bSlaveInterface0))) {
+	     printk(KERN_ERR"Qualcomm device bcdDevice=%x,InterfaceSubClass=%x\n",
+		        dev->udev->descriptor.bcdDevice,intf->cur_altsetting->desc.bInterfaceSubClass);
+	     deviceisBalong = false;
+	 }else{
+	     deviceisBalong = true;
+	     printk(KERN_ERR"Balong device bcdDevice=%x,InterfaceSubClass=%x\n",
+	     dev->udev->descriptor.bcdDevice,intf->cur_altsetting->desc.bInterfaceSubClass);
+	 }
+	 
+
+    return hw_get_ethernet_addr(dev);
+    
+error3:
+    if(dev->is_ncm){
+        for ( i = 0; i < ctx->skb_pool_size && ctx->skb_pool[i]; i++){
+            dev_kfree_skb_any(ctx->skb_pool[i]);
+        }
+        kfree(ctx->skb_pool);
+    }
+error2:
+    /* ensure immediate exit from cdc_disconnect */
+    usb_set_intfdata(info->data, NULL);
+    usb_driver_release_interface(driver_of(intf), info->data);
+
+    if(dev->ncm_ctx){
+        kfree(dev->ncm_ctx);    
+    }
+    return status;  
+
+bad_desc:
+    devinfo(dev, "bad CDC descriptors\n");
+    return -ENODEV;
+}
+
+void hw_cdc_unbind(struct hw_cdc_net *dev, struct usb_interface *intf)
+{
+    struct hw_dev_state        *info = (void *) &dev->data;
+    struct usb_driver        *driver = driver_of(intf);
+    int i;
+
+    /* disconnect master --> disconnect slave */
+    if (intf == info->control && info->data) {
+        /* ensure immediate exit from usbnet_disconnect */
+        usb_set_intfdata(info->data, NULL);
+        usb_driver_release_interface(driver, info->data);
+        info->data = NULL;
+    }
+
+    /* and vice versa (just in case) */
+    else if (intf == info->data && info->control) {
+        /* ensure immediate exit from usbnet_disconnect */
+        usb_set_intfdata(info->control, NULL);
+        usb_driver_release_interface(driver, info->control);
+        info->control = NULL;
+    }
+    if(dev->is_ncm && dev->ncm_ctx){
+        del_timer_sync(&dev->ncm_ctx->tx_timer);
+
+        ntb_free_dgram_list(&dev->ncm_ctx->curr_ntb);
+        for (i = 0; i < dev->ncm_ctx->skb_pool_size; i++){
+            dev_kfree_skb_any(dev->ncm_ctx->skb_pool[i]);
+        }
+        kfree(dev->ncm_ctx->skb_pool);
+        kfree(dev->ncm_ctx);
+        dev->ncm_ctx = NULL;
+    }
+    
+    
+}
+EXPORT_SYMBOL_GPL(hw_cdc_unbind);
+
+
+/*-------------------------------------------------------------------------
+ *
+ * Communications Device Class, Ethernet Control model
+ *
+ * Takes two interfaces.  The DATA interface is inactive till an altsetting
+ * is selected.  Configuration data includes class descriptors.  There's
+ * an optional status endpoint on the control interface.
+ *
+ * This should interop with whatever the 2.4 "CDCEther.c" driver
+ * (by Brad Hards) talked with, with more functionality.
+ *
+ *-------------------------------------------------------------------------*/
+
+static void dumpspeed(struct hw_cdc_net *dev, __le32 *speeds)
+{
+    if (netif_msg_timer(dev)){
+        devinfo(dev, "link speeds: %u kbps up, %u kbps down",
+            __le32_to_cpu(speeds[0]) / 1000,
+        __le32_to_cpu(speeds[1]) / 1000);
+    }
+}
+
+static inline int hw_get_ethernet_addr(struct hw_cdc_net *dev)
+{
+
+    dev->net->dev_addr[0] = 0x00;
+    dev->net->dev_addr[1] = 0x1e;
+
+    dev->net->dev_addr[2] = 0x10;
+    dev->net->dev_addr[3] = 0x1f;
+    dev->net->dev_addr[4] = 0x00;
+    dev->net->dev_addr[5] = 0x01;/*change 0x04 into 0x01 20100129*/
+
+    return 0;
+}
+
+
+enum {WRITE_REQUEST = 0x21, READ_RESPONSE = 0xa1};
+#define HW_CDC_OK 0
+#define HW_CDC_FAIL -1
+/*-------------------------------------------------------------------------*/
+/*The ioctl is called to send the qmi request to the device 
+  * or get the qmi response from the device*/
+static int hw_cdc_ioctl (struct usb_interface *intf, unsigned int code,
+            void *buf)
+{
+    struct usb_device *udev = interface_to_usbdev(intf);
+    struct hw_cdc_net *hwnet = (struct hw_cdc_net *)dev_get_drvdata(&intf->dev);
+    struct usb_host_interface *interface = intf->cur_altsetting;
+    struct usbdevfs_ctrltransfer *req = (struct usbdevfs_ctrltransfer *)buf;
+    char *pbuf = NULL;
+    int ret = -1;
+    if (!deviceisBalong) 
+    {
+        if (1 == hwnet->qmi_sync) {
+            deverr(hwnet, "%s: The ndis port is busy.", __FUNCTION__);
+            return HW_CDC_FAIL;
+        }
+    }
+
+    if (USBDEVFS_CONTROL != code || NULL == req){
+        deverr(hwnet, "%s: The request is not supported.", __FUNCTION__);
+        return HW_CDC_FAIL;
+    }
+
+    if (0 < req->wLength){
+        pbuf = (char *)kmalloc(req->wLength + 1, GFP_KERNEL);
+        if (NULL == pbuf){
+            deverr(hwnet, "%s: Kmalloc the buffer failed.", __FUNCTION__);
+            return HW_CDC_FAIL;
+        }
+        memset(pbuf, 0, req->wLength);
+    }
+
+    switch (req->bRequestType)
+    {
+        case WRITE_REQUEST:
+        {
+            if (NULL != req->data && 0 < req->wLength){
+                if (copy_from_user(pbuf, req->data, req->wLength)){
+                    deverr(hwnet, "usbnet_cdc_ioctl: copy_from_user failed");
+                    goto op_error;
+                }
+               pbuf[req->wLength] = 0;
+               ret = usb_control_msg(udev, usb_sndctrlpipe(udev, 0), req->bRequest,
+                     req->bRequestType, req->wValue, interface->desc.bInterfaceNumber,
+                     pbuf, req->wLength, req->timeout);
+            }else{
+                pbuf = NULL;
+                req->wLength = 0;
+            }
+            break;
+        }
+        case READ_RESPONSE:
+        {
+            if (NULL == req->data || 0 >= req->wLength || NULL == pbuf){
+                deverr(hwnet, "%s: The buffer is null, can not read the response.",
+                       __FUNCTION__);
+                goto op_error;
+            }
+            ret = usb_control_msg(udev, 
+                                  usb_rcvctrlpipe(udev, 0), 
+                                  req->bRequest, 
+                                  req->bRequestType, 
+                                  req->wValue, 
+                                  interface->desc.bInterfaceNumber, 
+                                  pbuf, 
+                                  req->wLength, 
+                                  req->timeout);
+
+            if (0 < ret){
+                    if (!deviceisBalong){
+                    /*check the connection indication*/
+                    if (0x04 == pbuf[6] && 0x22 == pbuf[9] && 0x00 == pbuf[10]){
+                        if (0x02 == pbuf[16]){
+                            if (hwnet){
+                                netif_carrier_on(hwnet->net);
+                            }
+                            }else{
+                                if (hwnet){
+                                    netif_carrier_off(hwnet->net);
+                            }
+                        }
+                    }
+                }
+                if (copy_to_user(req->data, pbuf, req->wLength)){
+                    deverr(hwnet, "%s: copy_from_user failed", __FUNCTION__);
+                    goto op_error;
+                }    
+            }
+            break;
+        }
+        default:
+            break;
+    }
+
+    if (NULL != pbuf){
+        kfree(pbuf);
+        pbuf = NULL;
+    }
+
+    return HW_CDC_OK;
+
+op_error:
+    if (NULL != pbuf){
+        kfree(pbuf);
+        pbuf = NULL;
+    }
+    return HW_CDC_FAIL;
+
+}
+
+/*
+ *#define    HUAWEI_ETHER_INTERFACE \
+ *    .bInterfaceClass    = USB_CLASS_COMM, \
+ *    .bInterfaceSubClass    = USB_CDC_SUBCLASS_ETHERNET, \
+ *    .bInterfaceProtocol    = USB_CDC_PROTO_NONE
+ */
+
+
+#define    HUAWEI_NDIS_INTERFACE \
+    .bInterfaceClass    = USB_CLASS_COMM, \
+    .bInterfaceSubClass    = USB_CDC_SUBCLASS_ETHERNET, \
+    .bInterfaceProtocol    = 0xff
+
+#define    HUAWEI_NCM_INTERFACE \
+    .bInterfaceClass    = USB_CLASS_COMM, \
+    .bInterfaceSubClass    = 0x0d, \
+    .bInterfaceProtocol    = 0xff
+
+#define    HUAWEI_NCM_INTERFACE2 \
+    .bInterfaceClass    = USB_CLASS_COMM, \
+    .bInterfaceSubClass    = 0x0d, \
+    .bInterfaceProtocol    = 0x00
+
+
+
+#define    HUAWEI_NDIS_OPTIMIZED_INTERFACE \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x09
+    
+
+#define    HUAWEI_NDIS_OPTIMIZED_INTERFACE_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x09
+
+
+#define    HUAWEI_NDIS_OPTIMIZED_INTERFACE_VDF \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x39
+    
+
+#define    HUAWEI_NDIS_OPTIMIZED_INTERFACE_VDF_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x39
+
+
+#define    HUAWEI_NDIS_SINGLE_INTERFACE \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x07
+    
+
+#define    HUAWEI_NDIS_SINGLE_INTERFACE_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x07
+
+  
+#define    HUAWEI_NDIS_SINGLE_INTERFACE_VDF \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x37    
+    
+
+#define    HUAWEI_NDIS_SINGLE_INTERFACE_VDF_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x37
+
+
+#define    HUAWEI_NCM_OPTIMIZED_INTERFACE \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x16
+    
+
+#define    HUAWEI_NCM_OPTIMIZED_INTERFACE_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x16
+    
+
+#define    HUAWEI_NCM_OPTIMIZED_INTERFACE_VDF \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x46
+    
+#define    HUAWEI_NCM_OPTIMIZED_INTERFACE_VDF_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x46
+    
+
+#define    HUAWEI_INTERFACE_NDIS_NO_3G_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x11
+    
+#define    HUAWEI_INTERFACE_NDIS_NO_3G_QUALCOMM \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x11
+    
+
+#define    HUAWEI_INTERFACE_NDIS_HW_QUALCOMM \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x67
+    
+#define    HUAWEI_INTERFACE_NDIS_CONTROL_QUALCOMM \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x69
+
+#define    HUAWEI_INTERFACE_NDIS_NCM_QUALCOMM \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x01, \
+    .bInterfaceProtocol    = 0x76
+    
+#define    HUAWEI_INTERFACE_NDIS_HW_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x67
+    
+#define    HUAWEI_INTERFACE_NDIS_CONTROL_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x69
+
+#define    HUAWEI_INTERFACE_NDIS_NCM_JUNGO \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x02, \
+    .bInterfaceProtocol    = 0x76
+
+
+#define    HUAWEI_NDIS_OPTIMIZED_INTERFACE_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x09
+
+
+#define    HUAWEI_NDIS_OPTIMIZED_INTERFACE_VDF_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x39
+
+#define    HUAWEI_NDIS_SINGLE_INTERFACE_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x07
+    
+#define    HUAWEI_NDIS_SINGLE_INTERFACE_VDF_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x37
+    
+#define    HUAWEI_NCM_OPTIMIZED_INTERFACE_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x16
+    
+#define    HUAWEI_NCM_OPTIMIZED_INTERFACE_VDF_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x46
+    
+#define    HUAWEI_INTERFACE_NDIS_NO_3G_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x11
+    
+    
+#define    HUAWEI_INTERFACE_NDIS_HW_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x67
+    
+#define    HUAWEI_INTERFACE_NDIS_CONTROL_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x69
+
+#define    HUAWEI_INTERFACE_NDIS_NCM_JUNGO_HW \
+    .bInterfaceClass    = 0xFF, \
+    .bInterfaceSubClass    = 0x03, \
+    .bInterfaceProtocol    = 0x76
