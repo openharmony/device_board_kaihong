@@ -597,3 +597,618 @@ ssize_t mipi_dsi_picture_parameter_set(struct mipi_dsi_device *dsi,
 
 	return (ret < 0) ? ret : 0;
 }
+EXPORT_SYMBOL(mipi_dsi_picture_parameter_set);
+
+/**
+ * mipi_dsi_generic_write() - transmit data using a generic write packet
+ * @dsi: DSI peripheral device
+ * @payload: buffer containing the payload
+ * @size: size of payload buffer
+ *
+ * This function will automatically choose the right data type depending on
+ * the payload length.
+ *
+ * Return: The number of bytes transmitted on success or a negative error code
+ * on failure.
+ */
+ssize_t mipi_dsi_generic_write(struct mipi_dsi_device *dsi, const void *payload,
+			       size_t size)
+{
+	struct mipi_dsi_msg msg = {
+		.channel = dsi->channel,
+		.tx_buf = payload,
+		.tx_len = size
+	};
+
+	switch (size) {
+	case 0:
+		msg.type = MIPI_DSI_GENERIC_SHORT_WRITE_0_PARAM;
+		break;
+
+	case 1:
+		msg.type = MIPI_DSI_GENERIC_SHORT_WRITE_1_PARAM;
+		break;
+
+	case 2:
+		msg.type = MIPI_DSI_GENERIC_SHORT_WRITE_2_PARAM;
+		break;
+
+	default:
+		msg.type = MIPI_DSI_GENERIC_LONG_WRITE;
+		break;
+	}
+
+	return mipi_dsi_device_transfer(dsi, &msg);
+}
+EXPORT_SYMBOL(mipi_dsi_generic_write);
+
+/**
+ * mipi_dsi_generic_read() - receive data using a generic read packet
+ * @dsi: DSI peripheral device
+ * @params: buffer containing the request parameters
+ * @num_params: number of request parameters
+ * @data: buffer in which to return the received data
+ * @size: size of receive buffer
+ *
+ * This function will automatically choose the right data type depending on
+ * the number of parameters passed in.
+ *
+ * Return: The number of bytes successfully read or a negative error code on
+ * failure.
+ */
+ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
+			      size_t num_params, void *data, size_t size)
+{
+	struct mipi_dsi_msg msg = {
+		.channel = dsi->channel,
+		.tx_len = num_params,
+		.tx_buf = params,
+		.rx_len = size,
+		.rx_buf = data
+	};
+
+	switch (num_params) {
+	case 0:
+		msg.type = MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM;
+		break;
+
+	case 1:
+		msg.type = MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM;
+		break;
+
+	case 2:
+		msg.type = MIPI_DSI_GENERIC_READ_REQUEST_2_PARAM;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return mipi_dsi_device_transfer(dsi, &msg);
+}
+EXPORT_SYMBOL(mipi_dsi_generic_read);
+
+/**
+ * mipi_dsi_dcs_write_buffer() - transmit a DCS command with payload
+ * @dsi: DSI peripheral device
+ * @data: buffer containing data to be transmitted
+ * @len: size of transmission buffer
+ *
+ * This function will automatically choose the right data type depending on
+ * the command payload length.
+ *
+ * Return: The number of bytes successfully transmitted or a negative error
+ * code on failure.
+ */
+ssize_t mipi_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
+				  const void *data, size_t len)
+{
+	struct mipi_dsi_msg msg = {
+		.channel = dsi->channel,
+		.tx_buf = data,
+		.tx_len = len
+	};
+
+	switch (len) {
+	case 0:
+		return -EINVAL;
+
+	case 1:
+		msg.type = MIPI_DSI_DCS_SHORT_WRITE;
+		break;
+
+	case 2:
+		msg.type = MIPI_DSI_DCS_SHORT_WRITE_PARAM;
+		break;
+
+	default:
+		msg.type = MIPI_DSI_DCS_LONG_WRITE;
+		break;
+	}
+
+	return mipi_dsi_device_transfer(dsi, &msg);
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_write_buffer);
+
+/**
+ * mipi_dsi_dcs_write() - send DCS write command
+ * @dsi: DSI peripheral device
+ * @cmd: DCS command
+ * @data: buffer containing the command payload
+ * @len: command payload length
+ *
+ * This function will automatically choose the right data type depending on
+ * the command payload length.
+ *
+ * Return: The number of bytes successfully transmitted or a negative error
+ * code on failure.
+ */
+ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
+			   const void *data, size_t len)
+{
+	ssize_t err;
+	size_t size;
+	u8 stack_tx[8];
+	u8 *tx;
+
+	size = 1 + len;
+	if (len > ARRAY_SIZE(stack_tx) - 1) {
+		tx = kmalloc(size, GFP_KERNEL);
+		if (!tx)
+			return -ENOMEM;
+	} else {
+		tx = stack_tx;
+	}
+
+	/* concatenate the DCS command byte and the payload */
+	tx[0] = cmd;
+	if (data)
+		memcpy(&tx[1], data, len);
+
+	err = mipi_dsi_dcs_write_buffer(dsi, tx, size);
+
+	if (tx != stack_tx)
+		kfree(tx);
+
+	return err;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_write);
+
+/**
+ * mipi_dsi_dcs_read() - send DCS read request command
+ * @dsi: DSI peripheral device
+ * @cmd: DCS command
+ * @data: buffer in which to receive data
+ * @len: size of receive buffer
+ *
+ * Return: The number of bytes read or a negative error code on failure.
+ */
+ssize_t mipi_dsi_dcs_read(struct mipi_dsi_device *dsi, u8 cmd, void *data,
+			  size_t len)
+{
+	struct mipi_dsi_msg msg = {
+		.channel = dsi->channel,
+		.type = MIPI_DSI_DCS_READ,
+		.tx_buf = &cmd,
+		.tx_len = 1,
+		.rx_buf = data,
+		.rx_len = len
+	};
+
+	return mipi_dsi_device_transfer(dsi, &msg);
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_read);
+
+/**
+ * mipi_dsi_dcs_nop() - send DCS nop packet
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_nop(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_NOP, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_nop);
+
+/**
+ * mipi_dsi_dcs_soft_reset() - perform a software reset of the display module
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_soft_reset(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SOFT_RESET, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_soft_reset);
+
+/**
+ * mipi_dsi_dcs_get_power_mode() - query the display module's current power
+ *    mode
+ * @dsi: DSI peripheral device
+ * @mode: return location for the current power mode
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_get_power_mode(struct mipi_dsi_device *dsi, u8 *mode)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_read(dsi, MIPI_DCS_GET_POWER_MODE, mode,
+				sizeof(*mode));
+	if (err <= 0) {
+		if (err == 0)
+			err = -ENODATA;
+
+		return err;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_get_power_mode);
+
+/**
+ * mipi_dsi_dcs_get_pixel_format() - gets the pixel format for the RGB image
+ *    data used by the interface
+ * @dsi: DSI peripheral device
+ * @format: return location for the pixel format
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_get_pixel_format(struct mipi_dsi_device *dsi, u8 *format)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_read(dsi, MIPI_DCS_GET_PIXEL_FORMAT, format,
+				sizeof(*format));
+	if (err <= 0) {
+		if (err == 0)
+			err = -ENODATA;
+
+		return err;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_get_pixel_format);
+
+/**
+ * mipi_dsi_dcs_enter_sleep_mode() - disable all unnecessary blocks inside the
+ *    display module except interface communication
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_enter_sleep_mode(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_ENTER_SLEEP_MODE, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_enter_sleep_mode);
+
+/**
+ * mipi_dsi_dcs_exit_sleep_mode() - enable all blocks inside the display
+ *    module
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_exit_sleep_mode(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_EXIT_SLEEP_MODE, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_exit_sleep_mode);
+
+/**
+ * mipi_dsi_dcs_set_display_off() - stop displaying the image data on the
+ *    display device
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_set_display_off(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_OFF, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_display_off);
+
+/**
+ * mipi_dsi_dcs_set_display_on() - start displaying the image data on the
+ *    display device
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure
+ */
+int mipi_dsi_dcs_set_display_on(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_ON, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_display_on);
+
+/**
+ * mipi_dsi_dcs_set_column_address() - define the column extent of the frame
+ *    memory accessed by the host processor
+ * @dsi: DSI peripheral device
+ * @start: first column of frame memory
+ * @end: last column of frame memory
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_set_column_address(struct mipi_dsi_device *dsi, u16 start,
+				    u16 end)
+{
+	u8 payload[4] = { start >> 8, start & 0xff, end >> 8, end & 0xff };
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_COLUMN_ADDRESS, payload,
+				 sizeof(payload));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_column_address);
+
+/**
+ * mipi_dsi_dcs_set_page_address() - define the page extent of the frame
+ *    memory accessed by the host processor
+ * @dsi: DSI peripheral device
+ * @start: first page of frame memory
+ * @end: last page of frame memory
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_set_page_address(struct mipi_dsi_device *dsi, u16 start,
+				  u16 end)
+{
+	u8 payload[4] = { start >> 8, start & 0xff, end >> 8, end & 0xff };
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_PAGE_ADDRESS, payload,
+				 sizeof(payload));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_page_address);
+
+/**
+ * mipi_dsi_dcs_set_tear_off() - turn off the display module's Tearing Effect
+ *    output signal on the TE signal line
+ * @dsi: DSI peripheral device
+ *
+ * Return: 0 on success or a negative error code on failure
+ */
+int mipi_dsi_dcs_set_tear_off(struct mipi_dsi_device *dsi)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_TEAR_OFF, NULL, 0);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_off);
+
+/**
+ * mipi_dsi_dcs_set_tear_on() - turn on the display module's Tearing Effect
+ *    output signal on the TE signal line.
+ * @dsi: DSI peripheral device
+ * @mode: the Tearing Effect Output Line mode
+ *
+ * Return: 0 on success or a negative error code on failure
+ */
+int mipi_dsi_dcs_set_tear_on(struct mipi_dsi_device *dsi,
+			     enum mipi_dsi_dcs_tear_mode mode)
+{
+	u8 value = mode;
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_TEAR_ON, &value,
+				 sizeof(value));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_on);
+
+/**
+ * mipi_dsi_dcs_set_pixel_format() - sets the pixel format for the RGB image
+ *    data used by the interface
+ * @dsi: DSI peripheral device
+ * @format: pixel format
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_set_pixel_format(struct mipi_dsi_device *dsi, u8 format)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_PIXEL_FORMAT, &format,
+				 sizeof(format));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_pixel_format);
+
+/**
+ * mipi_dsi_dcs_set_tear_scanline() - set the scanline to use as trigger for
+ *    the Tearing Effect output signal of the display module
+ * @dsi: DSI peripheral device
+ * @scanline: scanline to use as trigger
+ *
+ * Return: 0 on success or a negative error code on failure
+ */
+int mipi_dsi_dcs_set_tear_scanline(struct mipi_dsi_device *dsi, u16 scanline)
+{
+	u8 payload[2] = { scanline >> 8, scanline & 0xff };
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_TEAR_SCANLINE, payload,
+				 sizeof(payload));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_scanline);
+
+/**
+ * mipi_dsi_dcs_set_display_brightness() - sets the brightness value of the
+ *    display
+ * @dsi: DSI peripheral device
+ * @brightness: brightness value
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_set_display_brightness(struct mipi_dsi_device *dsi,
+					u16 brightness)
+{
+	u8 payload[2] = { brightness & 0xff, brightness >> 8 };
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
+				 payload, sizeof(payload));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_display_brightness);
+
+/**
+ * mipi_dsi_dcs_get_display_brightness() - gets the current brightness value
+ *    of the display
+ * @dsi: DSI peripheral device
+ * @brightness: brightness value
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_get_display_brightness(struct mipi_dsi_device *dsi,
+					u16 *brightness)
+{
+	ssize_t err;
+
+	err = mipi_dsi_dcs_read(dsi, MIPI_DCS_GET_DISPLAY_BRIGHTNESS,
+				brightness, sizeof(*brightness));
+	if (err <= 0) {
+		if (err == 0)
+			err = -ENODATA;
+
+		return err;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_get_display_brightness);
+
+static int mipi_dsi_drv_probe(struct device *dev)
+{
+	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+
+	return drv->probe(dsi);
+}
+
+static int mipi_dsi_drv_remove(struct device *dev)
+{
+	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+
+	return drv->remove(dsi);
+}
+
+static void mipi_dsi_drv_shutdown(struct device *dev)
+{
+	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+
+	drv->shutdown(dsi);
+}
+
+/**
+ * mipi_dsi_driver_register_full() - register a driver for DSI devices
+ * @drv: DSI driver structure
+ * @owner: owner module
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_driver_register_full(struct mipi_dsi_driver *drv,
+				  struct module *owner)
+{
+	drv->driver.bus = &mipi_dsi_bus_type;
+	drv->driver.owner = owner;
+
+	if (drv->probe)
+		drv->driver.probe = mipi_dsi_drv_probe;
+	if (drv->remove)
+		drv->driver.remove = mipi_dsi_drv_remove;
+	if (drv->shutdown)
+		drv->driver.shutdown = mipi_dsi_drv_shutdown;
+
+	return driver_register(&drv->driver);
+}
+EXPORT_SYMBOL(mipi_dsi_driver_register_full);
+
+/**
+ * mipi_dsi_driver_unregister() - unregister a driver for DSI devices
+ * @drv: DSI driver structure
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+void mipi_dsi_driver_unregister(struct mipi_dsi_driver *drv)
+{
+	driver_unregister(&drv->driver);
+}
+EXPORT_SYMBOL(mipi_dsi_driver_unregister);
+
+static int __init mipi_dsi_bus_init(void)
+{
+	return bus_register(&mipi_dsi_bus_type);
+}
+postcore_initcall(mipi_dsi_bus_init);
+
+MODULE_AUTHOR("Andrzej Hajda <a.hajda@samsung.com>");
+MODULE_DESCRIPTION("MIPI DSI Bus");
+MODULE_LICENSE("GPL and additional rights");
