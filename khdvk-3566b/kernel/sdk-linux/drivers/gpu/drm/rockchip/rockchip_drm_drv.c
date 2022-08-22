@@ -1657,3 +1657,244 @@ int rockchip_drm_endpoint_is_subdriver(struct device_node *ep)
 	 * any device not having a driver now is an external bridge.
 	 */
 	drv = pdev->dev.driver;
+	if (!drv) {
+		platform_device_put(pdev);
+		return false;
+	}
+
+	for (i = 0; i < num_rockchip_sub_drivers; i++) {
+		if (rockchip_sub_drivers[i] == to_platform_driver(drv)) {
+			platform_device_put(pdev);
+			return true;
+		}
+	}
+
+	platform_device_put(pdev);
+	return false;
+}
+
+static int compare_dev(struct device *dev, void *data)
+{
+	return dev == (struct device *)data;
+}
+
+static void rockchip_drm_match_remove(struct device *dev)
+{
+	struct device_link *link;
+
+	list_for_each_entry(link, &dev->links.consumers, s_node)
+		device_link_del(link);
+}
+
+static struct component_match *rockchip_drm_match_add(struct device *dev)
+{
+	struct component_match *match = NULL;
+	int i;
+
+	for (i = 0; i < num_rockchip_sub_drivers; i++) {
+		struct platform_driver *drv = rockchip_sub_drivers[i];
+		struct device *p = NULL, *d;
+
+		do {
+			d = platform_find_device_by_driver(p, &drv->driver);
+			put_device(p);
+			p = d;
+
+			if (!d)
+				break;
+
+			device_link_add(dev, d, DL_FLAG_STATELESS);
+			component_match_add(dev, &match, compare_dev, d);
+		} while (true);
+	}
+
+	if (IS_ERR(match))
+		rockchip_drm_match_remove(dev);
+
+	return match ?: ERR_PTR(-ENODEV);
+}
+
+static const struct component_master_ops rockchip_drm_ops = {
+	.bind = rockchip_drm_bind,
+	.unbind = rockchip_drm_unbind,
+};
+
+static int rockchip_drm_platform_of_probe(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct device_node *port;
+	bool found = false;
+	int i;
+
+	if (!np)
+		return -ENODEV;
+
+	for (i = 0;; i++) {
+		struct device_node *iommu;
+
+		port = of_parse_phandle(np, "ports", i);
+		if (!port)
+			break;
+
+		if (!of_device_is_available(port->parent)) {
+			of_node_put(port);
+			continue;
+		}
+
+		iommu = of_parse_phandle(port->parent, "iommus", 0);
+		if (!iommu || !of_device_is_available(iommu)) {
+			DRM_DEV_DEBUG(dev,
+				      "no iommu attached for %pOF, using non-iommu buffers\n",
+				      port->parent);
+			/*
+			 * if there is a crtc not support iommu, force set all
+			 * crtc use non-iommu buffer.
+			 */
+			is_support_iommu = false;
+		}
+
+		found = true;
+
+		of_node_put(iommu);
+		of_node_put(port);
+	}
+
+	if (i == 0) {
+		DRM_DEV_ERROR(dev, "missing 'ports' property\n");
+		return -ENODEV;
+	}
+
+	if (!found) {
+		DRM_DEV_ERROR(dev,
+			      "No available vop found for display-subsystem.\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int rockchip_drm_platform_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct component_match *match = NULL;
+	int ret;
+
+	ret = rockchip_drm_platform_of_probe(dev);
+	if (ret)
+		return ret;
+
+	match = rockchip_drm_match_add(dev);
+	if (IS_ERR(match))
+		return PTR_ERR(match);
+
+	ret = component_master_add_with_match(dev, &rockchip_drm_ops, match);
+	if (ret < 0) {
+		rockchip_drm_match_remove(dev);
+		return ret;
+	}
+
+	ret = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(64));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int rockchip_drm_platform_remove(struct platform_device *pdev)
+{
+	component_master_del(&pdev->dev, &rockchip_drm_ops);
+
+	rockchip_drm_match_remove(&pdev->dev);
+
+	return 0;
+}
+
+static void rockchip_drm_platform_shutdown(struct platform_device *pdev)
+{
+	struct drm_device *drm = platform_get_drvdata(pdev);
+
+	if (drm)
+		drm_atomic_helper_shutdown(drm);
+}
+
+static const struct of_device_id rockchip_drm_dt_ids[] = {
+	{ .compatible = "rockchip,display-subsystem", },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, rockchip_drm_dt_ids);
+
+static struct platform_driver rockchip_drm_platform_driver = {
+	.probe = rockchip_drm_platform_probe,
+	.remove = rockchip_drm_platform_remove,
+	.shutdown = rockchip_drm_platform_shutdown,
+	.driver = {
+		.name = "rockchip-drm",
+		.of_match_table = rockchip_drm_dt_ids,
+		.pm = &rockchip_drm_pm_ops,
+	},
+};
+
+#define ADD_ROCKCHIP_SUB_DRIVER(drv, cond) { \
+	if (IS_ENABLED(cond) && \
+	    !WARN_ON(num_rockchip_sub_drivers >= MAX_ROCKCHIP_SUB_DRIVERS)) \
+		rockchip_sub_drivers[num_rockchip_sub_drivers++] = &drv; \
+}
+
+static int __init rockchip_drm_init(void)
+{
+	int ret;
+
+	num_rockchip_sub_drivers = 0;
+	ADD_ROCKCHIP_SUB_DRIVER(vop_platform_driver, CONFIG_DRM_ROCKCHIP);
+	ADD_ROCKCHIP_SUB_DRIVER(vop2_platform_driver, CONFIG_DRM_ROCKCHIP);
+	ADD_ROCKCHIP_SUB_DRIVER(vconn_platform_driver, CONFIG_ROCKCHIP_VCONN);
+	ADD_ROCKCHIP_SUB_DRIVER(rockchip_lvds_driver,
+				CONFIG_ROCKCHIP_LVDS);
+	ADD_ROCKCHIP_SUB_DRIVER(rockchip_dp_driver,
+				CONFIG_ROCKCHIP_ANALOGIX_DP);
+	ADD_ROCKCHIP_SUB_DRIVER(cdn_dp_driver, CONFIG_ROCKCHIP_CDN_DP);
+	ADD_ROCKCHIP_SUB_DRIVER(dw_hdmi_rockchip_pltfm_driver,
+				CONFIG_ROCKCHIP_DW_HDMI);
+	ADD_ROCKCHIP_SUB_DRIVER(dw_mipi_dsi_rockchip_driver,
+				CONFIG_ROCKCHIP_DW_MIPI_DSI);
+	ADD_ROCKCHIP_SUB_DRIVER(dw_mipi_dsi2_rockchip_driver,
+				CONFIG_ROCKCHIP_DW_MIPI_DSI);
+	ADD_ROCKCHIP_SUB_DRIVER(inno_hdmi_driver, CONFIG_ROCKCHIP_INNO_HDMI);
+	ADD_ROCKCHIP_SUB_DRIVER(rk3066_hdmi_driver,
+				CONFIG_ROCKCHIP_RK3066_HDMI);
+	ADD_ROCKCHIP_SUB_DRIVER(rockchip_rgb_driver, CONFIG_ROCKCHIP_RGB);
+	ADD_ROCKCHIP_SUB_DRIVER(dw_dp_driver, CONFIG_ROCKCHIP_DW_DP);
+
+	ret = platform_register_drivers(rockchip_sub_drivers,
+					num_rockchip_sub_drivers);
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&rockchip_drm_platform_driver);
+	if (ret)
+		goto err_unreg_drivers;
+
+	rockchip_gem_get_ddr_info();
+
+	return 0;
+
+err_unreg_drivers:
+	platform_unregister_drivers(rockchip_sub_drivers,
+				    num_rockchip_sub_drivers);
+	return ret;
+}
+
+static void __exit rockchip_drm_fini(void)
+{
+	platform_driver_unregister(&rockchip_drm_platform_driver);
+
+	platform_unregister_drivers(rockchip_sub_drivers,
+				    num_rockchip_sub_drivers);
+}
+
+module_init(rockchip_drm_init);
+module_exit(rockchip_drm_fini);
+
+MODULE_AUTHOR("Mark Yao <mark.yao@rock-chips.com>");
+MODULE_DESCRIPTION("ROCKCHIP DRM Driver");
+MODULE_LICENSE("GPL v2");
