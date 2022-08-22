@@ -597,3 +597,173 @@ int intel_guc_reset_engine(struct intel_guc *guc,
  */
 int intel_guc_resume(struct intel_guc *guc)
 {
+	u32 action[] = {
+		INTEL_GUC_ACTION_EXIT_S_STATE,
+		GUC_POWER_D0,
+	};
+
+	/*
+	 * If GuC communication is enabled but submission is not supported,
+	 * we do not need to resume the GuC but we do need to enable the
+	 * GuC communication on resume (above).
+	 */
+	if (!intel_guc_submission_is_used(guc) || !intel_guc_is_ready(guc))
+		return 0;
+
+	return intel_guc_send(guc, action, ARRAY_SIZE(action));
+}
+
+/**
+ * DOC: GuC Memory Management
+ *
+ * GuC can't allocate any memory for its own usage, so all the allocations must
+ * be handled by the host driver. GuC accesses the memory via the GGTT, with the
+ * exception of the top and bottom parts of the 4GB address space, which are
+ * instead re-mapped by the GuC HW to memory location of the FW itself (WOPCM)
+ * or other parts of the HW. The driver must take care not to place objects that
+ * the GuC is going to access in these reserved ranges. The layout of the GuC
+ * address space is shown below:
+ *
+ * ::
+ *
+ *     +===========> +====================+ <== FFFF_FFFF
+ *     ^             |      Reserved      |
+ *     |             +====================+ <== GUC_GGTT_TOP
+ *     |             |                    |
+ *     |             |        DRAM        |
+ *    GuC            |                    |
+ *  Address    +===> +====================+ <== GuC ggtt_pin_bias
+ *   Space     ^     |                    |
+ *     |       |     |                    |
+ *     |      GuC    |        GuC         |
+ *     |     WOPCM   |       WOPCM        |
+ *     |      Size   |                    |
+ *     |       |     |                    |
+ *     v       v     |                    |
+ *     +=======+===> +====================+ <== 0000_0000
+ *
+ * The lower part of GuC Address Space [0, ggtt_pin_bias) is mapped to GuC WOPCM
+ * while upper part of GuC Address Space [ggtt_pin_bias, GUC_GGTT_TOP) is mapped
+ * to DRAM. The value of the GuC ggtt_pin_bias is the GuC WOPCM size.
+ */
+
+/**
+ * intel_guc_allocate_vma() - Allocate a GGTT VMA for GuC usage
+ * @guc:	the guc
+ * @size:	size of area to allocate (both virtual space and memory)
+ *
+ * This is a wrapper to create an object for use with the GuC. In order to
+ * use it inside the GuC, an object needs to be pinned lifetime, so we allocate
+ * both some backing storage and a range inside the Global GTT. We must pin
+ * it in the GGTT somewhere other than than [0, GUC ggtt_pin_bias) because that
+ * range is reserved inside GuC.
+ *
+ * Return:	A i915_vma if successful, otherwise an ERR_PTR.
+ */
+struct i915_vma *intel_guc_allocate_vma(struct intel_guc *guc, u32 size)
+{
+	struct intel_gt *gt = guc_to_gt(guc);
+	struct drm_i915_gem_object *obj;
+	struct i915_vma *vma;
+	u64 flags;
+	int ret;
+
+	obj = i915_gem_object_create_shmem(gt->i915, size);
+	if (IS_ERR(obj))
+		return ERR_CAST(obj);
+
+	vma = i915_vma_instance(obj, &gt->ggtt->vm, NULL);
+	if (IS_ERR(vma))
+		goto err;
+
+	flags = PIN_OFFSET_BIAS | i915_ggtt_pin_bias(vma);
+	ret = i915_ggtt_pin(vma, NULL, 0, flags);
+	if (ret) {
+		vma = ERR_PTR(ret);
+		goto err;
+	}
+
+	return i915_vma_make_unshrinkable(vma);
+
+err:
+	i915_gem_object_put(obj);
+	return vma;
+}
+
+/**
+ * intel_guc_allocate_and_map_vma() - Allocate and map VMA for GuC usage
+ * @guc:	the guc
+ * @size:	size of area to allocate (both virtual space and memory)
+ * @out_vma:	return variable for the allocated vma pointer
+ * @out_vaddr:	return variable for the obj mapping
+ *
+ * This wrapper calls intel_guc_allocate_vma() and then maps the allocated
+ * object with I915_MAP_WB.
+ *
+ * Return:	0 if successful, a negative errno code otherwise.
+ */
+int intel_guc_allocate_and_map_vma(struct intel_guc *guc, u32 size,
+				   struct i915_vma **out_vma, void **out_vaddr)
+{
+	struct i915_vma *vma;
+	void *vaddr;
+
+	vma = intel_guc_allocate_vma(guc, size);
+	if (IS_ERR(vma))
+		return PTR_ERR(vma);
+
+	vaddr = i915_gem_object_pin_map(vma->obj, I915_MAP_WB);
+	if (IS_ERR(vaddr)) {
+		i915_vma_unpin_and_release(&vma, 0);
+		return PTR_ERR(vaddr);
+	}
+
+	*out_vma = vma;
+	*out_vaddr = vaddr;
+
+	return 0;
+}
+
+/**
+ * intel_guc_load_status - dump information about GuC load status
+ * @guc: the GuC
+ * @p: the &drm_printer
+ *
+ * Pretty printer for GuC load status.
+ */
+void intel_guc_load_status(struct intel_guc *guc, struct drm_printer *p)
+{
+	struct intel_gt *gt = guc_to_gt(guc);
+	struct intel_uncore *uncore = gt->uncore;
+	intel_wakeref_t wakeref;
+
+	if (!intel_guc_is_supported(guc)) {
+		drm_printf(p, "GuC not supported\n");
+		return;
+	}
+
+	if (!intel_guc_is_wanted(guc)) {
+		drm_printf(p, "GuC disabled\n");
+		return;
+	}
+
+	intel_uc_fw_dump(&guc->fw, p);
+
+	with_intel_runtime_pm(uncore->rpm, wakeref) {
+		u32 status = intel_uncore_read(uncore, GUC_STATUS);
+		u32 i;
+
+		drm_printf(p, "\nGuC status 0x%08x:\n", status);
+		drm_printf(p, "\tBootrom status = 0x%x\n",
+			   (status & GS_BOOTROM_MASK) >> GS_BOOTROM_SHIFT);
+		drm_printf(p, "\tuKernel status = 0x%x\n",
+			   (status & GS_UKERNEL_MASK) >> GS_UKERNEL_SHIFT);
+		drm_printf(p, "\tMIA Core status = 0x%x\n",
+			   (status & GS_MIA_MASK) >> GS_MIA_SHIFT);
+		drm_puts(p, "\nScratch registers:\n");
+		for (i = 0; i < 16; i++) {
+			drm_printf(p, "\t%2d: \t0x%x\n",
+				   i, intel_uncore_read(uncore, SOFT_SCRATCH(i)));
+		}
+	}
+}
