@@ -26,6 +26,7 @@ group("khdvk_3566b_group") {
     "bluetooth:libbt_vendor",
     "bluetooth:BCM43430A1.hcd",
     "bluetooth:BCM4345C5.hcd",
+    "//device/soc/rockchip/rk3566/hardware:hardware_group",
 
   ]
 }
