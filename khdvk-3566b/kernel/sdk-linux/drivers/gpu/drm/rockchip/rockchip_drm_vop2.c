@@ -7610,3 +7610,1061 @@ static void vop2_wb_handler(struct vop2_video_port *vp)
 
 static void vop2_dsc_isr(struct vop2 *vop2)
 {
+	const struct vop2_data *vop2_data = vop2->data;
+	struct vop2_dsc *dsc;
+	const struct dsc_error_info *dsc_error_ecw = vop2_data->dsc_error_ecw;
+	const struct dsc_error_info *dsc_error_buffer_flow = vop2_data->dsc_error_buffer_flow;
+	u32 dsc_error_status = 0, dsc_ecw = 0;
+	int i = 0, j = 0;
+
+	for (i = 0; i < vop2_data->nr_dscs; i++) {
+		dsc = &vop2->dscs[i];
+
+		if (!dsc->enabled)
+			continue;
+
+		dsc_error_status = VOP_MODULE_GET(vop2, dsc, dsc_error_status);
+		if (!dsc_error_status)
+			continue;
+		dsc_ecw = VOP_MODULE_GET(vop2, dsc, dsc_ecw);
+
+		for (j = 0; j < vop2_data->nr_dsc_ecw; j++) {
+			if (dsc_ecw == dsc_error_ecw[j].dsc_error_val) {
+				DRM_ERROR("dsc%d %s\n", dsc->id, dsc_error_ecw[j].dsc_error_info);
+				break;
+			}
+		}
+
+		if (dsc_ecw == 0x0120ffff) {
+			u32 offset = dsc->regs->dsc_status.offset;
+
+			for (j = 0; j < vop2_data->nr_dsc_buffer_flow; j++)
+				DRM_ERROR("dsc%d %s:0x%x\n", dsc->id, dsc_error_buffer_flow[j].dsc_error_info,
+					  vop2_readl(vop2, offset + (j << 2)));
+		}
+	}
+}
+
+static irqreturn_t vop2_isr(int irq, void *data)
+{
+	struct vop2 *vop2 = data;
+	struct drm_crtc *crtc;
+	struct vop2_video_port *vp;
+	const struct vop2_data *vop2_data = vop2->data;
+	size_t vp_max = min_t(size_t, vop2_data->nr_vps, ROCKCHIP_MAX_CRTC);
+	size_t axi_max = min_t(size_t, vop2_data->nr_axi_intr, VOP2_SYS_AXI_BUS_NUM);
+	uint32_t vp_irqs[ROCKCHIP_MAX_CRTC];
+	uint32_t axi_irqs[VOP2_SYS_AXI_BUS_NUM];
+	uint32_t active_irqs;
+	uint32_t wb_irqs;
+	unsigned long flags;
+	int ret = IRQ_NONE;
+	int i;
+
+#define ERROR_HANDLER(x) \
+	do { \
+		if (active_irqs & x##_INTR) {\
+			if (x##_INTR == POST_BUF_EMPTY_INTR) \
+				DRM_DEV_ERROR_RATELIMITED(vop2->dev, #x " irq err at vp%d\n", vp->id); \
+			else \
+				DRM_DEV_ERROR_RATELIMITED(vop2->dev, #x " irq err\n"); \
+			active_irqs &= ~x##_INTR; \
+			ret = IRQ_HANDLED; \
+		} \
+	} while (0)
+
+	/*
+	 * The irq is shared with the iommu. If the runtime-pm state of the
+	 * vop2-device is disabled the irq has to be targeted at the iommu.
+	 */
+	if (!pm_runtime_get_if_in_use(vop2->dev))
+		return IRQ_NONE;
+
+	if (vop2_core_clks_enable(vop2)) {
+		DRM_DEV_ERROR(vop2->dev, "couldn't enable clocks\n");
+		goto out;
+	}
+
+	/*
+	 * interrupt register has interrupt status, enable and clear bits, we
+	 * must hold irq_lock to avoid a race with enable/disable_vblank().
+	 */
+	spin_lock_irqsave(&vop2->irq_lock, flags);
+	for (i = 0; i < vp_max; i++)
+		vp_irqs[i] = vop2_read_and_clear_active_vp_irqs(vop2, i);
+	for (i = 0; i < axi_max; i++)
+		axi_irqs[i] = vop2_read_and_clear_axi_irqs(vop2, i);
+	wb_irqs = vop2_read_and_clear_wb_irqs(vop2);
+	spin_unlock_irqrestore(&vop2->irq_lock, flags);
+
+	for (i = 0; i < vp_max; i++) {
+		vp = &vop2->vps[i];
+		crtc = &vp->rockchip_crtc.crtc;
+		active_irqs = vp_irqs[i];
+		if (active_irqs & DSP_HOLD_VALID_INTR) {
+			complete(&vp->dsp_hold_completion);
+			active_irqs &= ~DSP_HOLD_VALID_INTR;
+			ret = IRQ_HANDLED;
+		}
+
+		if (active_irqs & LINE_FLAG_INTR) {
+			complete(&vp->line_flag_completion);
+			active_irqs &= ~LINE_FLAG_INTR;
+			ret = IRQ_HANDLED;
+		}
+
+		if (active_irqs & LINE_FLAG1_INTR) {
+			vop2_handle_vcnt(crtc);
+			active_irqs &= ~LINE_FLAG1_INTR;
+			ret = IRQ_HANDLED;
+		}
+
+		if (active_irqs & FS_FIELD_INTR) {
+			vop2_wb_handler(vp);
+			if (likely(!vp->skip_vsync) || (vp->layer_sel_update == false)) {
+				drm_crtc_handle_vblank(crtc);
+				vop2_handle_vblank(vop2, crtc);
+			}
+			active_irqs &= ~FS_FIELD_INTR;
+			ret = IRQ_HANDLED;
+		}
+
+		ERROR_HANDLER(POST_BUF_EMPTY);
+
+		/* Unhandled irqs are spurious. */
+		if (active_irqs)
+			DRM_ERROR("Unknown video_port%d IRQs: %02x\n", i, active_irqs);
+	}
+
+	if (wb_irqs) {
+		active_irqs = wb_irqs;
+		ERROR_HANDLER(WB_UV_FIFO_FULL);
+		ERROR_HANDLER(WB_YRGB_FIFO_FULL);
+	}
+
+	for (i = 0; i < axi_max; i++) {
+		active_irqs = axi_irqs[i];
+
+		ERROR_HANDLER(BUS_ERROR);
+
+		/* Unhandled irqs are spurious. */
+		if (active_irqs)
+			DRM_ERROR("Unknown axi_bus%d IRQs: %02x\n", i, active_irqs);
+	}
+
+	if (vop2->data->nr_dscs)
+		vop2_dsc_isr(vop2);
+
+	vop2_core_clks_disable(vop2);
+out:
+	pm_runtime_put(vop2->dev);
+	return ret;
+}
+
+static int vop2_plane_create_name_property(struct vop2 *vop2, struct vop2_win *win)
+{
+	struct drm_prop_enum_list *props = vop2->plane_name_list;
+	struct drm_property *prop;
+	uint64_t bits = BIT_ULL(win->plane_id);
+
+	prop = drm_property_create_bitmask(vop2->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "NAME",
+					   props, vop2->registered_num_wins,
+					   bits);
+	if (!prop) {
+		DRM_DEV_ERROR(vop2->dev, "create Name prop for %s failed\n", win->name);
+		return -ENOMEM;
+	}
+	win->name_prop = prop;
+	drm_object_attach_property(&win->base.base, win->name_prop, bits);
+
+	return 0;
+}
+
+static int vop2_plane_create_feature_property(struct vop2 *vop2, struct vop2_win *win)
+{
+	uint64_t feature = 0;
+	struct drm_property *prop;
+
+	static const struct drm_prop_enum_list props[] = {
+		{ ROCKCHIP_DRM_PLANE_FEATURE_SCALE, "scale" },
+		{ ROCKCHIP_DRM_PLANE_FEATURE_AFBDC, "afbdc" },
+	};
+
+	if ((win->max_upscale_factor != 1) || (win->max_downscale_factor != 1))
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_SCALE);
+	if (win->feature & WIN_FEATURE_AFBDC)
+		feature |= BIT(ROCKCHIP_DRM_PLANE_FEATURE_AFBDC);
+
+	prop = drm_property_create_bitmask(vop2->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "FEATURE",
+					   props, ARRAY_SIZE(props),
+					   feature);
+	if (!prop) {
+		DRM_DEV_ERROR(vop2->dev, "create feature prop for %s failed\n", win->name);
+		return -ENOMEM;
+	}
+
+	win->feature_prop = prop;
+
+	drm_object_attach_property(&win->base.base, win->feature_prop, feature);
+
+	return 0;
+}
+
+static int vop2_plane_init(struct vop2 *vop2, struct vop2_win *win, unsigned long possible_crtcs)
+{
+	struct rockchip_drm_private *private = vop2->drm_dev->dev_private;
+	unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) | BIT(DRM_MODE_BLEND_PREMULTI) |
+				  BIT(DRM_MODE_BLEND_COVERAGE);
+	unsigned int max_width, max_height;
+	int ret;
+
+	/*
+	 * Some userspace software don't want use afbc plane
+	 */
+	if (win->feature & WIN_FEATURE_AFBDC) {
+		if (vop2->disable_afbc_win)
+			return -EACCES;
+	}
+
+	/*
+	 * Some userspace software don't want cluster sub plane
+	 */
+	if (!vop2->support_multi_area) {
+		if (win->feature & WIN_FEATURE_CLUSTER_SUB)
+			return -EACCES;
+	}
+
+	ret = drm_universal_plane_init(vop2->drm_dev, &win->base, possible_crtcs,
+				       &vop2_plane_funcs, win->formats, win->nformats,
+				       win->format_modifiers, win->type, win->name);
+	if (ret) {
+		DRM_DEV_ERROR(vop2->dev, "failed to initialize plane %d\n", ret);
+		return ret;
+	}
+
+	drm_plane_helper_add(&win->base, &vop2_plane_helper_funcs);
+
+	drm_object_attach_property(&win->base.base, private->eotf_prop, 0);
+	drm_object_attach_property(&win->base.base, private->color_space_prop, 0);
+	drm_object_attach_property(&win->base.base, private->async_commit_prop, 0);
+
+	if (win->feature & (WIN_FEATURE_CLUSTER_SUB | WIN_FEATURE_CLUSTER_MAIN))
+		drm_object_attach_property(&win->base.base, private->share_id_prop, win->plane_id);
+
+	if (win->parent)
+		drm_object_attach_property(&win->base.base, private->share_id_prop,
+					   win->parent->base.base.id);
+	else
+		drm_object_attach_property(&win->base.base, private->share_id_prop,
+					   win->base.base.id);
+	if (win->supported_rotations)
+		drm_plane_create_rotation_property(&win->base, DRM_MODE_ROTATE_0,
+						   DRM_MODE_ROTATE_0 | win->supported_rotations);
+	drm_plane_create_alpha_property(&win->base);
+	drm_plane_create_blend_mode_property(&win->base, blend_caps);
+	drm_plane_create_zpos_property(&win->base, win->win_id, 0, vop2->registered_num_wins - 1);
+	vop2_plane_create_name_property(vop2, win);
+	vop2_plane_create_feature_property(vop2, win);
+	max_width = vop2->data->max_input.width;
+	max_height = vop2->data->max_input.height;
+	if (win->feature & WIN_FEATURE_CLUSTER_SUB)
+		max_width >>= 1;
+	win->input_width_prop = drm_property_create_range(vop2->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							  "INPUT_WIDTH", 0, max_width);
+	win->input_height_prop = drm_property_create_range(vop2->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							   "INPUT_HEIGHT", 0, max_height);
+	max_width = vop2->data->max_output.width;
+	max_height = vop2->data->max_output.height;
+	if (win->feature & WIN_FEATURE_CLUSTER_SUB)
+		max_width >>= 1;
+	win->output_width_prop = drm_property_create_range(vop2->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							   "OUTPUT_WIDTH", 0, max_width);
+	win->output_height_prop = drm_property_create_range(vop2->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+							    "OUTPUT_HEIGHT", 0, max_height);
+	win->scale_prop = drm_property_create_range(vop2->drm_dev, DRM_MODE_PROP_IMMUTABLE,
+						    "SCALE_RATE", win->max_downscale_factor,
+						    win->max_upscale_factor);
+	/*
+	 * Support 24 bit(RGB888) or 16 bit(rgb565) color key.
+	 * Bit 31 is used as a flag to disable (0) or enable
+	 * color keying (1).
+	 */
+	win->color_key_prop = drm_property_create_range(vop2->drm_dev, 0, "colorkey", 0,
+							0x80ffffff);
+
+	if (!win->input_width_prop || !win->input_height_prop ||
+	    !win->output_width_prop || !win->output_height_prop ||
+	    !win->scale_prop || !win->color_key_prop) {
+		DRM_ERROR("failed to create property\n");
+		return -ENOMEM;
+	}
+
+	drm_object_attach_property(&win->base.base, win->input_width_prop, 0);
+	drm_object_attach_property(&win->base.base, win->input_height_prop, 0);
+	drm_object_attach_property(&win->base.base, win->output_width_prop, 0);
+	drm_object_attach_property(&win->base.base, win->output_height_prop, 0);
+	drm_object_attach_property(&win->base.base, win->scale_prop, 0);
+	drm_object_attach_property(&win->base.base, win->color_key_prop, 0);
+
+	return 0;
+}
+
+static struct drm_plane *vop2_cursor_plane_init(struct vop2_video_port *vp,
+						unsigned long possible_crtcs)
+{
+	struct vop2 *vop2 = vp->vop2;
+	struct drm_plane *cursor = NULL;
+	struct vop2_win *win;
+
+	win = vop2_find_win_by_phys_id(vop2, vp->cursor_win_id);
+	if (win) {
+		win->type = DRM_PLANE_TYPE_CURSOR;
+		win->zpos = vop2->registered_num_wins - 1;
+		if (!vop2_plane_init(vop2, win, possible_crtcs))
+			cursor = &win->base;
+	}
+
+	return cursor;
+}
+
+static int vop2_gamma_init(struct vop2 *vop2)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	const struct vop2_video_port_data *vp_data;
+	struct vop2_video_port *vp;
+	struct device *dev = vop2->dev;
+	u16 *r_base, *g_base, *b_base;
+	struct drm_crtc *crtc;
+	int i = 0, j = 0;
+	u32 lut_len = 0;
+
+	if (!vop2->lut_regs)
+		return 0;
+
+	for (i = 0; i < vop2_data->nr_vps; i++) {
+		vp = &vop2->vps[i];
+		crtc = &vp->rockchip_crtc.crtc;
+		if (!crtc->dev)
+			continue;
+		vp_data = &vop2_data->vp[vp->id];
+		lut_len = vp_data->gamma_lut_len;
+		vp->gamma_lut_len = vp_data->gamma_lut_len;
+		vp->lut_dma_rid = vp_data->lut_dma_rid;
+		vp->lut = devm_kmalloc_array(dev, lut_len, sizeof(*vp->lut),
+					     GFP_KERNEL);
+		if (!vp->lut)
+			return -ENOMEM;
+
+		for (j = 0; j < lut_len; j++) {
+			u32 b = j * lut_len * lut_len;
+			u32 g = j * lut_len;
+			u32 r = j;
+
+			vp->lut[j] = r | g | b;
+		}
+
+		drm_mode_crtc_set_gamma_size(crtc, lut_len);
+		drm_crtc_enable_color_mgmt(crtc, 0, false, lut_len);
+		r_base = crtc->gamma_store;
+		g_base = r_base + crtc->gamma_size;
+		b_base = g_base + crtc->gamma_size;
+		for (j = 0; j < lut_len; j++) {
+			rockchip_vop2_crtc_fb_gamma_get(crtc, &r_base[j],
+							&g_base[j],
+							&b_base[j], j);
+		}
+	}
+
+	return 0;
+}
+
+static int vop2_crtc_create_plane_mask_property(struct vop2 *vop2,
+						struct drm_crtc *crtc)
+{
+	struct drm_property *prop;
+	struct vop2_video_port *vp = to_vop2_video_port(crtc);
+
+	static const struct drm_prop_enum_list props[] = {
+		{ ROCKCHIP_VOP2_CLUSTER0, "Cluster0" },
+		{ ROCKCHIP_VOP2_CLUSTER1, "Cluster1" },
+		{ ROCKCHIP_VOP2_ESMART0, "Esmart0" },
+		{ ROCKCHIP_VOP2_ESMART1, "Esmart1" },
+		{ ROCKCHIP_VOP2_SMART0, "Smart0" },
+		{ ROCKCHIP_VOP2_SMART1, "Smart1" },
+		{ ROCKCHIP_VOP2_CLUSTER2, "Cluster2" },
+		{ ROCKCHIP_VOP2_CLUSTER3, "Cluster3" },
+		{ ROCKCHIP_VOP2_ESMART2, "Esmart2" },
+		{ ROCKCHIP_VOP2_ESMART3, "Esmart3" },
+	};
+
+	prop = drm_property_create_bitmask(vop2->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "PLANE_MASK",
+					   props, ARRAY_SIZE(props),
+					   0xffffffff);
+	if (!prop) {
+		DRM_DEV_ERROR(vop2->dev, "create plane_mask prop for vp%d failed\n", vp->id);
+		return -ENOMEM;
+	}
+
+	vp->plane_mask_prop = prop;
+	drm_object_attach_property(&crtc->base, vp->plane_mask_prop, vp->plane_mask);
+
+	return 0;
+}
+
+static int vop2_crtc_create_feature_property(struct vop2 *vop2, struct drm_crtc *crtc)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	struct vop2_video_port *vp = to_vop2_video_port(crtc);
+	const struct vop2_video_port_data *vp_data = &vop2_data->vp[vp->id];
+	struct drm_property *prop;
+	u64 feature = 0;
+
+	static const struct drm_prop_enum_list props[] = {
+		{ ROCKCHIP_DRM_CRTC_FEATURE_ALPHA_SCALE, "ALPHA_SCALE" },
+		{ ROCKCHIP_DRM_CRTC_FEATURE_HDR10, "HDR10" },
+		{ ROCKCHIP_DRM_CRTC_FEATURE_NEXT_HDR, "NEXT_HDR" },
+	};
+
+	if (vp_data->feature & VOP_FEATURE_ALPHA_SCALE)
+		feature |= BIT(ROCKCHIP_DRM_CRTC_FEATURE_ALPHA_SCALE);
+	if (vp_data->feature & VOP_FEATURE_HDR10)
+		feature |= BIT(ROCKCHIP_DRM_CRTC_FEATURE_HDR10);
+	if (vp_data->feature & VOP_FEATURE_NEXT_HDR)
+		feature |= BIT(ROCKCHIP_DRM_CRTC_FEATURE_NEXT_HDR);
+
+	prop = drm_property_create_bitmask(vop2->drm_dev,
+					   DRM_MODE_PROP_IMMUTABLE, "FEATURE",
+					   props, ARRAY_SIZE(props),
+					   0xffffffff);
+	if (!prop) {
+		DRM_DEV_ERROR(vop2->dev, "create FEATURE prop for vp%d failed\n", vp->id);
+		return -ENOMEM;
+	}
+
+	vp->feature_prop = prop;
+	drm_object_attach_property(&crtc->base, vp->feature_prop, feature);
+
+	return 0;
+}
+
+/*
+ * Returns:
+ * Registered crtc number on success, negative error code on failure.
+ */
+static int vop2_create_crtc(struct vop2 *vop2)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	struct drm_device *drm_dev = vop2->drm_dev;
+	struct device *dev = vop2->dev;
+	struct drm_plane *plane;
+	struct drm_plane *cursor = NULL;
+	struct drm_crtc *crtc;
+	struct device_node *port;
+	struct vop2_win *win = NULL;
+	struct vop2_video_port *vp;
+	const struct vop2_video_port_data *vp_data;
+	uint32_t possible_crtcs;
+	uint64_t soc_id;
+	uint32_t registered_num_crtcs = 0;
+	char dclk_name[9];
+	int i = 0, j = 0, k = 0;
+	int ret = 0;
+	bool be_used_for_primary_plane = false;
+	bool find_primary_plane = false;
+	bool bootloader_initialized = false;
+	struct rockchip_drm_private *private = drm_dev->dev_private;
+
+	/* all planes can attach to any crtc */
+	possible_crtcs = (1 << vop2_data->nr_vps) - 1;
+
+	/*
+	 * We set plane_mask from dts or bootloader
+	 * if all the plane_mask are zero, that means
+	 * the bootloader don't initialized the vop, or
+	 * something is wrong, the kernel will try to
+	 * initial all the vp.
+	 */
+	for (i = 0; i < vop2_data->nr_vps; i++) {
+		vp = &vop2->vps[i];
+		if (vp->plane_mask) {
+			bootloader_initialized = true;
+			break;
+		}
+	}
+
+	/*
+	 * Create primary plane for eache crtc first, since we need
+	 * to pass them to drm_crtc_init_with_planes, which sets the
+	 * "possible_crtcs" to the newly initialized crtc.
+	 */
+	for (i = 0; i < vop2_data->nr_vps; i++) {
+		vp_data = &vop2_data->vp[i];
+		vp = &vop2->vps[i];
+		vp->vop2 = vop2;
+		vp->id = vp_data->id;
+		vp->regs = vp_data->regs;
+		vp->cursor_win_id = -1;
+		if (vop2->disable_win_move)
+			possible_crtcs = BIT(registered_num_crtcs);
+
+		/*
+		 * we assume a vp with a zere plane_mask(set from dts or bootloader)
+		 * as unused.
+		 */
+		if (!vp->plane_mask && bootloader_initialized)
+			continue;
+
+		if (vop2_soc_is_rk3566())
+			soc_id = vp_data->soc_id[1];
+		else
+			soc_id = vp_data->soc_id[0];
+
+		snprintf(dclk_name, sizeof(dclk_name), "dclk_vp%d", vp->id);
+		vp->dclk_rst = devm_reset_control_get_optional(vop2->dev, dclk_name);
+		if (IS_ERR(vp->dclk_rst)) {
+			DRM_DEV_ERROR(vop2->dev, "failed to get dclk reset\n");
+			return PTR_ERR(vp->dclk_rst);
+		}
+
+		vp->dclk = devm_clk_get(vop2->dev, dclk_name);
+		if (IS_ERR(vp->dclk)) {
+			DRM_DEV_ERROR(vop2->dev, "failed to get %s\n", dclk_name);
+			return PTR_ERR(vp->dclk);
+		}
+
+		crtc = &vp->rockchip_crtc.crtc;
+
+		port = of_graph_get_port_by_id(dev->of_node, i);
+		if (!port) {
+			DRM_DEV_ERROR(vop2->dev, "no port node found for video_port%d\n", i);
+			return -ENOENT;
+		}
+		crtc->port = port;
+		of_property_read_u32(port, "cursor-win-id", &vp->cursor_win_id);
+
+		if (vp->primary_plane_phy_id >= 0) {
+			win = vop2_find_win_by_phys_id(vop2, vp->primary_plane_phy_id);
+			if (win) {
+				find_primary_plane = true;
+				win->type = DRM_PLANE_TYPE_PRIMARY;
+			}
+		} else {
+			while (j < vop2->registered_num_wins) {
+				be_used_for_primary_plane = false;
+				win = &vop2->win[j];
+				j++;
+
+				if (win->parent || (win->feature & WIN_FEATURE_CLUSTER_SUB))
+					continue;
+
+				if (win->type != DRM_PLANE_TYPE_PRIMARY)
+					continue;
+
+				for (k = 0; k < vop2_data->nr_vps; k++) {
+					if (win->phys_id == vop2->vps[k].primary_plane_phy_id) {
+						be_used_for_primary_plane = true;
+						break;
+					}
+				}
+
+				if (be_used_for_primary_plane)
+					continue;
+
+				find_primary_plane = true;
+				break;
+			}
+
+			if (find_primary_plane)
+				vp->primary_plane_phy_id = win->phys_id;
+		}
+
+		if (!find_primary_plane) {
+			DRM_DEV_ERROR(vop2->dev, "No primary plane find for video_port%d\n", i);
+			break;
+		} else {
+			/* give lowest zpos for primary plane */
+			win->zpos = registered_num_crtcs;
+			if (vop2_plane_init(vop2, win, possible_crtcs)) {
+				DRM_DEV_ERROR(vop2->dev, "failed to init primary plane\n");
+				break;
+			}
+			plane = &win->base;
+		}
+
+		/* some times we want a cursor window for some vp */
+		if (vp->cursor_win_id >= 0) {
+			cursor = vop2_cursor_plane_init(vp, possible_crtcs);
+			if (!cursor)
+				DRM_WARN("failed to init cursor plane for vp%d\n", vp->id);
+			else
+				DRM_DEV_INFO(vop2->dev, "%s as cursor plane for vp%d\n",
+					     cursor->name, vp->id);
+		} else {
+			cursor = NULL;
+		}
+
+		ret = drm_crtc_init_with_planes(drm_dev, crtc, plane, cursor, &vop2_crtc_funcs,
+						"video_port%d", vp->id);
+		if (ret) {
+			DRM_DEV_ERROR(vop2->dev, "crtc init for video_port%d failed\n", i);
+			return ret;
+		}
+
+		drm_crtc_helper_add(crtc, &vop2_crtc_helper_funcs);
+
+		drm_flip_work_init(&vp->fb_unref_work, "fb_unref", vop2_fb_unref_worker);
+
+		init_completion(&vp->dsp_hold_completion);
+		init_completion(&vp->line_flag_completion);
+		rockchip_register_crtc_funcs(crtc, &private_crtc_funcs);
+		soc_id = vop2_soc_id_fixup(soc_id);
+		drm_object_attach_property(&crtc->base, private->soc_id_prop, soc_id);
+		drm_object_attach_property(&crtc->base, private->port_id_prop, vp->id);
+		drm_object_attach_property(&crtc->base, private->aclk_prop, 0);
+		drm_object_attach_property(&crtc->base, private->bg_prop, 0);
+		drm_object_attach_property(&crtc->base, private->line_flag_prop, 0);
+		if (vp_data->feature & VOP_FEATURE_OVERSCAN) {
+			drm_object_attach_property(&crtc->base,
+						   drm_dev->mode_config.tv_left_margin_property, 100);
+			drm_object_attach_property(&crtc->base,
+						   drm_dev->mode_config.tv_right_margin_property, 100);
+			drm_object_attach_property(&crtc->base,
+						   drm_dev->mode_config.tv_top_margin_property, 100);
+			drm_object_attach_property(&crtc->base,
+						   drm_dev->mode_config.tv_bottom_margin_property, 100);
+		}
+		vop2_crtc_create_plane_mask_property(vop2, crtc);
+		vop2_crtc_create_feature_property(vop2, crtc);
+		registered_num_crtcs++;
+	}
+
+	/*
+	 * change the unused primary window to overlay window
+	 */
+	for (j = 0; j < vop2->registered_num_wins; j++) {
+		win = &vop2->win[j];
+		be_used_for_primary_plane = false;
+
+		for (k = 0; k < vop2_data->nr_vps; k++) {
+			if (vop2->vps[k].primary_plane_phy_id == win->phys_id) {
+				be_used_for_primary_plane = true;
+				break;
+			}
+		}
+
+		if (win->type == DRM_PLANE_TYPE_PRIMARY &&
+		    !be_used_for_primary_plane)
+			win->type = DRM_PLANE_TYPE_OVERLAY;
+	}
+
+	/*
+	 * create overlay planes of the leftover overlay win
+	 * Create drm_planes for overlay windows with possible_crtcs restricted
+	 */
+	for (j = 0; j < vop2->registered_num_wins; j++) {
+		win = &vop2->win[j];
+
+		if (win->type != DRM_PLANE_TYPE_OVERLAY)
+			continue;
+		/*
+		 * Only dual display on rk3568(which need two crtcs) need mirror win
+		 */
+		if (registered_num_crtcs < 2 && vop2_is_mirror_win(win))
+			continue;
+		/*
+		 * zpos of overlay plane is higher than primary
+		 * and lower than cursor
+		 */
+		win->zpos = registered_num_crtcs + j;
+
+		if (vop2->disable_win_move) {
+			crtc = vop2_find_crtc_by_plane_mask(vop2, win->phys_id);
+			if (crtc)
+				possible_crtcs = drm_crtc_mask(crtc);
+			else
+				possible_crtcs = (1 << vop2_data->nr_vps) - 1;
+		}
+
+		ret = vop2_plane_init(vop2, win, possible_crtcs);
+		if (ret)
+			DRM_WARN("failed to init overlay plane %s\n", win->name);
+	}
+
+	return registered_num_crtcs;
+}
+
+static void vop2_destroy_crtc(struct drm_crtc *crtc)
+{
+	struct vop2_video_port *vp = to_vop2_video_port(crtc);
+
+	of_node_put(crtc->port);
+
+	/*
+	 * Destroy CRTC after vop2_plane_destroy() since vop2_disable_plane()
+	 * references the CRTC.
+	 */
+	drm_crtc_cleanup(crtc);
+	drm_flip_work_cleanup(&vp->fb_unref_work);
+}
+
+static int vop2_pd_data_init(struct vop2 *vop2)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	const struct vop2_power_domain_data *pd_data;
+	struct vop2_power_domain *pd;
+	int i;
+
+	INIT_LIST_HEAD(&vop2->pd_list_head);
+
+	for (i = 0; i < vop2_data->nr_pds; i++) {
+		pd_data = &vop2_data->pd[i];
+		pd = devm_kzalloc(vop2->dev, sizeof(*pd), GFP_KERNEL);
+		if (!pd)
+			return -ENOMEM;
+		pd->vop2 = vop2;
+		pd->data = pd_data;
+		pd->module_on = false;
+		spin_lock_init(&pd->lock);
+		list_add_tail(&pd->list, &vop2->pd_list_head);
+		INIT_DELAYED_WORK(&pd->power_off_work, vop2_power_domain_off_work);
+		if (pd_data->parent_id) {
+			pd->parent = vop2_find_pd_by_id(vop2, pd_data->parent_id);
+			if (!pd->parent) {
+				DRM_DEV_ERROR(vop2->dev, "no parent pd find for pd%d\n", pd->data->id);
+				return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static void vop2_dsc_data_init(struct vop2 *vop2)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	const struct vop2_dsc_data *dsc_data;
+	struct vop2_dsc *dsc;
+	int i;
+
+	for (i = 0; i < vop2_data->nr_dscs; i++) {
+		dsc = &vop2->dscs[i];
+		dsc_data = &vop2_data->dsc[i];
+		dsc->id = dsc_data->id;
+		dsc->max_slice_num = dsc_data->max_slice_num;
+		dsc->max_linebuf_depth = dsc_data->max_linebuf_depth;
+		dsc->min_bits_per_pixel = dsc_data->min_bits_per_pixel;
+		dsc->regs = dsc_data->regs;
+		dsc->attach_vp_id = -1;
+		if (dsc_data->pd_id)
+			dsc->pd = vop2_find_pd_by_id(vop2, dsc_data->pd_id);
+	}
+}
+
+static int vop2_win_init(struct vop2 *vop2)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	const struct vop2_layer_data *layer_data;
+	struct drm_prop_enum_list *plane_name_list;
+	struct vop2_win *win;
+	struct vop2_layer *layer;
+	char name[DRM_PROP_NAME_LEN];
+	unsigned int num_wins = 0;
+	uint8_t plane_id = 0;
+	unsigned int i, j;
+
+	for (i = 0; i < vop2_data->win_size; i++) {
+		const struct vop2_win_data *win_data = &vop2_data->win[i];
+
+		win = &vop2->win[num_wins];
+		win->name = win_data->name;
+		win->regs = win_data->regs;
+		win->offset = win_data->base;
+		win->type = win_data->type;
+		win->formats = win_data->formats;
+		win->nformats = win_data->nformats;
+		win->format_modifiers = win_data->format_modifiers;
+		win->supported_rotations = win_data->supported_rotations;
+		win->max_upscale_factor = win_data->max_upscale_factor;
+		win->max_downscale_factor = win_data->max_downscale_factor;
+		win->hsu_filter_mode = win_data->hsu_filter_mode;
+		win->hsd_filter_mode = win_data->hsd_filter_mode;
+		win->vsu_filter_mode = win_data->vsu_filter_mode;
+		win->vsd_filter_mode = win_data->vsd_filter_mode;
+		win->dly = win_data->dly;
+		win->feature = win_data->feature;
+		win->phys_id = win_data->phys_id;
+		win->splice_win_id = win_data->splice_win_id;
+		win->layer_sel_id = win_data->layer_sel_id;
+		win->win_id = i;
+		win->plane_id = plane_id++;
+		win->area_id = 0;
+		win->zpos = i;
+		win->vop2 = vop2;
+		win->axi_id = win_data->axi_id;
+		win->axi_yrgb_id = win_data->axi_yrgb_id;
+		win->axi_uv_id = win_data->axi_uv_id;
+
+		if (win_data->pd_id)
+			win->pd = vop2_find_pd_by_id(vop2, win_data->pd_id);
+
+		num_wins++;
+
+		if (!vop2->support_multi_area)
+			continue;
+
+		for (j = 0; j < win_data->area_size; j++) {
+			struct vop2_win *area = &vop2->win[num_wins];
+			const struct vop2_win_regs *regs = win_data->area[j];
+
+			area->parent = win;
+			area->offset = win->offset;
+			area->regs = regs;
+			area->type = DRM_PLANE_TYPE_OVERLAY;
+			area->formats = win->formats;
+			area->feature = win->feature;
+			area->nformats = win->nformats;
+			area->format_modifiers = win->format_modifiers;
+			area->max_upscale_factor = win_data->max_upscale_factor;
+			area->max_downscale_factor = win_data->max_downscale_factor;
+			area->supported_rotations = win_data->supported_rotations;
+			area->hsu_filter_mode = win_data->hsu_filter_mode;
+			area->hsd_filter_mode = win_data->hsd_filter_mode;
+			area->vsu_filter_mode = win_data->vsu_filter_mode;
+			area->vsd_filter_mode = win_data->vsd_filter_mode;
+
+			area->vop2 = vop2;
+			area->win_id = i;
+			area->phys_id = win->phys_id;
+			area->area_id = j + 1;
+			area->plane_id = plane_id++;
+			area->layer_sel_id = -1;
+			snprintf(name, min(sizeof(name), strlen(win->name)), "%s", win->name);
+			snprintf(name, sizeof(name), "%s%d", name, area->area_id);
+			area->name = devm_kstrdup(vop2->dev, name, GFP_KERNEL);
+			num_wins++;
+		}
+	}
+
+	vop2->registered_num_wins = num_wins;
+
+	for (i = 0; i < vop2_data->nr_layers; i++) {
+		layer = &vop2->layers[i];
+		layer_data = &vop2_data->layer[i];
+		layer->id = layer_data->id;
+		layer->regs = layer_data->regs;
+	}
+
+	plane_name_list = devm_kzalloc(vop2->dev,
+				       vop2->registered_num_wins * sizeof(*plane_name_list),
+				       GFP_KERNEL);
+	if (!plane_name_list) {
+		DRM_DEV_ERROR(vop2->dev, "failed to alloc memory for plane_name_list\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < vop2->registered_num_wins; i++) {
+		win = &vop2->win[i];
+		plane_name_list[i].type = win->plane_id;
+		plane_name_list[i].name = win->name;
+	}
+
+	vop2->plane_name_list = plane_name_list;
+
+	return 0;
+}
+
+#include "rockchip_vop2_clk.c"
+
+static int vop2_bind(struct device *dev, struct device *master, void *data)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	const struct vop2_data *vop2_data;
+	struct drm_device *drm_dev = data;
+	struct vop2 *vop2;
+	struct resource *res;
+	size_t alloc_size;
+	int ret, i;
+	int num_wins = 0;
+	int registered_num_crtcs;
+	struct device_node *vop_out_node;
+
+	vop2_data = of_device_get_match_data(dev);
+	if (!vop2_data)
+		return -ENODEV;
+
+	for (i = 0; i < vop2_data->win_size; i++) {
+		const struct vop2_win_data *win_data = &vop2_data->win[i];
+
+		num_wins += win_data->area_size + 1;
+	}
+
+	/* Allocate vop2 struct and its vop2_win array */
+	alloc_size = sizeof(*vop2) + sizeof(*vop2->win) * num_wins;
+	vop2 = devm_kzalloc(dev, alloc_size, GFP_KERNEL);
+	if (!vop2)
+		return -ENOMEM;
+
+	vop2->dev = dev;
+	vop2->data = vop2_data;
+	vop2->drm_dev = drm_dev;
+	vop2->version = vop2_data->version;
+
+	dev_set_drvdata(dev, vop2);
+
+	vop2->support_multi_area = of_property_read_bool(dev->of_node, "support-multi-area");
+	vop2->disable_afbc_win = of_property_read_bool(dev->of_node, "disable-afbc-win");
+	vop2->disable_win_move = of_property_read_bool(dev->of_node, "disable-win-move");
+
+	ret = vop2_pd_data_init(vop2);
+	if (ret)
+		return ret;
+
+	ret = vop2_win_init(vop2);
+	if (ret)
+		return ret;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "regs");
+	if (!res) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get vop2 register byname\n");
+		return -EINVAL;
+	}
+	vop2->regs = devm_ioremap_resource(dev, res);
+	if (IS_ERR(vop2->regs))
+		return PTR_ERR(vop2->regs);
+	vop2->len = resource_size(res);
+
+	vop2->regsbak = devm_kzalloc(dev, vop2->len, GFP_KERNEL);
+	if (!vop2->regsbak)
+		return -ENOMEM;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "gamma_lut");
+	if (res) {
+		vop2->lut_regs = devm_ioremap_resource(dev, res);
+		if (IS_ERR(vop2->lut_regs))
+			return PTR_ERR(vop2->lut_regs);
+	}
+
+	vop2->sys_grf = syscon_regmap_lookup_by_phandle(dev->of_node, "rockchip,grf");
+	vop2->grf = syscon_regmap_lookup_by_phandle(dev->of_node, "rockchip,vop-grf");
+	vop2->vo1_grf = syscon_regmap_lookup_by_phandle(dev->of_node, "rockchip,vo1-grf");
+	vop2->sys_pmu = syscon_regmap_lookup_by_phandle(dev->of_node, "rockchip,pmu");
+
+	vop2->hclk = devm_clk_get(vop2->dev, "hclk_vop");
+	if (IS_ERR(vop2->hclk)) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get hclk source\n");
+		return PTR_ERR(vop2->hclk);
+	}
+	vop2->aclk = devm_clk_get(vop2->dev, "aclk_vop");
+	if (IS_ERR(vop2->aclk)) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get aclk source\n");
+		return PTR_ERR(vop2->aclk);
+	}
+
+	vop2->pclk = devm_clk_get_optional(vop2->dev, "pclk_vop");
+	if (IS_ERR(vop2->pclk)) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get pclk source\n");
+		return PTR_ERR(vop2->pclk);
+	}
+
+	vop2->ahb_rst = devm_reset_control_get_optional(vop2->dev, "ahb");
+	if (IS_ERR(vop2->ahb_rst)) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get ahb reset\n");
+		return PTR_ERR(vop2->ahb_rst);
+	}
+
+	vop2->axi_rst = devm_reset_control_get_optional(vop2->dev, "axi");
+	if (IS_ERR(vop2->axi_rst)) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get axi reset\n");
+		return PTR_ERR(vop2->axi_rst);
+	}
+
+	vop2->irq = platform_get_irq(pdev, 0);
+	if (vop2->irq < 0) {
+		DRM_DEV_ERROR(dev, "cannot find irq for vop2\n");
+		return vop2->irq;
+	}
+
+	vop_out_node = of_get_child_by_name(dev->of_node, "ports");
+	if (vop_out_node) {
+		struct device_node *child;
+
+		for_each_child_of_node(vop_out_node, child) {
+			u32 plane_mask = 0;
+			u32 primary_plane_phy_id = 0;
+			u32 vp_id = 0;
+
+			of_property_read_u32(child, "rockchip,plane-mask", &plane_mask);
+			of_property_read_u32(child, "rockchip,primary-plane", &primary_plane_phy_id);
+			of_property_read_u32(child, "reg", &vp_id);
+
+			vop2->vps[vp_id].plane_mask = plane_mask;
+			if (plane_mask)
+				vop2->vps[vp_id].primary_plane_phy_id = primary_plane_phy_id;
+			else
+				vop2->vps[vp_id].primary_plane_phy_id = ROCKCHIP_VOP2_PHY_ID_INVALID;
+
+			ret = of_clk_set_defaults(child, false);
+			if (ret) {
+				DRM_DEV_ERROR(dev, "Failed to set clock defaults %d\n", ret);
+				return ret;
+			}
+
+			DRM_DEV_INFO(dev, "vp%d assign plane mask: 0x%x, primary plane phy id: %d\n",
+				     vp_id, vop2->vps[vp_id].plane_mask,
+				     vop2->vps[vp_id].primary_plane_phy_id);
+		}
+	}
+
+	spin_lock_init(&vop2->reg_lock);
+	spin_lock_init(&vop2->irq_lock);
+	mutex_init(&vop2->vop2_lock);
+
+	ret = devm_request_irq(dev, vop2->irq, vop2_isr, IRQF_SHARED, dev_name(dev), vop2);
+	if (ret)
+		return ret;
+
+	vop2_dsc_data_init(vop2);
+
+	registered_num_crtcs = vop2_create_crtc(vop2);
+	if (registered_num_crtcs <= 0)
+		return -ENODEV;
+
+	ret = vop2_gamma_init(vop2);
+	if (ret)
+		return ret;
+	vop2_clk_init(vop2);
+	vop2_cubic_lut_init(vop2);
+	vop2_wb_connector_init(vop2, registered_num_crtcs);
+	pm_runtime_enable(&pdev->dev);
+
+	return 0;
+}
+
+static void vop2_unbind(struct device *dev, struct device *master, void *data)
+{
+	struct vop2 *vop2 = dev_get_drvdata(dev);
+	struct drm_device *drm_dev = vop2->drm_dev;
+	struct list_head *plane_list = &drm_dev->mode_config.plane_list;
+	struct list_head *crtc_list = &drm_dev->mode_config.crtc_list;
+	struct drm_crtc *crtc, *tmpc;
+	struct drm_plane *plane, *tmpp;
+
+	pm_runtime_disable(dev);
+
+	list_for_each_entry_safe(plane, tmpp, plane_list, head)
+		drm_plane_cleanup(plane);
+
+	list_for_each_entry_safe(crtc, tmpc, crtc_list, head)
+		vop2_destroy_crtc(crtc);
+
+	vop2_wb_connector_destory(vop2);
+}
+
+const struct component_ops vop2_component_ops = {
+	.bind = vop2_bind,
+	.unbind = vop2_unbind,
+};
+EXPORT_SYMBOL_GPL(vop2_component_ops);
