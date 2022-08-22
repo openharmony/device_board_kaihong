@@ -1993,3 +1993,362 @@ static struct rk_priv_data *rk_gmac_setup(struct platform_device *pdev,
 
 	ret = of_property_read_u32(dev->of_node, "rx_delay", &value);
 	if (ret) {
+		bsp_priv->rx_delay = -1;
+		dev_err(dev, "Can not read property: rx_delay.");
+		dev_err(dev, "set rx_delay to 0x%x\n",
+			bsp_priv->rx_delay);
+	} else {
+		dev_info(dev, "RX delay(0x%x).\n", value);
+		bsp_priv->rx_delay = value;
+	}
+
+	bsp_priv->grf = syscon_regmap_lookup_by_phandle(dev->of_node,
+							"rockchip,grf");
+	bsp_priv->php_grf = syscon_regmap_lookup_by_phandle(dev->of_node,
+							    "rockchip,php_grf");
+	bsp_priv->xpcs = syscon_regmap_lookup_by_phandle(dev->of_node,
+							 "rockchip,xpcs");
+	if (!IS_ERR(bsp_priv->xpcs)) {
+		struct phy *comphy;
+
+		comphy = devm_of_phy_get(&pdev->dev, dev->of_node, NULL);
+		if (IS_ERR(comphy))
+			dev_err(dev, "devm_of_phy_get error\n");
+		ret = phy_init(comphy);
+		if (ret)
+			dev_err(dev, "phy_init error\n");
+	}
+
+	if (plat->phy_node) {
+		bsp_priv->integrated_phy = of_property_read_bool(plat->phy_node,
+								 "phy-is-integrated");
+		if (bsp_priv->integrated_phy) {
+			bsp_priv->phy_reset = of_reset_control_get(plat->phy_node, NULL);
+			if (IS_ERR(bsp_priv->phy_reset)) {
+				dev_err(&pdev->dev, "No PHY reset control found.\n");
+				bsp_priv->phy_reset = NULL;
+			}
+		}
+	}
+	dev_info(dev, "integrated PHY? (%s).\n",
+		 bsp_priv->integrated_phy ? "yes" : "no");
+
+	bsp_priv->pdev = pdev;
+
+	return bsp_priv;
+}
+
+static int rk_gmac_powerup(struct rk_priv_data *bsp_priv)
+{
+	int ret;
+	struct device *dev = &bsp_priv->pdev->dev;
+
+	ret = gmac_clk_enable(bsp_priv, true);
+	if (ret)
+		return ret;
+
+	/*rmii or rgmii*/
+	switch (bsp_priv->phy_iface) {
+	case PHY_INTERFACE_MODE_RGMII:
+		dev_info(dev, "init for RGMII\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_rgmii)
+			bsp_priv->ops->set_to_rgmii(bsp_priv, bsp_priv->tx_delay,
+						    bsp_priv->rx_delay);
+		break;
+	case PHY_INTERFACE_MODE_RGMII_ID:
+		dev_info(dev, "init for RGMII_ID\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_rgmii)
+			bsp_priv->ops->set_to_rgmii(bsp_priv, -1, -1);
+		break;
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+		dev_info(dev, "init for RGMII_RXID\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_rgmii)
+			bsp_priv->ops->set_to_rgmii(bsp_priv, bsp_priv->tx_delay, -1);
+		break;
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+		dev_info(dev, "init for RGMII_TXID\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_rgmii)
+			bsp_priv->ops->set_to_rgmii(bsp_priv, -1, bsp_priv->rx_delay);
+		break;
+	case PHY_INTERFACE_MODE_RMII:
+		dev_info(dev, "init for RMII\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_rmii)
+			bsp_priv->ops->set_to_rmii(bsp_priv);
+		break;
+	case PHY_INTERFACE_MODE_SGMII:
+		dev_info(dev, "init for SGMII\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_sgmii)
+			bsp_priv->ops->set_to_sgmii(bsp_priv);
+		break;
+	case PHY_INTERFACE_MODE_QSGMII:
+		dev_info(dev, "init for QSGMII\n");
+		if (bsp_priv->ops && bsp_priv->ops->set_to_qsgmii)
+			bsp_priv->ops->set_to_qsgmii(bsp_priv);
+		break;
+	default:
+		dev_err(dev, "NO interface defined!\n");
+	}
+
+	ret = rk_gmac_phy_power_on(bsp_priv, true);
+	if (ret) {
+		gmac_clk_enable(bsp_priv, false);
+		return ret;
+	}
+
+	pm_runtime_enable(dev);
+	pm_runtime_get_sync(dev);
+
+	if (bsp_priv->integrated_phy)
+		rk_gmac_integrated_phy_powerup(bsp_priv);
+
+	return 0;
+}
+
+static void rk_gmac_powerdown(struct rk_priv_data *gmac)
+{
+	struct device *dev = &gmac->pdev->dev;
+
+	if (gmac->integrated_phy)
+		rk_gmac_integrated_phy_powerdown(gmac);
+
+	pm_runtime_put_sync(dev);
+	pm_runtime_disable(dev);
+
+	rk_gmac_phy_power_on(gmac, false);
+	gmac_clk_enable(gmac, false);
+}
+
+static void rk_fix_speed(void *priv, unsigned int speed)
+{
+	struct rk_priv_data *bsp_priv = priv;
+	struct device *dev = &bsp_priv->pdev->dev;
+
+	switch (bsp_priv->phy_iface) {
+	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+		if (bsp_priv->ops && bsp_priv->ops->set_rgmii_speed)
+			bsp_priv->ops->set_rgmii_speed(bsp_priv, speed);
+		break;
+	case PHY_INTERFACE_MODE_RMII:
+		if (bsp_priv->ops && bsp_priv->ops->set_rmii_speed)
+			bsp_priv->ops->set_rmii_speed(bsp_priv, speed);
+		break;
+	case PHY_INTERFACE_MODE_SGMII:
+	case PHY_INTERFACE_MODE_QSGMII:
+		break;
+	default:
+		dev_err(dev, "unsupported interface %d", bsp_priv->phy_iface);
+	}
+}
+
+void dwmac_rk_set_rgmii_delayline(struct stmmac_priv *priv,
+				  int tx_delay, int rx_delay)
+{
+	struct rk_priv_data *bsp_priv = priv->plat->bsp_priv;
+
+	if (bsp_priv->ops->set_to_rgmii) {
+		bsp_priv->ops->set_to_rgmii(bsp_priv, tx_delay, rx_delay);
+		bsp_priv->tx_delay = tx_delay;
+		bsp_priv->rx_delay = rx_delay;
+	}
+}
+EXPORT_SYMBOL(dwmac_rk_set_rgmii_delayline);
+
+void dwmac_rk_get_rgmii_delayline(struct stmmac_priv *priv,
+				  int *tx_delay, int *rx_delay)
+{
+	struct rk_priv_data *bsp_priv = priv->plat->bsp_priv;
+
+	if (!bsp_priv->ops->set_to_rgmii)
+		return;
+
+	*tx_delay = bsp_priv->tx_delay;
+	*rx_delay = bsp_priv->rx_delay;
+}
+EXPORT_SYMBOL(dwmac_rk_get_rgmii_delayline);
+
+int dwmac_rk_get_phy_interface(struct stmmac_priv *priv)
+{
+	struct rk_priv_data *bsp_priv = priv->plat->bsp_priv;
+
+	return bsp_priv->phy_iface;
+}
+EXPORT_SYMBOL(dwmac_rk_get_phy_interface);
+
+static void rk_get_eth_addr(void *priv, unsigned char *addr)
+{
+	struct rk_priv_data *bsp_priv = priv;
+	struct device *dev = &bsp_priv->pdev->dev;
+	unsigned char ethaddr[ETH_ALEN * MAX_ETH] = {0};
+	int ret, id = bsp_priv->bus_id;
+
+	if (is_valid_ether_addr(addr))
+		goto out;
+
+	if (id < 0 || id >= MAX_ETH) {
+		dev_err(dev, "%s: Invalid ethernet bus id %d\n", __func__, id);
+		return;
+	}
+
+	ret = rk_vendor_read(LAN_MAC_ID, ethaddr, ETH_ALEN * MAX_ETH);
+	if (ret <= 0 ||
+	    !is_valid_ether_addr(&ethaddr[id * ETH_ALEN])) {
+		dev_err(dev, "%s: rk_vendor_read eth mac address failed (%d)\n",
+			__func__, ret);
+		random_ether_addr(&ethaddr[id * ETH_ALEN]);
+		memcpy(addr, &ethaddr[id * ETH_ALEN], ETH_ALEN);
+		dev_err(dev, "%s: generate random eth mac address: %pM\n", __func__, addr);
+
+		ret = rk_vendor_write(LAN_MAC_ID, ethaddr, ETH_ALEN * MAX_ETH);
+		if (ret != 0)
+			dev_err(dev, "%s: rk_vendor_write eth mac address failed (%d)\n",
+				__func__, ret);
+
+		ret = rk_vendor_read(LAN_MAC_ID, ethaddr, ETH_ALEN * MAX_ETH);
+		if (ret != ETH_ALEN * MAX_ETH)
+			dev_err(dev, "%s: id: %d rk_vendor_read eth mac address failed (%d)\n",
+				__func__, id, ret);
+	} else {
+		memcpy(addr, &ethaddr[id * ETH_ALEN], ETH_ALEN);
+	}
+
+out:
+	dev_err(dev, "%s: mac address: %pM\n", __func__, addr);
+}
+
+static int rk_gmac_probe(struct platform_device *pdev)
+{
+	struct plat_stmmacenet_data *plat_dat;
+	struct stmmac_resources stmmac_res;
+	const struct rk_gmac_ops *data;
+	int ret;
+
+	data = of_device_get_match_data(&pdev->dev);
+	if (!data) {
+		dev_err(&pdev->dev, "no of match data provided\n");
+		return -EINVAL;
+	}
+
+	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
+	if (ret)
+		return ret;
+
+	plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
+	if (IS_ERR(plat_dat))
+		return PTR_ERR(plat_dat);
+
+	if (!of_device_is_compatible(pdev->dev.of_node, "snps,dwmac-4.20a"))
+		plat_dat->has_gmac = true;
+
+	plat_dat->fix_mac_speed = rk_fix_speed;
+	plat_dat->get_eth_addr = rk_get_eth_addr;
+
+	plat_dat->bsp_priv = rk_gmac_setup(pdev, plat_dat, data);
+	if (IS_ERR(plat_dat->bsp_priv)) {
+		ret = PTR_ERR(plat_dat->bsp_priv);
+		goto err_remove_config_dt;
+	}
+
+	ret = rk_gmac_clk_init(plat_dat);
+	if (ret)
+		goto err_remove_config_dt;
+
+	ret = rk_gmac_powerup(plat_dat->bsp_priv);
+	if (ret)
+		goto err_remove_config_dt;
+
+	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
+	if (ret)
+		goto err_gmac_powerdown;
+
+	ret = dwmac_rk_create_loopback_sysfs(&pdev->dev);
+	if (ret)
+		goto err_gmac_powerdown;
+
+	return 0;
+
+err_gmac_powerdown:
+	rk_gmac_powerdown(plat_dat->bsp_priv);
+err_remove_config_dt:
+	stmmac_remove_config_dt(pdev, plat_dat);
+
+	return ret;
+}
+
+static int rk_gmac_remove(struct platform_device *pdev)
+{
+	struct rk_priv_data *bsp_priv = get_stmmac_bsp_priv(&pdev->dev);
+	int ret = stmmac_dvr_remove(&pdev->dev);
+
+	rk_gmac_powerdown(bsp_priv);
+	dwmac_rk_remove_loopback_sysfs(&pdev->dev);
+
+	return ret;
+}
+
+#ifdef CONFIG_PM_SLEEP
+static int rk_gmac_suspend(struct device *dev)
+{
+	struct rk_priv_data *bsp_priv = get_stmmac_bsp_priv(dev);
+	int ret = stmmac_suspend(dev);
+
+	/* Keep the PHY up if we use Wake-on-Lan. */
+	if (!device_may_wakeup(dev)) {
+		rk_gmac_powerdown(bsp_priv);
+		bsp_priv->suspended = true;
+	}
+
+	return ret;
+}
+
+static int rk_gmac_resume(struct device *dev)
+{
+	struct rk_priv_data *bsp_priv = get_stmmac_bsp_priv(dev);
+
+	/* The PHY was up for Wake-on-Lan. */
+	if (bsp_priv->suspended) {
+		rk_gmac_powerup(bsp_priv);
+		bsp_priv->suspended = false;
+	}
+
+	return stmmac_resume(dev);
+}
+#endif /* CONFIG_PM_SLEEP */
+
+static SIMPLE_DEV_PM_OPS(rk_gmac_pm_ops, rk_gmac_suspend, rk_gmac_resume);
+
+static const struct of_device_id rk_gmac_dwmac_match[] = {
+	{ .compatible = "rockchip,px30-gmac",	.data = &px30_ops   },
+	{ .compatible = "rockchip,rk1808-gmac", .data = &rk1808_ops },
+	{ .compatible = "rockchip,rk3128-gmac", .data = &rk3128_ops },
+	{ .compatible = "rockchip,rk3228-gmac", .data = &rk3228_ops },
+	{ .compatible = "rockchip,rk3288-gmac", .data = &rk3288_ops },
+	{ .compatible = "rockchip,rk3308-mac",  .data = &rk3308_ops },
+	{ .compatible = "rockchip,rk3328-gmac", .data = &rk3328_ops },
+	{ .compatible = "rockchip,rk3366-gmac", .data = &rk3366_ops },
+	{ .compatible = "rockchip,rk3368-gmac", .data = &rk3368_ops },
+	{ .compatible = "rockchip,rk3399-gmac", .data = &rk3399_ops },
+	{ .compatible = "rockchip,rk3568-gmac", .data = &rk3568_ops },
+	{ .compatible = "rockchip,rk3588-gmac", .data = &rk3588_ops },
+	{ .compatible = "rockchip,rv1108-gmac", .data = &rv1108_ops },
+	{ .compatible = "rockchip,rv1126-gmac", .data = &rv1126_ops },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, rk_gmac_dwmac_match);
+
+static struct platform_driver rk_gmac_dwmac_driver = {
+	.probe  = rk_gmac_probe,
+	.remove = rk_gmac_remove,
+	.driver = {
+		.name           = "rk_gmac-dwmac",
+		.pm		= &rk_gmac_pm_ops,
+		.of_match_table = rk_gmac_dwmac_match,
+	},
+};
+module_platform_driver(rk_gmac_dwmac_driver);
+
+MODULE_AUTHOR("Chen-Zhi (Roger Chen) <roger.chen@rock-chips.com>");
+MODULE_DESCRIPTION("Rockchip RK3288 DWMAC specific glue layer");
+MODULE_LICENSE("GPL");
