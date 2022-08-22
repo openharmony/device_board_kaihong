@@ -11554,3 +11554,91 @@ dhd_bus_set_hp2p_ring_max_size(struct dhd_bus *bus, bool tx, uint16 val)
 	return val;
 }
 #endif /* DHD_HP2P */
+
+static bool
+dhd_bus_tcm_test(struct dhd_bus *bus)
+{
+	int ret = 0;
+	int size; /* Full mem size */
+	int start; /* Start address */
+	int read_size = 0; /* Read size of each iteration */
+	int num = 0;
+	uint8 *read_buf, *write_buf;
+	uint8 init_val[NUM_PATTERNS] = {
+		0xFFu, /* 11111111 */
+		0x00u, /* 00000000 */
+	};
+
+	if (!bus) {
+		DHD_ERROR(("%s: bus is NULL !\n", __FUNCTION__));
+		return FALSE;
+	}
+
+	read_buf = MALLOCZ(bus->dhd->osh, MEMBLOCK);
+
+	if (!read_buf) {
+		DHD_ERROR(("%s: MALLOC of read_buf failed\n", __FUNCTION__));
+		return FALSE;
+	}
+
+	write_buf = MALLOCZ(bus->dhd->osh, MEMBLOCK);
+
+	if (!write_buf) {
+		MFREE(bus->dhd->osh, read_buf, MEMBLOCK);
+		DHD_ERROR(("%s: MALLOC of write_buf failed\n", __FUNCTION__));
+		return FALSE;
+	}
+
+	DHD_ERROR(("%s: start %x,  size: %x\n", __FUNCTION__, bus->dongle_ram_base, bus->ramsize));
+	DHD_ERROR(("%s: memblock size %d,  #pattern %d\n", __FUNCTION__, MEMBLOCK, NUM_PATTERNS));
+
+	while (num < NUM_PATTERNS) {
+		start = bus->dongle_ram_base;
+		/* Get full mem size */
+		size = bus->ramsize;
+
+		memset(write_buf, init_val[num], MEMBLOCK);
+		while (size > 0) {
+			read_size = MIN(MEMBLOCK, size);
+			memset(read_buf, 0, read_size);
+
+			/* Write */
+			if ((ret = dhdpcie_bus_membytes(bus, TRUE, start, write_buf, read_size))) {
+				DHD_ERROR(("%s: Write Error membytes %d\n", __FUNCTION__, ret));
+				MFREE(bus->dhd->osh, read_buf, MEMBLOCK);
+				MFREE(bus->dhd->osh, write_buf, MEMBLOCK);
+				return FALSE;
+			}
+
+			/* Read */
+			if ((ret = dhdpcie_bus_membytes(bus, FALSE, start, read_buf, read_size))) {
+				DHD_ERROR(("%s: Read Error membytes %d\n", __FUNCTION__, ret));
+				MFREE(bus->dhd->osh, read_buf, MEMBLOCK);
+				MFREE(bus->dhd->osh, write_buf, MEMBLOCK);
+				return FALSE;
+			}
+
+			/* Compare */
+			if (memcmp(read_buf, write_buf, read_size)) {
+				DHD_ERROR(("%s: Mismatch at %x, iter : %d\n",
+					__FUNCTION__, start, num));
+				prhex("Readbuf", read_buf, read_size);
+				prhex("Writebuf", write_buf, read_size);
+				MFREE(bus->dhd->osh, read_buf, MEMBLOCK);
+				MFREE(bus->dhd->osh, write_buf, MEMBLOCK);
+				return FALSE;
+			}
+
+			/* Decrement size and increment start address */
+			size -= read_size;
+			start += read_size;
+		}
+		num++;
+	}
+
+	MFREE(bus->dhd->osh, read_buf, MEMBLOCK);
+	MFREE(bus->dhd->osh, write_buf, MEMBLOCK);
+
+	DHD_ERROR(("%s: Success iter : %d\n", __FUNCTION__, num));
+	return TRUE;
+}
