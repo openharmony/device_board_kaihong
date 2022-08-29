@@ -28,7 +28,7 @@
 #include "hdf_wlan_utils.h"
 #include "net_bdh_adpater.h"
 #include "hdf_wl_interface.h"
-#include "hdf_public_ap6275s.h"
+#include "hdf_public_ap6256.h"
 
 #include <typedefs.h>
 #include <ethernet.h>
@@ -280,8 +280,11 @@ int32_t Bdh6SAction(struct NetDevice *hhnetDev, WifiActionData *actionData)
         srcMac = actionData->src;
     }
     memset_s(&params, sizeof(params), 0, sizeof(params));
-    params.wait = 0;
-    center_freq = p2p_remain_freq;
+    //params.wait = 0;
+    //center_freq = p2p_remain_freq;
+    params.wait = actionData->wait;
+    params.no_cck = (bool)actionData->noCck;
+    center_freq = actionData->freq;
     params.chan = ieee80211_get_channel_khz(wiphy, MHZ_TO_KHZ(center_freq));
     if (params.chan == NULL) {
         HDF_LOGE("%s: get center_freq %u faild", __func__, center_freq);
@@ -307,6 +310,66 @@ int32_t Bdh6SAction(struct NetDevice *hhnetDev, WifiActionData *actionData)
     return retVal;
 }
 
+static void InitCfg80211BeaconDataInfo(struct cfg80211_beacon_data *pInfo, const struct WlanBeaconConf *param)
+{
+    memset_s(pInfo, sizeof(struct cfg80211_beacon_data), 0x00, sizeof(struct cfg80211_beacon_data));
+    pInfo->head = param->headIEs;
+    pInfo->head_len = (size_t)param->headIEsLength;
+    pInfo->tail = param->tailIEs;
+    pInfo->tail_len = (size_t)param->tailIEsLength;
+
+    pInfo->beacon_ies = NULL;
+    pInfo->proberesp_ies = NULL;
+    pInfo->assocresp_ies = NULL;
+    pInfo->probe_resp = NULL;
+    pInfo->beacon_ies_len = 0X00;
+    pInfo->proberesp_ies_len = 0X00;
+    pInfo->assocresp_ies_len = 0X00;
+    pInfo->probe_resp_len = 0X00;
+}
+
+static void InitCfg80211ApSettingInfo(const struct WlanBeaconConf *param)
+{
+    if (g_ap_setting_info.beacon.head != NULL) {
+        OsalMemFree((uint8_t *)g_ap_setting_info.beacon.head);
+        g_ap_setting_info.beacon.head = NULL;
+    }
+    if (g_ap_setting_info.beacon.tail != NULL) {
+        OsalMemFree((uint8_t *)g_ap_setting_info.beacon.tail);
+        g_ap_setting_info.beacon.tail = NULL;
+    }
+
+    if (param->headIEs && param->headIEsLength > 0) {
+        g_ap_setting_info.beacon.head = OsalMemCalloc(param->headIEsLength);
+        memcpy_s((uint8_t *)g_ap_setting_info.beacon.head, param->headIEsLength, param->headIEs, param->headIEsLength);
+        g_ap_setting_info.beacon.head_len = param->headIEsLength;
+    }
+
+    if (param->tailIEs && param->tailIEsLength > 0) {
+        g_ap_setting_info.beacon.tail = OsalMemCalloc(param->tailIEsLength);
+        memcpy_s((uint8_t *)g_ap_setting_info.beacon.tail, param->tailIEsLength, param->tailIEs, param->tailIEsLength);
+        g_ap_setting_info.beacon.tail_len = param->tailIEsLength;
+    }
+
+    /* add beacon data for start ap */
+    g_ap_setting_info.dtim_period = param->DTIMPeriod;
+    g_ap_setting_info.hidden_ssid = param->hiddenSSID;
+    g_ap_setting_info.beacon_interval = param->interval;
+    HDF_LOGE("%s: dtim_period:%d---hidden_ssid:%d---beacon_interval:%d!",
+        __func__, g_ap_setting_info.dtim_period, g_ap_setting_info.hidden_ssid, g_ap_setting_info.beacon_interval);
+
+    g_ap_setting_info.beacon.beacon_ies = NULL;
+    g_ap_setting_info.beacon.proberesp_ies = NULL;
+    g_ap_setting_info.beacon.assocresp_ies = NULL;
+    g_ap_setting_info.beacon.probe_resp = NULL;
+    g_ap_setting_info.beacon.beacon_ies_len = 0X00;
+    g_ap_setting_info.beacon.proberesp_ies_len = 0X00;
+    g_ap_setting_info.beacon.assocresp_ies_len = 0X00;
+    g_ap_setting_info.beacon.probe_resp_len = 0X00;
+
+    bdh6_nl80211_calculate_ap_params(&g_ap_setting_info);
+}
+
 int32_t WalChangeBeacon(NetDevice *hnetDev, struct WlanBeaconConf *param)
 {
     int32_t ret = 0;
@@ -320,7 +383,7 @@ int32_t WalChangeBeacon(NetDevice *hnetDev, struct WlanBeaconConf *param)
         HDF_LOGE("%s: net_device is NULL", __func__);
         return -1;
     }
-    
+
     wiphy = get_linux_wiphy_ndev(netdev);
     if (!wiphy) {
         HDF_LOGE("%s: wiphy is NULL", __func__);
@@ -333,84 +396,8 @@ int32_t WalChangeBeacon(NetDevice *hnetDev, struct WlanBeaconConf *param)
         return 0;
     }
 
-    memset(&info, 0x00, sizeof(info));
-
-#if 1
-    if (g_ap_setting_info.beacon.head != NULL) {
-        OsalMemFree((uint8_t *)g_ap_setting_info.beacon.head);
-        g_ap_setting_info.beacon.head = NULL;
-    }
-    if (g_ap_setting_info.beacon.tail != NULL) {
-        OsalMemFree((uint8_t *)g_ap_setting_info.beacon.tail);
-        g_ap_setting_info.beacon.tail = NULL;
-    }
-
-    if (param->headIEs && param->headIEsLength > 0) {
-        g_ap_setting_info.beacon.head = OsalMemCalloc(param->headIEsLength);
-        memcpy((uint8_t *)g_ap_setting_info.beacon.head, param->headIEs, param->headIEsLength);
-        g_ap_setting_info.beacon.head_len = param->headIEsLength;
-
-        //info.head = g_ap_setting_info.beacon.head;
-        //info.head_len = g_ap_setting_info.beacon.head_len;
-    }
-
-    if (param->tailIEs && param->tailIEsLength > 0) {
-        g_ap_setting_info.beacon.tail = OsalMemCalloc(param->tailIEsLength);
-        memcpy((uint8_t *)g_ap_setting_info.beacon.tail, param->tailIEs, param->tailIEsLength);
-        g_ap_setting_info.beacon.tail_len = param->tailIEsLength;
-
-        //info.tail = g_ap_setting_info.beacon.tail;
-        //info.tail_len = g_ap_setting_info.beacon.tail_len;
-    }
-#endif    
-    
-    info.head = param->headIEs;
-    info.head_len = (size_t)param->headIEsLength;
-    info.tail = param->tailIEs;
-    info.tail_len = (size_t)param->tailIEsLength;
-
-    info.beacon_ies = NULL;
-    info.proberesp_ies = NULL;
-    info.assocresp_ies = NULL;
-    info.probe_resp = NULL;
-    //info.lci = NULL;
-    //info.civicloc = NULL;
-    //info.ftm_responder = 0X00;
-    info.beacon_ies_len = 0X00;
-    info.proberesp_ies_len = 0X00;
-    info.assocresp_ies_len = 0X00;
-    info.probe_resp_len = 0X00;
-    //info.lci_len = 0X00;
-    //info.civicloc_len = 0X00;
-
-    /* add beacon data for start ap*/
-    g_ap_setting_info.dtim_period = param->DTIMPeriod;
-    g_ap_setting_info.hidden_ssid = param->hiddenSSID;
-    g_ap_setting_info.beacon_interval = param->interval;
-    HDF_LOGE("%s: dtim_period:%d---hidden_ssid:%d---beacon_interval:%d!",
-        __func__, g_ap_setting_info.dtim_period, g_ap_setting_info.hidden_ssid, g_ap_setting_info.beacon_interval);
-	
-    //g_ap_setting_info.beacon.head = param->headIEs;
-    //g_ap_setting_info.beacon.head_len = param->headIEsLength;
-    //g_ap_setting_info.beacon.tail = param->tailIEs;
-    //g_ap_setting_info.beacon.tail_len = param->tailIEsLength;
-
-    g_ap_setting_info.beacon.beacon_ies = NULL;
-    g_ap_setting_info.beacon.proberesp_ies = NULL;
-    g_ap_setting_info.beacon.assocresp_ies = NULL;
-    g_ap_setting_info.beacon.probe_resp = NULL;
-    //g_ap_setting_info.beacon.lci = NULL;
-    // g_ap_setting_info.beacon.civicloc = NULL;
-    // g_ap_setting_info.beacon.ftm_responder = 0X00;
-    g_ap_setting_info.beacon.beacon_ies_len = 0X00;
-    g_ap_setting_info.beacon.proberesp_ies_len = 0X00;
-    g_ap_setting_info.beacon.assocresp_ies_len = 0X00;
-    g_ap_setting_info.beacon.probe_resp_len = 0X00;
-    // g_ap_setting_info.beacon.lci_len = 0X00;
-    // g_ap_setting_info.beacon.civicloc_len = 0X00;
-
-    // call nl80211_calculate_ap_params(&params);
-    bdh6_nl80211_calculate_ap_params(&g_ap_setting_info);
+    InitCfg80211BeaconDataInfo(&info, param);
+    InitCfg80211ApSettingInfo(param);
 
     HDF_LOGE("%s: headIEsLen:%d---tailIEsLen:%d!", __func__, param->headIEsLength, param->tailIEsLength);
     ret = WalStartAp(netDev);
@@ -762,9 +749,8 @@ int32_t BDH6Init(struct HdfChipDriver *chipDriver, struct NetDevice *netDevice)
     ret = hdf_bdh6_netdev_open(netDevice);
     if (ret != 0) {
         HDF_LOGE("%s:open netdev %s failed", __func__, netDevice->name);
-        return HDF_FAILURE;
     }
-	
+
     ret = BDH6InitNetdev(netDevice, sizeof(void *), NL80211_IFTYPE_P2P_DEVICE, HDF_INF_P2P0);
     if (ret != 0) {
         HDF_LOGE("%s:BDH6InitNetdev p2p0 failed", __func__);

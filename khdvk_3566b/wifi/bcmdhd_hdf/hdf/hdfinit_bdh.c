@@ -25,7 +25,7 @@
 #include "hdf_wlan_utils.h"
 #include "hdf_wl_interface.h"
 #include "net_bdh_adpater.h"
-#include "hdf_public_ap6275s.h"
+#include "hdf_public_ap6256.h"
 #include "eapol.h"
 
 #define HDF_LOG_TAG BDH6Driver

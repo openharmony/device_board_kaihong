@@ -1,4 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0-only
-obj-$(CONFIG_VENDOR_RK3566_DRIVER_POWER_SUPPLY_RK817)	+= rk817_battery.o
-obj-$(CONFIG_VENDOR_RK3566_DRIVER_POWER_SUPPLY_RK817)	+= rk817_charger.o
-

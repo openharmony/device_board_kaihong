@@ -9136,7 +9136,7 @@ wl_cfg80211_config_p2p_pub_af_tx(struct wiphy *wiphy,
 		WL_DBG(("P2P: GO_NEG_PHASE status set \n"));
 		wl_set_p2p_status(cfg, GO_NEG_PHASE);
 
-		config_af_params->search_channel = true;
+		//config_af_params->search_channel = true;
 		cfg->next_af_subtype = act_frm->subtype + 1;
 
 		/* increase dwell time to wait for RESP frame */
@@ -9270,9 +9270,11 @@ wl_cfg80211_check_DFS_channel(struct bcm_cfg80211 *cfg, wl_af_params_t *af_param
 static bool
 wl_cfg80211_check_dwell_overflow(int32 requested_dwell, ulong dwell_jiffies)
 {
-	if ((requested_dwell & CUSTOM_RETRY_MASK) &&
+	//if ((requested_dwell & CUSTOM_RETRY_MASK) &&
+	if ((requested_dwell >= 500) &&
 			(jiffies_to_msecs(jiffies - dwell_jiffies) >
-			 (requested_dwell & ~CUSTOM_RETRY_MASK))) {
+			requested_dwell)) {
+			 //(requested_dwell & ~CUSTOM_RETRY_MASK))) {
 		WL_ERR(("Action frame TX retry time over dwell time!\n"));
 		return true;
 	}
@@ -9517,6 +9519,10 @@ wl_cfg80211_send_action_frame(struct wiphy *wiphy, struct net_device *dev,
 	ack = wl_cfgp2p_tx_action_frame(cfg, dev, af_params, bssidx) ? false : true;
 	dwell_overflow = wl_cfg80211_check_dwell_overflow(requested_dwell, dwell_jiffies);
 
+	if (requested_dwell < 500)
+	{
+		config_af_params.max_tx_retry = 5;
+	}
 	/* if failed, retry it. tx_retry_max value is configure by .... */
 	while ((ack == false) && (tx_retry++ < config_af_params.max_tx_retry) &&
 			!dwell_overflow) {
@@ -9533,10 +9539,14 @@ wl_cfg80211_send_action_frame(struct wiphy *wiphy, struct net_device *dev,
 		ack = wl_cfgp2p_tx_action_frame(cfg, dev, af_params, bssidx) ?
 			false : true;
 		dwell_overflow = wl_cfg80211_check_dwell_overflow(requested_dwell, dwell_jiffies);
+		WL_DBG(("ack:%d dwell_overflow:%d channel:%d requested_dwell:%d\n", ack, dwell_overflow, af_params->channel, requested_dwell));
 	}
 
 	if (ack == false) {
 		WL_ERR(("Failed to send Action Frame(retry %d)\n", tx_retry));
+	}
+	else {
+		WL_ERR(("success to send Action Frame(retry %d, channel:%d)\n", tx_retry, af_params->channel));
 	}
 	WL_DBG(("Complete to send action frame\n"));
 exit:
@@ -9806,6 +9816,12 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 #endif // endif
 
 	memcpy(action_frame->data, &buf[DOT11_MGMT_HDR_LEN], action_frame->len);
+	printk(KERN_INFO"lijg123 send action: dst: %02x:%02x:%02x:%02x:%02x:%02x, src:%02x:%02x:%02x:%02x:%02x:%02x, \
+		bssid:%02x:%02x:%02x:%02x:%02x:%02x\n",
+		mgmt->da[0], mgmt->da[1], mgmt->da[2], mgmt->da[3], mgmt->da[4], mgmt->da[5],
+		mgmt->sa[0], mgmt->sa[1], mgmt->sa[2], mgmt->sa[3], mgmt->sa[4], mgmt->sa[5],
+		mgmt->bssid[0], mgmt->bssid[1], mgmt->bssid[2], mgmt->bssid[3], mgmt->bssid[4], mgmt->bssid[5]);
+	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 1, buf, len, true);
 
 	ack = wl_cfg80211_send_action_frame(wiphy, dev, cfgdev, af_params,
 		action_frame, action_frame->len, bssidx);

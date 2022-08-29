@@ -1,6 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0-only
-config REGULATOR_XZ3216
-	tristate "Xizhuo XZ3216 voltage regulator"
-	depends on I2C
-	help
-	  Support the voltage and current regulators of the XZ321X series of DCDC devices.

@@ -12636,7 +12636,7 @@ void dhd_detach(dhd_pub_t *dhdp)
 #endif /* SET_RPS_CPUS */
 				netif_tx_disable(ifp->net);
 #ifdef CONFIG_AP6XXX_WIFI6_HDF
-                IFP_NET_DESTRUCTOR = NULL;
+				IFP_NET_DESTRUCTOR = NULL;
 #endif
 				unregister_netdev(ifp->net);
 			}

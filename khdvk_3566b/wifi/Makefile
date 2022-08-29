@@ -2,7 +2,7 @@
 #rkwifi packed Makefile
 # (gwl)
 
-obj-$(CONFIG_AP6XXX_WIFI_AP6256) += bcmdhd_hdf/
+obj-$(CONFIG_DRIVERS_AP6256) += bcmdhd_hdf/
 
 .PHONY: clean
 

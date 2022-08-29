@@ -33,7 +33,7 @@
 #include "hdf_wifi_cmd.h"
 #include "hdf_wifi_event.h"
 #include "hdf_mac80211_sta_event.h"
-#include "hdf_public_ap6275s.h"
+#include "hdf_public_ap6256.h"
 #include "hdf_mac80211_sta.h"
 
 #define HDF_LOG_TAG BDH6Driver
