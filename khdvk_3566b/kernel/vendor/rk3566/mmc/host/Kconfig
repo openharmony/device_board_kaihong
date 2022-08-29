@@ -1,5 +1,0 @@
-config VENDOR_RK3566_MMC_HOST_RK_SDMMC_OPS
-	bool "Vendor MMC host rk_sdmmc_ops library"
-	default y
-	help
-	  Choose this option to enable the MMC host rk_sdmmc_ops library.

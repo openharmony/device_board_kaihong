@@ -44,7 +44,7 @@
                 <filteritem type="filepath" name="khdvk_3566b/kernel/config/rk3566-rp-kh.dts" desc="配置文件，不能加其他注释"/>
 				<filteritem type="filepath" name="khdvk_3566b/loader/*" desc="mirror image file"/>
 				<filteritem type="filepath" name="khdvk_3566b/bootanimation/*" desc="开机动画"/>
-				<filteritem type="filepath" name="khdvk_3566b/kernel/sdk-linux/.*" desc="thirdparty file"/>
+				<filteritem type="filepath" name="khdvk_3566b/kernel/sdk_linux/.*" desc="thirdparty file"/>
 				<filteritem type="filepath" name="khdvk_3566b/kernel/vendor/.*" desc="thirdparty file"/>
                 <filteritem type="filepath" name="khdvk_3566b/bluetooth/BCM43430A1.hcd" desc="AP6256 bluetooth firmware"/>
 				<filteritem type="filepath" name="khdvk_3566b/bluetooth/BCM4345C5.hcd" desc="AP6212 bluetooth firmware"/>
