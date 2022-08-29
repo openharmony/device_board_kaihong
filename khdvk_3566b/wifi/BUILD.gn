@@ -15,72 +15,9 @@ import("//build/ohos.gni")
 AP6XXX_ETC_DIR = "//device/board/kaihong/khdvk_3566b/wifi/ap6xxx"
 DNS_CONFIG_DIR = "//device/board/kaihong/khdvk_3566b/wifi"
 
-ohos_prebuilt_etc("clm_bcm43752a2_ag.blob") {
-  source = "$AP6XXX_ETC_DIR/clm_bcm43752a2_ag.blob"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("fw_bcm43438a1_apsta.bin") {
-  source = "$AP6XXX_ETC_DIR/fw_bcm43438a1_apsta.bin"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("fw_bcm43438a1.bin") {
-  source = "$AP6XXX_ETC_DIR/fw_bcm43438a1.bin"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
 
 ohos_prebuilt_etc("fw_bcm43456c5_ag.bin") {
   source = "$AP6XXX_ETC_DIR/fw_bcm43456c5_ag.bin"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("fw_bcm43752a2_ag_apsta.bin") {
-  source = "$AP6XXX_ETC_DIR/fw_bcm43752a2_ag_apsta.bin"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("fw_bcm43752a2_ag.bin") {
-  source = "$AP6XXX_ETC_DIR/fw_bcm43752a2_ag.bin"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("nvram_ap6275s.txt") {
-  source = "$AP6XXX_ETC_DIR/nvram_ap6275s.txt"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("nvram.txt") {
-  source = "$AP6XXX_ETC_DIR/nvram.txt"
-  install_images = [ vendor_base_dir ]
-  relative_install_dir = "firmware"
-  part_name = "kaihong_products"
-  install_enable = true
-}
-
-ohos_prebuilt_etc("nvram_ap6212a.txt") {
-  source = "$AP6XXX_ETC_DIR/nvram_ap6212a.txt"
   install_images = [ vendor_base_dir ]
   relative_install_dir = "firmware"
   part_name = "kaihong_products"
@@ -104,16 +41,8 @@ ohos_prebuilt_etc("resolv.conf") {
 
 group("ap6xxx") {
   deps = [
-    ":clm_bcm43752a2_ag.blob",
-    ":fw_bcm43752a2_ag.bin",
-    ":fw_bcm43752a2_ag_apsta.bin",
-    ":fw_bcm43438a1.bin",
-    ":fw_bcm43438a1_apsta.bin",
     ":fw_bcm43456c5_ag.bin",
     ":nvram_ap6256.txt",
-    ":nvram_ap6212a.txt",
-    ":nvram_ap6275s.txt",
-    ":nvram.txt",
     ":resolv.conf",
   ]
 }

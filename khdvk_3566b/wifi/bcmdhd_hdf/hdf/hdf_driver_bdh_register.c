@@ -23,7 +23,7 @@
 #include "securec.h"
 #include "wifi_module.h"
 #include "hdf_wifi_core.h"
-#include "hdf_public_ap6275s.h"
+#include "hdf_public_ap6256.h"
 
 #define HDF_LOG_TAG BDH6Driver
 #define BDH6_MAX_WLAN_DEVICE 3
@@ -33,7 +33,7 @@ int32_t DeinitBDH6Chip(struct HdfWlanDevice *device);
 int32_t BDH6Deinit(struct HdfChipDriver *chipDriver, struct NetDevice *netDevice);
 int32_t BDH6Init(struct HdfChipDriver *chipDriver, struct NetDevice *netDevice);
 void BDH6Mac80211Init(struct HdfChipDriver *chipDriver);
-static const char * const BDH6_DRIVER_NAME = "hisi";
+static const char * const BDH6_DRIVER_NAME = "ap6256";
 DEFINE_MUTEX(bdh6_reset_driver_lock);
 
 void BDH6_ResetDriver(void)
@@ -171,7 +171,7 @@ struct HdfDriverEntry g_hdfBdh6ChipEntry = {
     .Bind = HdfWlanBDH6DriverBind,
     .Init = HdfWlanBDH6ChipDriverInit,
     .Release = HdfWlanBDH6ChipRelease,
-    .moduleName = "HDF_WLAN_CHIPS"
+    .moduleName = "HDF_WLAN_CHIPS_AP6256"
 };
 
 HDF_INIT(g_hdfBdh6ChipEntry);
