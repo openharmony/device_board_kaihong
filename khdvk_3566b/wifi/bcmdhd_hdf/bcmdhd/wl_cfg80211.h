@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 2022 Broadcom.
+ * Copyright (C) 1999-2019, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -344,7 +344,7 @@ do {									\
 #define WL_SCAN_JOIN_PROBE_INTERVAL_MS		20
 #define WL_SCAN_JOIN_ACTIVE_DWELL_TIME_MS	320
 #define WL_SCAN_JOIN_PASSIVE_DWELL_TIME_MS	400
-#define WL_AF_TX_MAX_RETRY	5
+#define WL_AF_TX_MAX_RETRY	20
 
 #define WL_AF_SEARCH_TIME_MAX		450
 #define WL_AF_TX_EXTRA_TIME_MAX		200
@@ -353,7 +353,7 @@ do {									\
 #ifdef WL_NAN
 #define WL_SCAN_TIMER_INTERVAL_MS_NAN	15000 /* Scan timeout */
 #endif /* WL_NAN */
-#define WL_CHANNEL_SYNC_RETRY	5
+#define WL_CHANNEL_SYNC_RETRY	2
 #define WL_INVALID		-1
 
 #ifdef DHD_LOSSLESS_ROAMING

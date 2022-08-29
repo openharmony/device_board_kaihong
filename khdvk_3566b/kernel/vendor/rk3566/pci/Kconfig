@@ -1,9 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0
-config PCIE_DW_ROCKCHIP
-	tristate "Rockchip DesignWare PCIe controller"
-	select PCIE_DW
-	select PCIE_DW_HOST
-	depends on ARCH_ROCKCHIP
-	depends on OF
-	help
-	  Enables support for the DW PCIe controller in the Rockchip SoC.

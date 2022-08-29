@@ -21,7 +21,7 @@
 #include "eapol.h"
 #include "hdf_wlan_utils.h"
 #include "hdf_wl_interface.h"
-#include "hdf_public_ap6275s.h"
+#include "hdf_public_ap6256.h"
 #include "hdf_wifi_event.h"
 
 #define HDF_LOG_TAG BDH6Driver
@@ -291,7 +291,10 @@ int32_t hdf_bdh6_netdev_open(struct NetDevice *netDev)
 
     rtnl_lock();
     retVal = (int32_t)dhd_ops_pri.ndo_open(netdev);
-    if (retVal < 0) {
+    if (0 == retVal) {
+        netDev->flags |= NET_DEVICE_IFF_RUNNING;
+    }
+    else {
         HDF_LOGE("%s: hdf net device open failed! ret = %d", __func__, retVal);
     }
 
@@ -329,7 +332,10 @@ int32_t hdf_bdh6_netdev_stop(struct NetDevice *netDev)
     rtnl_lock();
     retVal = (int32_t)dhd_ops_pri.ndo_stop(netdev);
     rtnl_unlock();
-    if (retVal < 0) {
+    if (0 == retVal) {
+        netDev->flags &= (0xffff & ~NET_DEVICE_IFF_RUNNING);
+    }
+    else {
         HDF_LOGE("%s: hdf net device stop failed! ret = %d", __func__, retVal);
     }
 

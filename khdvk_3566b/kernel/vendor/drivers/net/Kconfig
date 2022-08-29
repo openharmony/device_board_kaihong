@@ -1,4 +1,0 @@
-
-source "vendor/drivers/net/ethernet/Kconfig"
-source "vendor/drivers/net/usb/Kconfig"
-

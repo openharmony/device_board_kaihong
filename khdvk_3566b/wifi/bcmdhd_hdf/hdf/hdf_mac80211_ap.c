@@ -31,7 +31,7 @@
 #include "hdf_log.h"
 
 #include "net_device_adapter.h"
-#include "hdf_public_ap6275s.h"
+#include "hdf_public_ap6256.h"
 
 #define HDF_LOG_TAG bcmdhd
 
