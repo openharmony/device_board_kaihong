@@ -14,7 +14,7 @@
 
 KHDF_AUDIO_KHDF_ROOT_DIR = drivers/hdf/khdf
 KHDF_FRAMEWORK_ROOT_DIR = drivers/hdf/framework
-KHDF_AUDIO_RK3566_INC_DIR = drivers/hdf/framework/../../../device/board/kaihong/khdvk_3566b/audio_drivers
+KHDF_AUDIO_RK3566_INC_DIR = drivers/hdf/framework/../../../device/board/kaihong/khdvk_3566b/kernel/audio
 
 obj-$(CONFIG_DRIVERS_HDF_AUDIO_RK3566) += \
         codec/rk809_codec/src/rk809_codec_adapter.o \
