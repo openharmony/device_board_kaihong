@@ -71,15 +71,20 @@ cp -arfpL $BORAD_DIR/kernel/make_ohos.sh ${KERNEL_SRC_TMP_PATH}
 cp -arfpL $BORAD_DIR/loader/parameter-fit.txt ${IMAGES_OUT_PATH}/parameter.txt
 
 #拷贝kernel patch 删减
+cp -arfp $BORAD_DIR/../../../soc/rockchip/common/sdk_linux/*  $KERNEL_BUILD_ROOT_DIR/kernel/
+cp -arfp $BORAD_DIR/../../../soc/rockchip/common/vendor  $KERNEL_BUILD_ROOT_DIR/kernel/
 cp -arfp $BORAD_DIR/../../../soc/rockchip/rk3566/sdk_linux/*  $KERNEL_BUILD_ROOT_DIR/kernel/
 cp -arfp $BORAD_DIR/../../../soc/rockchip/rk3566/vendor  $KERNEL_BUILD_ROOT_DIR/kernel/
 
-cp -arfp $BORAD_DIR/touchscreen/touch* ${ROOT_DIR}/drivers/hdf_core/framework/model/input/driver/touchscreen/
-cp -arfp $BORAD_DIR/touchscreen/Makefile ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/input/
-cp -arfp $BORAD_DIR/touchscreen/Kconfig  ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/input/
-cp -arfp $BORAD_DIR/panel/mipi* ${ROOT_DIR}/drivers/hdf_core/framework/model/display/driver/panel/
-cp -arfp $BORAD_DIR/touchscreen/Makefile ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/display/
-cp -arfp $BORAD_DIR/touchscreen/Kconfig ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/display/
+
+cp -arfp $BORAD_DIR/kernel/modem/option.c  $KERNEL_BUILD_ROOT_DIR/kernel/drivers/usb/serial
+
+cp -arfp $BORAD_DIR/kernel/touchscreen/touch* ${ROOT_DIR}/drivers/hdf_core/framework/model/input/driver/touchscreen/
+cp -arfp $BORAD_DIR/kernel/touchscreen/Makefile ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/input/
+cp -arfp $BORAD_DIR/kernel/touchscreen/Kconfig  ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/input/
+cp -arfp $BORAD_DIR/kernel/panel/mipi* ${ROOT_DIR}/drivers/hdf_core/framework/model/display/driver/panel/
+cp -arfp $BORAD_DIR/kernel/panel/Makefile ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/display/
+cp -arfp $BORAD_DIR/kernel/panel/Kconfig ${ROOT_DIR}/drivers/hdf_core/adapter/khdf/linux/model/display/
 
 pushd $KERNEL_BUILD_ROOT_DIR
 rm -rf ${KERNEL_OBJ_TMP_PATH}
