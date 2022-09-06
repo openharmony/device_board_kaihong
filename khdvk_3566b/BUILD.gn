@@ -22,8 +22,8 @@ group("khdvk_3566b_group") {
     "distributedhardware:distributedhardware",
     "updater:updater_files",
     "wifi:ap6xxx",
-    "bluetooth:libbt_vendor",
-    "bluetooth:BCM4345C5.hcd",
+    "kernel/bluetooth:libbt_vendor",
+    "kernel/bluetooth:BCM4345C5.hcd",
     "//device/soc/rockchip/rk3566/hardware:hardware_group",
 
   ]

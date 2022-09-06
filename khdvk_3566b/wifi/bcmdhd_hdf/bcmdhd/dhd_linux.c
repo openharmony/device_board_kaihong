@@ -877,13 +877,14 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, voi
 		suspend = FALSE;
 		break;
 	}
-
+#if 0
 	if(!dhd->early_suspended && suspend_mode != PM_NOTIFIER) {
 		suspend_mode = PM_NOTIFIER;
 		conf->suspend_mode = PM_NOTIFIER;
 		conf->insuspend |= (NO_TXDATA_IN_SUSPEND | NO_TXCTL_IN_SUSPEND);
 		printf("%s: switch suspend_mode to %d\n", __FUNCTION__, suspend_mode);
 	}
+#endif
 	printf("%s: action=%ld, suspend=%d, suspend_mode=%d\n",
 		__FUNCTION__, action, suspend, suspend_mode);
 	if (suspend) {

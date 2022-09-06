@@ -4852,7 +4852,7 @@ dhd_conf_preinit(dhd_pub_t *dhd)
 	conf->pm = -1;
 	conf->pm_in_suspend = -1;
 	conf->insuspend = 0;
-	conf->suspend_mode = PM_NOTIFIER;
+	conf->suspend_mode = EARLY_SUSPEND;
 	conf->suspend_bcn_li_dtim = -1;
 	conf->rekey_offload = FALSE;
 #ifdef WL_EXT_WOWL
