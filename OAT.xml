@@ -27,6 +27,7 @@
 				<policyitem type="copyright" name="rockchip (Shanghai) Technologies Co., Ltd." path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By Rockchip"/>
 				<policyitem type="copyright" name="Institute of Software, CAS." path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By ISCAS"/>
 				<policyitem type="copyright" name="Broadcom" path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By Broadcom"/>
+				<policyitem type="copyright" name="Matthias Urlichs" path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By Matthias Urlichs"/>
 				<policyitem type="license" name="EndUserLicenseAgreement" path=".*" desc="EULA file"/>
 				<policyitem type="license" name="GPL" path=".*" desc="linux kernel adapter codes"/>
 				<policyitem type="license" name="MIT" path=".*" desc=""/>
@@ -43,7 +44,7 @@
                 <filteritem type="filepath" name="khdvk_3566b/kernel/rk3566-rp-kh.dts" desc="配置文件，不能加其他注释"/>
 				<filteritem type="filepath" name="khdvk_3566b/loader/*" desc="mirror image file"/>
 				<filteritem type="filepath" name="khdvk_3566b/wifi/bcmdhd_hdf/bcmdhd/.*" desc="thirdparty file"/>
-				<filteritem type="filepath" name="khdvk_3566b/bluetooth/BCM4345C5.hcd" desc="AP6212 bluetooth firmware"/>
+				<filteritem type="filepath" name="khdvk_3566b/kernel/bluetooth/BCM4345C5.hcd" desc="AP6256 bluetooth firmware"/>
                 <filteritem type="filepath" name="khdvk_3566b/wifi/proc/sys/net/ipv4/ping_group_range" desc="project configuration file"/>
 				<filteritem type="filepath" name="khdvk_3566b/wifi/ap6xxx/*" desc="mirror image file"/>
                 <!--filteritem type="filename" name="*.uvwxyz" desc="Describe the reason for filtering scan results"/-->
