@@ -15,7 +15,6 @@ import("//build/ohos.gni")
 AP6XXX_ETC_DIR = "//device/board/kaihong/khdvk_3566b/wifi/ap6xxx"
 DNS_CONFIG_DIR = "//device/board/kaihong/khdvk_3566b/wifi"
 
-
 ohos_prebuilt_etc("fw_bcm43456c5_ag.bin") {
   source = "$AP6XXX_ETC_DIR/fw_bcm43456c5_ag.bin"
   install_images = [ vendor_base_dir ]

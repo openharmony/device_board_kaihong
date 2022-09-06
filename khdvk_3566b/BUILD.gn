@@ -11,21 +11,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//build/ohos.gni")
 import("//build/config/clang/clang.gni")
+import("//build/ohos.gni")
 
 print("khdvk_3566b_group in")
 group("khdvk_3566b_group") {
   deps = [
     ":kernel",
-    "rootfs:init_configs",
     "distributedhardware:distributedhardware",
+    "kernel/bluetooth:BCM4345C5.hcd",
+    "kernel/bluetooth:libbt_vendor",
+    "rootfs:init_configs",
     "updater:updater_files",
     "wifi:ap6xxx",
-    "kernel/bluetooth:libbt_vendor",
-    "kernel/bluetooth:BCM4345C5.hcd",
     "//device/soc/rockchip/rk3566/hardware:hardware_group",
-
   ]
 }
 
@@ -33,12 +32,12 @@ kernel_build_script_dir = "//kernel/linux/linux-5.10"
 kernel_source_dir = "//kernel/linux/linux-5.10"
 
 action("kernel") {
-   script = "kernel/build_kernel.sh"
-   sources = [ kernel_source_dir ]
-   product_path = "vendor/$product_company/$product_name"
+  script = "kernel/build_kernel.sh"
+  sources = [ kernel_source_dir ]
+  product_path = "vendor/$product_company/$product_name"
 
-   outputs = [ "$root_build_dir/packages/phone/images" ]
-   args = [
+  outputs = [ "$root_build_dir/packages/phone/images" ]
+  args = [
     rebase_path(kernel_build_script_dir, root_build_dir),
     rebase_path("$root_out_dir/../KERNEL_OBJ"),
     rebase_path("$root_build_dir/packages/phone/images"),
