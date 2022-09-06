@@ -44,7 +44,6 @@ config("device_manager_config") {
 
 ohos_shared_library("camera_device_manager") {
   sources = [
-    "src/rkispv5.cpp",
     "$camera_path/adapter/platform/v4l2/src/device_manager/enumerator_manager.cpp",
     "$camera_path/adapter/platform/v4l2/src/device_manager/flash_controller.cpp",
     "$camera_path/adapter/platform/v4l2/src/device_manager/flash_manager.cpp",
@@ -57,6 +56,7 @@ ohos_shared_library("camera_device_manager") {
     "$camera_path/device_manager/src/icontroller.cpp",
     "$camera_path/device_manager/src/imanager.cpp",
     "$camera_path/device_manager/src/isensor.cpp",
+    "src/rkispv5.cpp",
   ]
 
   include_dirs = [

@@ -27,7 +27,6 @@ config("bt_warnings") {
   ]
 }
 
-
 ohos_prebuilt_etc("BCM4345C5.hcd") {
   source = "//device/board/${product_company}/${product_name}/kernel/bluetooth/BCM4345C5.hcd"
   install_images = [ vendor_base_dir ]
@@ -35,7 +34,6 @@ ohos_prebuilt_etc("BCM4345C5.hcd") {
   part_name = "kaihong_products"
   install_enable = true
 }
-
 
 ohos_shared_library("libbt_vendor") {
   output_name = "libbt_vendor"
