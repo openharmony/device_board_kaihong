@@ -182,7 +182,7 @@ bash build/prebuilts_download.sh
 ```
 
 编译所生成的文件都归档在out/khdvk_3566b/目录下，结果镜像输出在
-out/khdvk_3566b/packages/phone/images/ 目录下，需要烧录的文件有 MiniLoaderAll.bin，parameter.txt，boot.img，ramdisk.img，resource.img，system.img，updater.img，userdata.img，vendor.img。需要注意 uboot.img也是需要烧录的，获取地址为：https://gitee.com/boot_img/images/raw/master/uboot.img 。
+out/khdvk_3566b/packages/phone/images/ 目录下，需要烧录的文件有 MiniLoaderAll.bin，parameter.txt，boot.img，ramdisk.img，resource.img，system.img，updater.img，userdata.img，vendor.img。需要注意 uboot.img也是需要烧录的，获取地址为：http://ftpkaihongdigi.i234.me:5000/sharing/lKmniElWR 。
 
 3） 编译源码完成，请进行镜像烧录。
 
