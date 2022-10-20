@@ -153,16 +153,16 @@ int RK3568SetI2sFomartVal(const struct AudioPcmHwParams *param)
         return -1;
     }
     switch (param->format) {
-        case AUDIO_FORMAT_PCM_8_BIT:
+        case AUDIO_FORMAT_TYPE_PCM_8_BIT:
             val |= I2S_TXCR_VDW(8); // 8-bit
             break;
-        case AUDIO_FORMAT_PCM_16_BIT:
+        case AUDIO_FORMAT_TYPE_PCM_16_BIT:
             val |= I2S_TXCR_VDW(16); // 16-bit
             break;
-        case AUDIO_FORMAT_PCM_24_BIT:
+        case AUDIO_FORMAT_TYPE_PCM_24_BIT:
             val |= I2S_TXCR_VDW(24); // 24-bit
             break;
-        case AUDIO_FORMAT_PCM_32_BIT:
+        case AUDIO_FORMAT_TYPE_PCM_32_BIT:
             val |= I2S_TXCR_VDW(32); // 32-bit
             break;
         default:

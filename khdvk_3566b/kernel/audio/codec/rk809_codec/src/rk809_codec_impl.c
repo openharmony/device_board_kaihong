@@ -591,11 +591,11 @@ int32_t Rk809FormatToBitWidth(enum AudioFormat format, unsigned int *bitWidth)
         return HDF_FAILURE;
     }
     switch (format) {
-        case AUDIO_FORMAT_PCM_16_BIT:
+        case AUDIO_FORMAT_TYPE_PCM_16_BIT:
             *bitWidth = DATA_BIT_WIDTH16;
             break;
 
-        case AUDIO_FORMAT_PCM_24_BIT:
+        case AUDIO_FORMAT_TYPE_PCM_24_BIT:
             *bitWidth = DATA_BIT_WIDTH24;
             break;
 
