@@ -17,7 +17,7 @@ DNS_CONFIG_DIR = "//device/board/kaihong/khdvk_3566b/wifi"
 
 ohos_prebuilt_etc("fw_bcm43456c5_ag.bin") {
   source = "$AP6XXX_ETC_DIR/fw_bcm43456c5_ag.bin"
-  install_images = [ vendor_base_dir ]
+  install_images = [ chipset_base_dir ]
   relative_install_dir = "firmware"
   part_name = "kaihong_products"
   install_enable = true
@@ -25,7 +25,7 @@ ohos_prebuilt_etc("fw_bcm43456c5_ag.bin") {
 
 ohos_prebuilt_etc("nvram_ap6256.txt") {
   source = "$AP6XXX_ETC_DIR/nvram_ap6256.txt"
-  install_images = [ vendor_base_dir ]
+  install_images = [ chipset_base_dir ]
   relative_install_dir = "firmware"
   part_name = "kaihong_products"
   install_enable = true
