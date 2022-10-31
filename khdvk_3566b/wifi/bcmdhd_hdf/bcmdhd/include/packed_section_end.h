@@ -26,9 +26,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -46,14 +46,14 @@
  * point, then there is a missing include of packed_section_start.h.
  */
 #ifdef BWL_PACKED_SECTION
-	#undef BWL_PACKED_SECTION
+#undef BWL_PACKED_SECTION
 #else
-	#error "BWL_PACKED_SECTION is NOT defined!"
+#error "BWL_PACKED_SECTION is NOT defined!"
 #endif // endif
 
 /* Compiler-specific directives for structure packing are declared in
  * packed_section_start.h. This marks the end of the structure packing section,
  * so, undef them here.
  */
-#undef	BWL_PRE_PACKED_STRUCT
-#undef	BWL_POST_PACKED_STRUCT
+#undef BWL_PRE_PACKED_STRUCT
+#undef BWL_POST_PACKED_STRUCT

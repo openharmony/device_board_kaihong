@@ -37,14 +37,14 @@
 #endif
 
 #if (BTVND_DBG == TRUE)
-#define BTVNDDBG(param, ...)        \
-    {                               \
-        HILOGD(param, ##__VA_ARGS__); \
+#define BTVNDDBG(param, ...)                                                   \
+    {                                                                          \
+        HILOGD(param, ##__VA_ARGS__);                                          \
     }
 #else
-#define BTVNDDBG(param, ...)        \
-    {                               \
-        HILOGD(param, ##__VA_ARGS__); \
+#define BTVNDDBG(param, ...)                                                   \
+    {                                                                          \
+        HILOGD(param, ##__VA_ARGS__);                                          \
     }
 #endif
 
@@ -81,8 +81,7 @@ uint8_t vnd_local_bd_addr[BD_ADDR_LEN] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static const tUSERIAL_CFG userial_init_cfg = {
     (USERIAL_DATABITS_8 | USERIAL_PARITY_NONE | USERIAL_STOPBITS_1),
-    USERIAL_BAUD_115200
-};
+    USERIAL_BAUD_115200};
 
 /******************************************************************************
 **  Functions
@@ -101,8 +100,9 @@ typedef enum {
 
 static int init(const bt_vendor_callbacks_t *p_cb, unsigned char *local_bdaddr)
 {
-    HILOGI("init, bdaddr:%02x%02x:%02x%02x:%02x%02x", local_bdaddr[0], local_bdaddr[1], local_bdaddr[2],
-        local_bdaddr[3], local_bdaddr[4], local_bdaddr[5]);
+    HILOGI("init, bdaddr:%02x%02x:%02x%02x:%02x%02x", local_bdaddr[0],
+           local_bdaddr[1], local_bdaddr[2], local_bdaddr[3], local_bdaddr[4],
+           local_bdaddr[5]);
 
     if (p_cb == NULL) {
         HILOGE("init failed with no user callbacks!");
@@ -160,8 +160,9 @@ static int op(bt_opcode_t opcode, void *param)
             int fd, idx;
             fd = userial_vendor_open((tUSERIAL_CFG *)&userial_init_cfg);
             if (fd != -1) {
-                for (idx = 0; idx < HCI_MAX_CHANNEL; idx++)
+                for (idx = 0; idx < HCI_MAX_CHANNEL; idx++) {
                     (*fd_array)[idx] = fd;
+                }
 
                 retval = 1;
             }
@@ -214,7 +215,4 @@ static void cleanup(void)
 
 // Entry point of DLib
 const bt_vendor_interface_t BLUETOOTH_VENDOR_LIB_INTERFACE = {
-    sizeof(bt_vendor_interface_t),
-    init,
-    op,
-    cleanup};
+    sizeof(bt_vendor_interface_t), init, op, cleanup};
