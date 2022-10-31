@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -36,17 +36,17 @@
 #include <bcmdefs.h>
 
 struct nvram_header {
-	uint32 magic;
-	uint32 len;
-	uint32 crc_ver_init;	/* 0:7 crc, 8:15 ver, 16:31 sdram_init */
-	uint32 config_refresh;	/* 0:15 sdram_config, 16:31 sdram_refresh */
-	uint32 config_ncdl;	/* ncdl values for memc */
+    uint32 magic;
+    uint32 len;
+    uint32 crc_ver_init;   /* 0:7 crc, 8:15 ver, 16:31 sdram_init */
+    uint32 config_refresh; /* 0:15 sdram_config, 16:31 sdram_refresh */
+    uint32 config_ncdl;    /* ncdl values for memc */
 };
 
 struct nvram_tuple {
-	char *name;
-	char *value;
-	struct nvram_tuple *next;
+    char *name;
+    char *value;
+    struct nvram_tuple *next;
 };
 
 /*
@@ -96,7 +96,7 @@ extern void nvram_exit(void *sih);
  * @param	name	name of variable to get
  * @return	value of variable or NULL if undefined
  */
-extern char * nvram_get(const char *name);
+extern char *nvram_get(const char *name);
 
 /*
  * Get the value of an NVRAM variable. The pointer returned may be
@@ -105,7 +105,7 @@ extern char * nvram_get(const char *name);
  * @param	bit	bit value to get
  * @return	value of variable or NULL if undefined
  */
-extern char * nvram_get_bitflag(const char *name, const int bit);
+extern char *nvram_get_bitflag(const char *name, const int bit);
 
 /*
  * Read the reset GPIO value from the nvram and set the GPIO
@@ -118,11 +118,10 @@ extern int nvram_resetgpio_init(void *sih);
  * @param	name	name of variable to get
  * @return	value of variable or NUL if undefined
  */
-static INLINE char *
-nvram_safe_get(const char *name)
+static INLINE char *nvram_safe_get(const char *name)
 {
-	char *p = nvram_get(name);
-	return p ? p : "";
+    char *p = nvram_get(name);
+    return p ? p : "";
 }
 
 /*
@@ -132,20 +131,19 @@ nvram_safe_get(const char *name)
  * @return	TRUE if variable is defined and its value is string equal
  *		to match or FALSE otherwise
  */
-static INLINE int
-nvram_match(const char *name, const char *match)
+static INLINE int nvram_match(const char *name, const char *match)
 {
-	const char *value = nvram_get(name);
+    const char *value = nvram_get(name);
 
-	/* In nvramstubs.c builds, nvram_get() is defined as returning zero,
-	* so the return line below never executes the strcmp(),
-	* resulting in 'match' being an unused parameter.
-	* Make a ref to 'match' to quiet the compiler warning.
-	*/
+    /* In nvramstubs.c builds, nvram_get() is defined as returning zero,
+     * so the return line below never executes the strcmp(),
+     * resulting in 'match' being an unused parameter.
+     * Make a ref to 'match' to quiet the compiler warning.
+     */
 
-	BCM_REFERENCE(match);
+    BCM_REFERENCE(match);
 
-	return (value && !strcmp(value, match));
+    return (value && !strcmp(value, match));
 }
 
 /*
@@ -156,12 +154,12 @@ nvram_match(const char *name, const char *match)
  * @return	TRUE if variable is defined and its value is string equal
  *		to match or FALSE otherwise
  */
-static INLINE int
-nvram_match_bitflag(const char *name, const int bit, const char *match)
+static INLINE int nvram_match_bitflag(const char *name, const int bit,
+                                      const char *match)
 {
-	const char *value = nvram_get_bitflag(name, bit);
-	BCM_REFERENCE(match);
-	return (value && !strcmp(value, match));
+    const char *value = nvram_get_bitflag(name, bit);
+    BCM_REFERENCE(match);
+    return (value && !strcmp(value, match));
 }
 
 /*
@@ -171,20 +169,19 @@ nvram_match_bitflag(const char *name, const int bit, const char *match)
  * @return	TRUE if variable is defined and its value is not string
  *		equal to invmatch or FALSE otherwise
  */
-static INLINE int
-nvram_invmatch(const char *name, const char *invmatch)
+static INLINE int nvram_invmatch(const char *name, const char *invmatch)
 {
-	const char *value = nvram_get(name);
+    const char *value = nvram_get(name);
 
-	/* In nvramstubs.c builds, nvram_get() is defined as returning zero,
-	* so the return line below never executes the strcmp(),
-	* resulting in 'invmatch' being an unused parameter.
-	* Make a ref to 'invmatch' to quiet the compiler warning.
-	*/
+    /* In nvramstubs.c builds, nvram_get() is defined as returning zero,
+     * so the return line below never executes the strcmp(),
+     * resulting in 'invmatch' being an unused parameter.
+     * Make a ref to 'invmatch' to quiet the compiler warning.
+     */
 
-	BCM_REFERENCE(invmatch);
+    BCM_REFERENCE(invmatch);
 
-	return (value && strcmp(value, invmatch));
+    return (value && strcmp(value, invmatch));
 }
 
 /*
@@ -247,44 +244,44 @@ extern int nvram_getall(char *nvram_buf, int count);
  * returns the crc value of the nvram
  * @param	nvh	nvram header pointer
  */
-uint8 nvram_calc_crc(struct nvram_header * nvh);
+uint8 nvram_calc_crc(struct nvram_header *nvh);
 
 extern int nvram_space;
 #endif /* _LANGUAGE_ASSEMBLY */
 
 /* The NVRAM version number stored as an NVRAM variable */
-#define NVRAM_SOFTWARE_VERSION	"1"
+#define NVRAM_SOFTWARE_VERSION "1"
 
-#define NVRAM_MAGIC		0x48534C46	/* 'FLSH' */
-#define NVRAM_CLEAR_MAGIC	0x0
-#define NVRAM_INVALID_MAGIC	0xFFFFFFFF
-#define NVRAM_VERSION		1
-#define NVRAM_HEADER_SIZE	20
+#define NVRAM_MAGIC 0x48534C46 /* 'FLSH' */
+#define NVRAM_CLEAR_MAGIC 0x0
+#define NVRAM_INVALID_MAGIC 0xFFFFFFFF
+#define NVRAM_VERSION 1
+#define NVRAM_HEADER_SIZE 20
 /* This definition is for precommit staging, and will be removed */
-#define NVRAM_SPACE		0x8000
+#define NVRAM_SPACE 0x8000
 /* For CFE builds this gets passed in thru the makefile */
 #ifndef MAX_NVRAM_SPACE
-#define MAX_NVRAM_SPACE		0x10000
+#define MAX_NVRAM_SPACE 0x10000
 #endif // endif
-#define DEF_NVRAM_SPACE		0x8000
-#define ROM_ENVRAM_SPACE	0x1000
-#define NVRAM_LZMA_MAGIC	0x4c5a4d41	/* 'LZMA' */
+#define DEF_NVRAM_SPACE 0x8000
+#define ROM_ENVRAM_SPACE 0x1000
+#define NVRAM_LZMA_MAGIC 0x4c5a4d41 /* 'LZMA' */
 
 #define NVRAM_MAX_VALUE_LEN 255
 #define NVRAM_MAX_PARAM_LEN 64
 
-#define NVRAM_CRC_START_POSITION	9 /* magic, len, crc8 to be skipped */
-#define NVRAM_CRC_VER_MASK	0xffffff00 /* for crc_ver_init */
+#define NVRAM_CRC_START_POSITION 9    /* magic, len, crc8 to be skipped */
+#define NVRAM_CRC_VER_MASK 0xffffff00 /* for crc_ver_init */
 
 /* Offsets to embedded nvram area */
-#define NVRAM_START_COMPRESSED	0x400
-#define NVRAM_START		0x1000
+#define NVRAM_START_COMPRESSED 0x400
+#define NVRAM_START 0x1000
 
 #define BCM_JUMBO_NVRAM_DELIMIT '\n'
 #define BCM_JUMBO_START "Broadcom Jumbo Nvram file"
 
-#if (defined(FAILSAFE_UPGRADE) || defined(CONFIG_FAILSAFE_UPGRADE) || \
-	defined(__CONFIG_FAILSAFE_UPGRADE_SUPPORT__))
+#if (defined(FAILSAFE_UPGRADE) || defined(CONFIG_FAILSAFE_UPGRADE) ||          \
+     defined(__CONFIG_FAILSAFE_UPGRADE_SUPPORT__))
 #define IMAGE_SIZE "image_size"
 #define BOOTPARTITION "bootpartition"
 #define IMAGE_BOOT BOOTPARTITION
@@ -300,8 +297,8 @@ extern int nvram_space;
 #define LINUX_SECOND "linux2"
 #endif // endif
 
-#if (defined(DUAL_IMAGE) || defined(CONFIG_DUAL_IMAGE) || \
-	defined(__CONFIG_DUAL_IMAGE_FLASH_SUPPORT__))
+#if (defined(DUAL_IMAGE) || defined(CONFIG_DUAL_IMAGE) ||                      \
+     defined(__CONFIG_DUAL_IMAGE_FLASH_SUPPORT__))
 /* Shared by all: CFE, Linux Kernel, and Ap */
 #define IMAGE_BOOT "image_boot"
 #define BOOTPARTITION IMAGE_BOOT
@@ -323,6 +320,7 @@ extern int nvram_space;
 #define LINUX_PART_TO_FLASH "linux_to_flash"
 #define LINUX_FLASH_POLICY "linux_flash_policy"
 
-#endif /* defined(DUAL_IMAGE||CONFIG_DUAL_IMAGE)||__CONFIG_DUAL_IMAGE_FLASH_SUPPORT__ */
+#endif /* defined(DUAL_IMAGE||CONFIG_DUAL_IMAGE)||__CONFIG_DUAL_IMAGE_FLASH_SUPPORT__ \
+        */
 
 #endif /* _bcmnvram_h_ */
