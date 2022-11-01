@@ -761,12 +761,12 @@ void hw_config_cback(void *p_mem)
 
                 hw_cfg_cb.local_chip_name[LOCAL_NAME_BUFFER_LEN - 1] = 0;
                 HILOGI("Chipset %s", hw_cfg_cb.local_chip_name);
-                if (strcmp(hw_cfg_cb.local_chip_name == 0, "BCM4345C5")) {
+                if (strcmp(hw_cfg_cb.local_chip_name, "BCM4345C5") == 0) {
                     HILOGI("found BCM4345C5");
                     p_name = FW_PATCHFILE_LOCATION "BCM4345C5.hcd";
                 }
 
-                if (strcmp(hw_cfg_cb.local_chip_name == 0, "BCM43430A1")) {
+                if (strcmp(hw_cfg_cb.local_chip_name, "BCM43430A1") == 0) {
                     HILOGI("found BCM43430A1");
                     p_name = FW_PATCHFILE_LOCATION "BCM43430A1.hcd";
                 }
