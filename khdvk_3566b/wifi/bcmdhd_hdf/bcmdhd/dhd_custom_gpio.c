@@ -84,34 +84,6 @@ int dhd_customer_gpio_wlan_ctrl(void *adapter, int onoff)
     return err;
 }
 
-#if 0
-/* Function to get custom MAC address */
-int
-dhd_custom_get_mac_address(void *adapter, unsigned char *buf)
-{
-    int ret = 0;
-
-    WL_TRACE(("%s Enter\n", __FUNCTION__));
-    if (!buf)
-        return -EINVAL;
-
-	/* Customer access to MAC address stored outside of DHD driver */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
-    ret = wifi_platform_get_mac_addr(adapter, buf);
-#endif // endif
-
-#ifdef EXAMPLE_GET_MAC
-	/* EXAMPLE code */
-	{
-		struct ether_addr ea_example = {{0x00, 0x11, 0x22, 0x33, 0x44, 0xFF}};
-        bcopy((char *)&ea_example, buf, sizeof(struct ether_addr));
-    }
-#endif /* EXAMPLE_GET_MAC */
-
-    return ret;
-}
-#endif /* GET_CUSTOM_MAC_ENABLE */
-
 /* Customized Locale table : OPTIONAL feature */
 const struct cntry_locales_custom translate_custom_table[] = {
 /* Table should be filled out based on custom platform regulatory requirement */

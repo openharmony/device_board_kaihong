@@ -363,9 +363,6 @@ int sdioh_iovar_op(sdioh_info_t *si, const char *name, void *params, int plen,
     int32 int_val = 0;
     bool bool_val;
     uint32 actionid;
-    /*
-        sdioh_regs_t *regs;
-    */
 
     ASSERT(name);
     ASSERT(len >= 0);

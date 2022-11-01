@@ -596,35 +596,6 @@ static void start_fwcfg_cbtimer(void)
 
 void hw_sco_config(void);
 
-#if 0
-ssize_t hw_config_cback_set_baud1(HC_BT_HDR *p_buf, uint16_t opcode)
-{
-    uint8_t *p = (uint8_t *)(p_buf + 1);
-    ssize_t xmit_bytes = 0;
-    // /vendor/etc/firmware
-    // char* p_name = FW_PATCHFILE_LOCATION "BCM43430A1.hcd";
-    char* p_name = FW_PATCHFILE_LOCATION "BCM4345C5.hcd";
-    if ((hw_cfg_cb.fw_fd = open(p_name, O_RDONLY)) == -1) {
-        HILOGE("vendor lib preload failed to open [%s]", p_name);
-    } else {
-        /* vsc_download_minidriver */
-        UINT16_TO_STREAM(p, HCI_VSC_DOWNLOAD_MINIDRV);
-        *p = 0; /* parameter length */
-
-        p_buf->len = HCI_CMD_PREAMBLE_SIZE;
-        hw_config_set_state(HW_CFG_DL_MINIDRIVER);
-        xmit_bytes = bt_vendor_cbacks->xmit_cb(HCI_VSC_DOWNLOAD_MINIDRV, p_buf);
-    }
-
-    if (xmit_bytes <= 0) {
-        HILOGE("vendor lib preload failed to locate firmware patch file and set bdaddr");
-        xmit_bytes = hw_config_set_bdaddr(p_buf);
-    }
-
-    return xmit_bytes;
-}
-#endif
-
 ssize_t hw_config_cback_read_local_name(HC_BT_HDR *p_buf, uint16_t opcode)
 {
     uint8_t *p = (uint8_t *)(p_buf + 1);

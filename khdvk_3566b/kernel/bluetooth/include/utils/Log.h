@@ -52,19 +52,6 @@ static void Print(const char *fmt, ...)
     fclose(fp);
 }
 
-#if 0
-static void Print(const char* fmt, ...)
-{
-    int ret;
-    char buf[1024] = { 0 };
-    va_list ap;
-    va_start(ap, fmt);
-    ret = vsprintf(buf, fmt, ap);
-    va_end(ap);
-    printf("%s\n", buf);
-}
-#endif
-
 #define HILOGD(...) Print(__VA_ARGS__)
 #define HILOGI(...) Print(__VA_ARGS__)
 #define HILOGW(...) Print(__VA_ARGS__)
