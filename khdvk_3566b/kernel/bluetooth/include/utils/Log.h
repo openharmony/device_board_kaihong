@@ -19,50 +19,38 @@
 #include "hilog/log.h"
 #include "time.h"
 
-//#define VENDOR_DEBUG_2_FILE
+// #define VENDOR_DEBUG_2_FILE
 
 #ifdef VENDOR_DEBUG_2_FILE
-static void Print(const char* fmt, ...)
+static void Print(const char *fmt, ...)
 {
-  FILE* fp = fopen("/data/btvendor.log", "a+");
+    FILE *fp = fopen("/data/btvendor.log", "a+");
 
-  int nFileLen = ftell(fp);
+    int nFileLen = ftell(fp);
 
-  int ret;
-  char buf[1024] = { 0 };
-  if (fp != 0)
-  {
-    time_t timep;
-    time(&timep);
+    int ret;
+    char buf[1024] = {0};
+    if (fp != 0) {
+        time_t timep;
+        time(&timep);
 
-    struct tm* p;
-    p = gmtime(&timep);
-    ret = sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d VENDOR:", 1900 + p->tm_year, 1 + p->tm_mon, p->tm_mday, 8 + p->tm_hour, p->tm_min, p->tm_sec);
-    fwrite(buf, 1, ret, fp);
+        struct tm *p;
+        p = gmtime(&timep);
+        ret = sprintf(
+            buf, "%04d-%02d-%02d %02d:%02d:%02d VENDOR:", 0X76C + p->tm_year,
+            1 + p->tm_mon, p->tm_mday, 0X8 + p->tm_hour, p->tm_min, p->tm_sec);
+        fwrite(buf, 1, ret, fp);
 
-    va_list ap;
-    va_start(ap, fmt);
-    ret = vsprintf(buf, fmt, ap);
-    va_end(ap);
+        va_list ap;
+        va_start(ap, fmt);
+        ret = vsprintf(buf, fmt, ap);
+        va_end(ap);
 
-    buf[ret] = '\n';
-    fwrite(buf, 1, ret + 1, fp);
-  }
-  fclose(fp);
+        buf[ret] = '\n';
+        fwrite(buf, 1, ret + 1, fp);
+    }
+    fclose(fp);
 }
-
-#if 0
-static void Print(const char* fmt, ...)
-{
-  int ret;
-  char buf[1024] = { 0 };
-  va_list ap;
-  va_start(ap, fmt);
-  ret = vsprintf(buf, fmt, ap);
-  va_end(ap);
-  printf("%s\n", buf);
-}
-#endif
 
 #define HILOGD(...) Print(__VA_ARGS__)
 #define HILOGI(...) Print(__VA_ARGS__)
@@ -71,10 +59,14 @@ static void Print(const char* fmt, ...)
 
 #else
 
-#define HILOGD(...) HiLogPrint(LOG_CORE, LOG_DEBUG, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
-#define HILOGI(...) HiLogPrint(LOG_CORE, LOG_INFO, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
-#define HILOGW(...) HiLogPrint(LOG_CORE, LOG_WARN, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
-#define HILOGE(...) HiLogPrint(LOG_CORE, LOG_ERROR, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
+#define HILOGD(...)                                                            \
+    HiLogPrint(LOG_CORE, LOG_DEBUG, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
+#define HILOGI(...)                                                            \
+    HiLogPrint(LOG_CORE, LOG_INFO, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
+#define HILOGW(...)                                                            \
+    HiLogPrint(LOG_CORE, LOG_WARN, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
+#define HILOGE(...)                                                            \
+    HiLogPrint(LOG_CORE, LOG_ERROR, LOG_DOMAIN, "BTVENDOR", __VA_ARGS__)
 #endif
 
-#endif//#define BT_VENDOR_LOG_H
+#endif // #define BT_VENDOR_LOG_H

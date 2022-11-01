@@ -46,15 +46,15 @@
 #endif
 
 #if (VNDUSERIAL_DBG == TRUE)
-#define VNDUSERIALDBG(param, ...)   \
-{                               \
-    HILOGD(param, ##__VA_ARGS__); \
-}
+#define VNDUSERIALDBG(param, ...)                                              \
+    {                                                                          \
+        HILOGD(param, ##__VA_ARGS__);                                          \
+    }
 #else
-#define VNDUSERIALDBG(param, ...)   \
-{                               \
-    HILOGD(param, ##__VA_ARGS__); \
-}
+#define VNDUSERIALDBG(param, ...)                                              \
+    {                                                                          \
+        HILOGD(param, ##__VA_ARGS__);                                          \
+    }
 #endif
 
 #define VND_PORT_NAME_MAXLEN 256
@@ -92,35 +92,35 @@ static vnd_userial_cb_t vnd_userial;
 *******************************************************************************/
 uint8_t userial_to_tcio_baud(uint8_t cfg_baud, uint32_t *baud)
 {
-    if (cfg_baud == USERIAL_BAUD_115200)
+    if (cfg_baud == USERIAL_BAUD_115200) {
         *baud = B115200;
-    else if (cfg_baud == USERIAL_BAUD_4M)
+    } else if (cfg_baud == USERIAL_BAUD_4M) {
         *baud = B4000000;
-    else if (cfg_baud == USERIAL_BAUD_3M)
+    } else if (cfg_baud == USERIAL_BAUD_3M) {
         *baud = B3000000;
-    else if (cfg_baud == USERIAL_BAUD_2M)
+    } else if (cfg_baud == USERIAL_BAUD_2M) {
         *baud = B2000000;
-    else if (cfg_baud == USERIAL_BAUD_1_5M)
+    } else if (cfg_baud == USERIAL_BAUD_1_5M) {
         *baud = B1500000;
-    else if (cfg_baud == USERIAL_BAUD_1M)
+    } else if (cfg_baud == USERIAL_BAUD_1M) {
         *baud = B1000000;
-    else if (cfg_baud == USERIAL_BAUD_921600)
+    } else if (cfg_baud == USERIAL_BAUD_921600) {
         *baud = B921600;
-    else if (cfg_baud == USERIAL_BAUD_460800)
+    } else if (cfg_baud == USERIAL_BAUD_460800) {
         *baud = B460800;
-    else if (cfg_baud == USERIAL_BAUD_230400)
+    } else if (cfg_baud == USERIAL_BAUD_230400) {
         *baud = B230400;
-    else if (cfg_baud == USERIAL_BAUD_57600)
+    } else if (cfg_baud == USERIAL_BAUD_57600) {
         *baud = B57600;
-    else if (cfg_baud == USERIAL_BAUD_19200)
+    } else if (cfg_baud == USERIAL_BAUD_19200) {
         *baud = B19200;
-    else if (cfg_baud == USERIAL_BAUD_9600)
+    } else if (cfg_baud == USERIAL_BAUD_9600) {
         *baud = B9600;
-    else if (cfg_baud == USERIAL_BAUD_1200)
+    } else if (cfg_baud == USERIAL_BAUD_1200) {
         *baud = B1200;
-    else if (cfg_baud == USERIAL_BAUD_600)
+    } else if (cfg_baud == USERIAL_BAUD_600) {
         *baud = B600;
-    else {
+    } else {
         HILOGE("userial vendor open: unsupported baud idx %i", cfg_baud);
         *baud = B115200;
         return FALSE;
@@ -150,8 +150,9 @@ void userial_ioctl_init_bt_wake(int fd)
 
     /* attempt to load enable discipline driver */
     if (ioctl(vnd_userial.fd, TIOCSETD, &ldisc) < 0) {
-        VNDUSERIALDBG("USERIAL_Open():fd %d, TIOCSETD failed: error %d for ldisc: %d",
-                      fd, errno, ldisc);
+        VNDUSERIALDBG(
+            "USERIAL_Open():fd %d, TIOCSETD failed: error %d for ldisc: %d", fd,
+            errno, ldisc);
     }
 #endif
 
@@ -179,8 +180,8 @@ void userial_ioctl_init_bt_wake(int fd)
 void userial_vendor_init(void)
 {
     vnd_userial.fd = -1;
-    (void)snprintf_s(vnd_userial.port_name, VND_PORT_NAME_MAXLEN, VND_PORT_NAME_MAXLEN, "%s",
-        BLUETOOTH_UART_DEVICE_PORT);
+    (void)snprintf_s(vnd_userial.port_name, VND_PORT_NAME_MAXLEN,
+                     VND_PORT_NAME_MAXLEN, "%s", BLUETOOTH_UART_DEVICE_PORT);
 }
 
 /*******************************************************************************
@@ -205,31 +206,34 @@ int userial_vendor_open(tUSERIAL_CFG *p_cfg)
         return -1;
     }
 
-    if (p_cfg->fmt & USERIAL_DATABITS_8)
+    if (p_cfg->fmt & USERIAL_DATABITS_8) {
         data_bits = CS8;
-    else if (p_cfg->fmt & USERIAL_DATABITS_7)
+    } else if (p_cfg->fmt & USERIAL_DATABITS_7) {
         data_bits = CS7;
-    else if (p_cfg->fmt & USERIAL_DATABITS_6)
+    } else if (p_cfg->fmt & USERIAL_DATABITS_6) {
         data_bits = CS6;
-    else if (p_cfg->fmt & USERIAL_DATABITS_5)
+    } else if (p_cfg->fmt & USERIAL_DATABITS_5) {
         data_bits = CS5;
+    }
 
-    if (p_cfg->fmt & USERIAL_PARITY_NONE)
+    if (p_cfg->fmt & USERIAL_PARITY_NONE) {
         parity = 0;
-    else if (p_cfg->fmt & USERIAL_PARITY_EVEN)
+    } else if (p_cfg->fmt & USERIAL_PARITY_EVEN) {
         parity = PARENB;
-    else if (p_cfg->fmt & USERIAL_PARITY_ODD)
+    } else if (p_cfg->fmt & USERIAL_PARITY_ODD) {
         parity = (PARENB | PARODD);
+    }
 
-    if (p_cfg->fmt & USERIAL_STOPBITS_1)
+    if (p_cfg->fmt & USERIAL_STOPBITS_1) {
         stop_bits = 0;
-    else if (p_cfg->fmt & USERIAL_STOPBITS_2)
+    } else if (p_cfg->fmt & USERIAL_STOPBITS_2) {
         stop_bits = CSTOPB;
-    
+    }
+
     HILOGI("userial vendor open: opening %s", vnd_userial.port_name);
 
     if ((vnd_userial.fd = open(vnd_userial.port_name, O_RDWR)) == -1) {
-	    HILOGI("userial vendor open: port opening error");
+        HILOGI("userial vendor open: port opening error");
         return -1;
     }
 

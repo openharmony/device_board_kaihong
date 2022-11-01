@@ -13,9 +13,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -32,7 +32,7 @@
 #ifndef __FRAG_H__
 #define __FRAG_H__
 
-int bcm_tlv_dot11_frag_tot_len(const void *buf, uint buf_len,
-	uint8 id, bool id_ext, uint *ie_len);
+int bcm_tlv_dot11_frag_tot_len(const void *buf, uint buf_len, uint8 id,
+                               bool id_ext, uint *ie_len);
 
 #endif /* __FRAG_H__ */

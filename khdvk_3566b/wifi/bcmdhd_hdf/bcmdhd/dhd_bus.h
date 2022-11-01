@@ -15,9 +15,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -50,9 +50,11 @@ extern void dhd_bus_unregister(void);
 
 /* Download firmware image and nvram image */
 extern int dhd_bus_download_firmware(struct dhd_bus *bus, osl_t *osh,
-	char *fw_path, char *nv_path, char *clm_path, char *conf_path);
+                                     char *fw_path, char *nv_path,
+                                     char *clm_path, char *conf_path);
 #if defined(BT_OVER_SDIO)
-extern int dhd_bus_download_btfw(struct dhd_bus *bus, osl_t *osh, char *btfw_path);
+extern int dhd_bus_download_btfw(struct dhd_bus *bus, osl_t *osh,
+                                 char *btfw_path);
 #endif /* defined (BT_OVER_SDIO) */
 
 /* Stop bus module: clear pending frames, disable data flow */
@@ -102,11 +104,12 @@ extern int dhd_bus_txcons(dhd_pub_t *dhd, uchar *msg, uint msglen);
 
 /* Deferred processing for the bus, return TRUE requests reschedule */
 extern bool dhd_bus_dpc(struct dhd_bus *bus);
-extern void dhd_bus_isr(bool * InterruptRecognized, bool * QueueMiniportHandleInterrupt, void *arg);
+extern void dhd_bus_isr(bool *InterruptRecognized,
+                        bool *QueueMiniportHandleInterrupt, void *arg);
 
 /* Check for and handle local prot-specific iovar commands */
-extern int dhd_bus_iovar_op(dhd_pub_t *dhdp, const char *name,
-                            void *params, int plen, void *arg, int len, bool set);
+extern int dhd_bus_iovar_op(dhd_pub_t *dhdp, const char *name, void *params,
+                            int plen, void *arg, int len, bool set);
 
 /* Add bus dump output to a buffer */
 extern void dhd_bus_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf);
@@ -121,7 +124,8 @@ extern uint dhd_bus_chip(struct dhd_bus *bus);
 extern uint dhd_bus_chiprev(struct dhd_bus *bus);
 
 /* Set user-specified nvram parameters. */
-extern void dhd_bus_set_nvram_params(struct dhd_bus * bus, const char *nvram_params);
+extern void dhd_bus_set_nvram_params(struct dhd_bus *bus,
+                                     const char *nvram_params);
 
 extern void *dhd_bus_pub(struct dhd_bus *bus);
 extern void *dhd_bus_txq(struct dhd_bus *bus);
@@ -132,19 +136,23 @@ extern void dhd_bus_set_dotxinrx(struct dhd_bus *bus, bool val);
 /* return sdio io status */
 extern uint8 dhd_bus_is_ioready(struct dhd_bus *bus);
 #else
-#define dhd_bus_set_dotxinrx(a, b) do {} while (0)
+#define dhd_bus_set_dotxinrx(a, b)                                             \
+    do {                                                                       \
+    } while (0)
 #endif // endif
 
-#define DHD_SET_BUS_STATE_DOWN(_bus)  do { \
-	(_bus)->dhd->busstate = DHD_BUS_DOWN; \
-} while (0)
+#define DHD_SET_BUS_STATE_DOWN(_bus)                                           \
+    do {                                                                       \
+        (_bus)->dhd->busstate = DHD_BUS_DOWN;                                  \
+    } while (0)
 
-/* Register a dummy SDIO client driver in order to be notified of new SDIO device */
-extern int dhd_bus_reg_sdio_notify(void* semaphore);
+/* Register a dummy SDIO client driver in order to be notified of new SDIO
+ * device */
+extern int dhd_bus_reg_sdio_notify(void *semaphore);
 extern void dhd_bus_unreg_sdio_notify(void);
 extern void dhd_txglom_enable(dhd_pub_t *dhdp, bool enable);
-extern int dhd_bus_get_ids(struct dhd_bus *bus, uint32 *bus_type, uint32 *bus_num,
-	uint32 *slot_num);
+extern int dhd_bus_get_ids(struct dhd_bus *bus, uint32 *bus_type,
+                           uint32 *bus_num, uint32 *slot_num);
 
 #if defined(DHD_FW_COREDUMP) && (defined(BCMPCIE) || defined(BCMSDIO))
 extern int dhd_bus_mem_dump(dhd_pub_t *dhd);
@@ -156,75 +164,87 @@ extern int dhd_bus_get_mem_dump(dhd_pub_t *dhdp);
 
 #ifdef BCMPCIE
 enum {
-	/* Scratch buffer confiuguration update */
-	D2H_DMA_SCRATCH_BUF,
-	D2H_DMA_SCRATCH_BUF_LEN,
+    /* Scratch buffer confiuguration update */
+    D2H_DMA_SCRATCH_BUF,
+    D2H_DMA_SCRATCH_BUF_LEN,
 
-	/* DMA Indices array buffers for: H2D WR and RD, and D2H WR and RD */
-	H2D_DMA_INDX_WR_BUF, /* update H2D WR dma indices buf base addr to dongle */
-	H2D_DMA_INDX_RD_BUF, /* update H2D RD dma indices buf base addr to dongle */
-	D2H_DMA_INDX_WR_BUF, /* update D2H WR dma indices buf base addr to dongle */
-	D2H_DMA_INDX_RD_BUF, /* update D2H RD dma indices buf base addr to dongle */
+    /* DMA Indices array buffers for: H2D WR and RD, and D2H WR and RD */
+    H2D_DMA_INDX_WR_BUF, /* update H2D WR dma indices buf base addr to dongle */
+    H2D_DMA_INDX_RD_BUF, /* update H2D RD dma indices buf base addr to dongle */
+    D2H_DMA_INDX_WR_BUF, /* update D2H WR dma indices buf base addr to dongle */
+    D2H_DMA_INDX_RD_BUF, /* update D2H RD dma indices buf base addr to dongle */
 
-	/* DHD sets/gets WR or RD index, in host's H2D and D2H DMA indices buffer */
-	H2D_DMA_INDX_WR_UPD, /* update H2D WR index in H2D WR dma indices buf */
-	H2D_DMA_INDX_RD_UPD, /* update H2D RD index in H2D RD dma indices buf */
-	D2H_DMA_INDX_WR_UPD, /* update D2H WR index in D2H WR dma indices buf */
-	D2H_DMA_INDX_RD_UPD, /* update D2H RD index in D2H RD dma indices buf */
+    /* DHD sets/gets WR or RD index, in host's H2D and D2H DMA indices buffer */
+    H2D_DMA_INDX_WR_UPD, /* update H2D WR index in H2D WR dma indices buf */
+    H2D_DMA_INDX_RD_UPD, /* update H2D RD index in H2D RD dma indices buf */
+    D2H_DMA_INDX_WR_UPD, /* update D2H WR index in D2H WR dma indices buf */
+    D2H_DMA_INDX_RD_UPD, /* update D2H RD index in D2H RD dma indices buf */
 
-	/* DHD Indices array buffers and update for: H2D flow ring WR */
-	H2D_IFRM_INDX_WR_BUF, /* update H2D WR dma indices buf base addr to dongle */
-	H2D_IFRM_INDX_WR_UPD, /* update H2D WR dma indices buf base addr to dongle */
+    /* DHD Indices array buffers and update for: H2D flow ring WR */
+    H2D_IFRM_INDX_WR_BUF, /* update H2D WR dma indices buf base addr to dongle
+                           */
+    H2D_IFRM_INDX_WR_UPD, /* update H2D WR dma indices buf base addr to dongle
+                           */
 
-	/* H2D and D2H Mailbox data update */
-	H2D_MB_DATA,
-	D2H_MB_DATA,
+    /* H2D and D2H Mailbox data update */
+    H2D_MB_DATA,
+    D2H_MB_DATA,
 
-	/* (Common) MsgBuf Ring configuration update */
-	RING_BUF_ADDR,       /* update ring base address to dongle */
-	RING_ITEM_LEN,       /* update ring item size to dongle */
-	RING_MAX_ITEMS,      /* update ring max items to dongle */
+    /* (Common) MsgBuf Ring configuration update */
+    RING_BUF_ADDR,  /* update ring base address to dongle */
+    RING_ITEM_LEN,  /* update ring item size to dongle */
+    RING_MAX_ITEMS, /* update ring max items to dongle */
 
-	/* Update of WR or RD index, for a MsgBuf Ring */
-	RING_RD_UPD,         /* update ring read index from/to dongle */
-	RING_WR_UPD,         /* update ring write index from/to dongle */
+    /* Update of WR or RD index, for a MsgBuf Ring */
+    RING_RD_UPD, /* update ring read index from/to dongle */
+    RING_WR_UPD, /* update ring write index from/to dongle */
 
-	TOTAL_LFRAG_PACKET_CNT,
-	MAX_HOST_RXBUFS,
-	HOST_API_VERSION,
-	DNGL_TO_HOST_TRAP_ADDR,
-	HOST_SCB_ADDR,		/* update host scb base address to dongle */
+    TOTAL_LFRAG_PACKET_CNT,
+    MAX_HOST_RXBUFS,
+    HOST_API_VERSION,
+    DNGL_TO_HOST_TRAP_ADDR,
+    HOST_SCB_ADDR, /* update host scb base address to dongle */
 };
 
-typedef void (*dhd_mb_ring_t) (struct dhd_bus *, uint32);
-typedef void (*dhd_mb_ring_2_t) (struct dhd_bus *, uint32, bool);
-extern void dhd_bus_cmn_writeshared(struct dhd_bus *bus, void * data, uint32 len, uint8 type,
-	uint16 ringid);
+typedef void (*dhd_mb_ring_t)(struct dhd_bus *, uint32);
+typedef void (*dhd_mb_ring_2_t)(struct dhd_bus *, uint32, bool);
+extern void dhd_bus_cmn_writeshared(struct dhd_bus *bus, void *data, uint32 len,
+                                    uint8 type, uint16 ringid);
 extern void dhd_bus_ringbell(struct dhd_bus *bus, uint32 value);
 extern void dhd_bus_ringbell_2(struct dhd_bus *bus, uint32 value, bool devwake);
-extern void dhd_bus_cmn_readshared(struct dhd_bus *bus, void* data, uint8 type, uint16 ringid);
+extern void dhd_bus_cmn_readshared(struct dhd_bus *bus, void *data, uint8 type,
+                                   uint16 ringid);
 extern uint32 dhd_bus_get_sharedflags(struct dhd_bus *bus);
-extern void dhd_bus_rx_frame(struct dhd_bus *bus, void* pkt, int ifidx, uint pkt_count);
+extern void dhd_bus_rx_frame(struct dhd_bus *bus, void *pkt, int ifidx,
+                             uint pkt_count);
 extern void dhd_bus_start_queue(struct dhd_bus *bus);
 extern void dhd_bus_stop_queue(struct dhd_bus *bus);
 extern dhd_mb_ring_t dhd_bus_get_mbintr_fn(struct dhd_bus *bus);
 extern dhd_mb_ring_2_t dhd_bus_get_mbintr_2_fn(struct dhd_bus *bus);
-extern void dhd_bus_write_flow_ring_states(struct dhd_bus *bus,
-	void * data, uint16 flowid);
-extern void dhd_bus_read_flow_ring_states(struct dhd_bus *bus,
-	void * data, uint8 flowid);
-extern int dhd_bus_flow_ring_create_request(struct dhd_bus *bus, void *flow_ring_node);
+extern void dhd_bus_write_flow_ring_states(struct dhd_bus *bus, void *data,
+                                           uint16 flowid);
+extern void dhd_bus_read_flow_ring_states(struct dhd_bus *bus, void *data,
+                                          uint8 flowid);
+extern int dhd_bus_flow_ring_create_request(struct dhd_bus *bus,
+                                            void *flow_ring_node);
 extern void dhd_bus_clean_flow_ring(struct dhd_bus *bus, void *flow_ring_node);
-extern void dhd_bus_flow_ring_create_response(struct dhd_bus *bus, uint16 flow_id, int32 status);
-extern int dhd_bus_flow_ring_delete_request(struct dhd_bus *bus, void *flow_ring_node);
-extern void dhd_bus_flow_ring_delete_response(struct dhd_bus *bus, uint16 flowid, uint32 status);
-extern int dhd_bus_flow_ring_flush_request(struct dhd_bus *bus, void *flow_ring_node);
-extern void dhd_bus_flow_ring_flush_response(struct dhd_bus *bus, uint16 flowid, uint32 status);
+extern void dhd_bus_flow_ring_create_response(struct dhd_bus *bus,
+                                              uint16 flow_id, int32 status);
+extern int dhd_bus_flow_ring_delete_request(struct dhd_bus *bus,
+                                            void *flow_ring_node);
+extern void dhd_bus_flow_ring_delete_response(struct dhd_bus *bus,
+                                              uint16 flowid, uint32 status);
+extern int dhd_bus_flow_ring_flush_request(struct dhd_bus *bus,
+                                           void *flow_ring_node);
+extern void dhd_bus_flow_ring_flush_response(struct dhd_bus *bus, uint16 flowid,
+                                             uint32 status);
 extern uint32 dhd_bus_max_h2d_queues(struct dhd_bus *bus);
-extern int dhd_bus_schedule_queue(struct dhd_bus *bus, uint16 flow_id, bool txs);
+extern int dhd_bus_schedule_queue(struct dhd_bus *bus, uint16 flow_id,
+                                  bool txs);
 
 #ifdef IDLE_TX_FLOW_MGMT
-extern void dhd_bus_flow_ring_resume_response(struct dhd_bus *bus, uint16 flowid, int32 status);
+extern void dhd_bus_flow_ring_resume_response(struct dhd_bus *bus,
+                                              uint16 flowid, int32 status);
 #endif /* IDLE_TX_FLOW_MGMT */
 
 extern int dhdpcie_bus_clock_start(struct dhd_bus *bus);
@@ -239,7 +259,7 @@ extern int dhd_bus_request_irq(struct dhd_bus *bus);
 extern int dhdpcie_get_pcieirq(struct dhd_bus *bus, unsigned int *irq);
 extern void dhd_bus_aer_config(struct dhd_bus *bus);
 
-extern struct device * dhd_bus_to_dev(struct dhd_bus *bus);
+extern struct device *dhd_bus_to_dev(struct dhd_bus *bus);
 
 extern int dhdpcie_cto_init(struct dhd_bus *bus, bool enable);
 extern int dhdpcie_cto_cfg_init(struct dhd_bus *bus, bool enable);
@@ -258,7 +278,7 @@ extern void dhd_bus_handle_mb_data(struct dhd_bus *bus, uint32 d2h_mb_data);
 
 /* dump the device trap informtation  */
 extern void dhd_bus_dump_trap_info(struct dhd_bus *bus, struct bcmstrbuf *b);
-extern void dhd_bus_copy_trap_sig(struct dhd_bus *bus,  trap_t *tr);
+extern void dhd_bus_copy_trap_sig(struct dhd_bus *bus, trap_t *tr);
 /* Function to set default min res mask */
 extern bool dhd_bus_set_default_min_res_mask(struct dhd_bus *bus);
 
@@ -270,7 +290,8 @@ extern void dhd_bus_ucode_download(struct dhd_bus *bus);
 #ifdef DHD_ULP
 extern void dhd_bus_ulp_disable_console(dhd_pub_t *dhdp);
 #endif /* DHD_ULP */
-extern int dhd_bus_readwrite_bp_addr(dhd_pub_t *dhdp, uint addr, uint size, uint* data, bool read);
+extern int dhd_bus_readwrite_bp_addr(dhd_pub_t *dhdp, uint addr, uint size,
+                                     uint *data, bool read);
 extern int dhd_get_idletime(dhd_pub_t *dhd);
 #ifdef BCMPCIE
 extern void dhd_bus_dump_console_buffer(struct dhd_bus *bus);
@@ -284,26 +305,48 @@ extern void dhd_bus_set_linkdown(dhd_pub_t *dhdp, bool val);
 extern int dhd_bus_get_linkdown(dhd_pub_t *dhdp);
 #else
 #define dhd_bus_dump_console_buffer(x)
-static INLINE void dhd_bus_intr_count_dump(dhd_pub_t *dhdp) { UNUSED_PARAMETER(dhdp); }
-static INLINE void dhd_bus_set_dpc_sched_time(dhd_pub_t *dhdp) { }
-static INLINE bool dhd_bus_query_dpc_sched_errors(dhd_pub_t *dhdp) { return 0; }
-static INLINE int dhd_bus_dmaxfer_lpbk(dhd_pub_t *dhdp, uint32 type) { return 0; }
-static INLINE bool dhd_bus_check_driver_up(void) { return FALSE; }
-static INLINE void dhd_bus_set_linkdown(dhd_pub_t *dhdp, bool val) { }
-static INLINE int dhd_bus_get_linkdown(dhd_pub_t *dhdp) { return 0; }
-static INLINE int dhd_bus_get_cto(dhd_pub_t *dhdp) { return 0; }
+static INLINE void dhd_bus_intr_count_dump(dhd_pub_t *dhdp)
+{
+    UNUSED_PARAMETER(dhdp);
+}
+static INLINE void dhd_bus_set_dpc_sched_time(dhd_pub_t *dhdp)
+{
+}
+static INLINE bool dhd_bus_query_dpc_sched_errors(dhd_pub_t *dhdp)
+{
+    return 0;
+}
+static INLINE int dhd_bus_dmaxfer_lpbk(dhd_pub_t *dhdp, uint32 type)
+{
+    return 0;
+}
+static INLINE bool dhd_bus_check_driver_up(void)
+{
+    return FALSE;
+}
+static INLINE void dhd_bus_set_linkdown(dhd_pub_t *dhdp, bool val)
+{
+}
+static INLINE int dhd_bus_get_linkdown(dhd_pub_t *dhdp)
+{
+    return 0;
+}
+static INLINE int dhd_bus_get_cto(dhd_pub_t *dhdp)
+{
+    return 0;
+}
 #endif /* BCMPCIE */
 
 #if defined(BCMPCIE) && defined(EWP_ETD_PRSRV_LOGS)
 void dhdpcie_get_etd_preserve_logs(dhd_pub_t *dhd, uint8 *ext_trap_data,
-		void *event_decode_data);
+                                   void *event_decode_data);
 #endif // endif
 
 extern uint16 dhd_get_chipid(dhd_pub_t *dhd);
 
 #ifdef DHD_WAKE_STATUS
-extern wake_counts_t* dhd_bus_get_wakecount(dhd_pub_t *dhd);
-extern int dhd_bus_get_bus_wake(dhd_pub_t * dhd);
+extern wake_counts_t *dhd_bus_get_wakecount(dhd_pub_t *dhd);
+extern int dhd_bus_get_bus_wake(dhd_pub_t *dhd);
 #endif /* DHD_WAKE_STATUS */
 
 #ifdef BT_OVER_SDIO
@@ -327,7 +370,7 @@ extern void dhd_bus_l1ss_enable_rc_ep(struct dhd_bus *bus, bool enable);
 bool dhd_bus_is_multibp_capable(struct dhd_bus *bus);
 
 #ifdef BCMPCIE
-extern void dhdpcie_advertise_bus_cleanup(dhd_pub_t  *dhdp);
+extern void dhdpcie_advertise_bus_cleanup(dhd_pub_t *dhdp);
 extern void dhd_msgbuf_iovar_timeout_dump(dhd_pub_t *dhd);
 #endif /* BCMPCIE */
 

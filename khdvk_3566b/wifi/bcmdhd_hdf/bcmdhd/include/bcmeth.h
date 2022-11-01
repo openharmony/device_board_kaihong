@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -69,47 +69,47 @@
 
 /*
  * While adding the subtypes and their specific processing code make sure
- * bcmeth_bcm_hdr_t is the first data structure in the user specific data structure definition
+ * bcmeth_bcm_hdr_t is the first data structure in the user specific data
+ * structure definition
  */
 
-#define	BCMILCP_SUBTYPE_RATE		1
-#define	BCMILCP_SUBTYPE_LINK		2
-#define	BCMILCP_SUBTYPE_CSA		3
-#define	BCMILCP_SUBTYPE_LARQ		4
-#define BCMILCP_SUBTYPE_VENDOR		5
-#define	BCMILCP_SUBTYPE_FLH		17
+#define BCMILCP_SUBTYPE_RATE 1
+#define BCMILCP_SUBTYPE_LINK 2
+#define BCMILCP_SUBTYPE_CSA 3
+#define BCMILCP_SUBTYPE_LARQ 4
+#define BCMILCP_SUBTYPE_VENDOR 5
+#define BCMILCP_SUBTYPE_FLH 17
 
-#define BCMILCP_SUBTYPE_VENDOR_LONG	32769
-#define BCMILCP_SUBTYPE_CERT		32770
-#define BCMILCP_SUBTYPE_SES		32771
+#define BCMILCP_SUBTYPE_VENDOR_LONG 32769
+#define BCMILCP_SUBTYPE_CERT 32770
+#define BCMILCP_SUBTYPE_SES 32771
 
-#define BCMILCP_BCM_SUBTYPE_RESERVED		0
-#define BCMILCP_BCM_SUBTYPE_EVENT		1
-#define BCMILCP_BCM_SUBTYPE_SES			2
+#define BCMILCP_BCM_SUBTYPE_RESERVED 0
+#define BCMILCP_BCM_SUBTYPE_EVENT 1
+#define BCMILCP_BCM_SUBTYPE_SES 2
 /*
  * The EAPOL type is not used anymore. Instead EAPOL messages are now embedded
  * within BCMILCP_BCM_SUBTYPE_EVENT type messages
  */
 /* #define BCMILCP_BCM_SUBTYPE_EAPOL		3 */
-#define BCMILCP_BCM_SUBTYPE_DPT                 4
-#define BCMILCP_BCM_SUBTYPE_DNGLEVENT       5
+#define BCMILCP_BCM_SUBTYPE_DPT 4
+#define BCMILCP_BCM_SUBTYPE_DNGLEVENT 5
 
-#define BCMILCP_BCM_SUBTYPEHDR_MINLENGTH	8
-#define BCMILCP_BCM_SUBTYPEHDR_VERSION		0
-#define BCMILCP_BCM_SUBTYPE_EVENT_DATA_PAD	2
+#define BCMILCP_BCM_SUBTYPEHDR_MINLENGTH 8
+#define BCMILCP_BCM_SUBTYPEHDR_VERSION 0
+#define BCMILCP_BCM_SUBTYPE_EVENT_DATA_PAD 2
 
 /* These fields are stored in network order */
-typedef BWL_PRE_PACKED_STRUCT struct bcmeth_hdr
-{
-	uint16	subtype;	/* Vendor specific..32769 */
-	uint16	length;
-	uint8	version;	/* Version is 0 */
-	uint8	oui[3];		/* Broadcom OUI */
-	/* user specific Data */
-	uint16	usr_subtype;
+typedef BWL_PRE_PACKED_STRUCT struct bcmeth_hdr {
+    uint16 subtype; /* Vendor specific..32769 */
+    uint16 length;
+    uint8 version; /* Version is 0 */
+    uint8 oui[3];  /* Broadcom OUI */
+    /* user specific Data */
+    uint16 usr_subtype;
 } BWL_POST_PACKED_STRUCT bcmeth_hdr_t;
 
 /* This marks the end of a packed structure section. */
 #include <packed_section_end.h>
 
-#endif	/*  _BCMETH_H_ */
+#endif /*  _BCMETH_H_ */
