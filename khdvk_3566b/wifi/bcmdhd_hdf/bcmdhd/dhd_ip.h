@@ -14,9 +14,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -38,38 +38,38 @@
 #include <dhd.h>
 #endif /* DHDTCPACK_SUPPRESS || DHDTCPSYNC_FLOOD_BLK */
 
-typedef enum pkt_frag
-{
-	DHD_PKT_FRAG_NONE = 0,
-	DHD_PKT_FRAG_FIRST,
-	DHD_PKT_FRAG_CONT,
-	DHD_PKT_FRAG_LAST
+typedef enum pkt_frag {
+    DHD_PKT_FRAG_NONE = 0,
+    DHD_PKT_FRAG_FIRST,
+    DHD_PKT_FRAG_CONT,
+    DHD_PKT_FRAG_LAST
 } pkt_frag_t;
 
 extern pkt_frag_t pkt_frag_info(osl_t *osh, void *p);
 
 #ifdef DHDTCPSYNC_FLOOD_BLK
 typedef enum tcp_hdr_flags {
-	FLAG_SYNC,
-	FLAG_SYNCACK,
-	FLAG_RST,
-	FLAG_OTHERS
+    FLAG_SYNC,
+    FLAG_SYNCACK,
+    FLAG_RST,
+    FLAG_OTHERS
 } tcp_hdr_flag_t;
 
 extern tcp_hdr_flag_t dhd_tcpdata_get_flag(dhd_pub_t *dhdp, void *pkt);
 #endif /* DHDTCPSYNC_FLOOD_BLK */
 
 #ifdef DHDTCPACK_SUPPRESS
-#define	TCPACKSZMIN	(ETHER_HDR_LEN + IPV4_MIN_HEADER_LEN + TCP_MIN_HEADER_LEN)
+#define TCPACKSZMIN (ETHER_HDR_LEN + IPV4_MIN_HEADER_LEN + TCP_MIN_HEADER_LEN)
 /* Size of MAX possible TCP ACK packet. Extra bytes for IP/TCP option fields */
-#define	TCPACKSZMAX	(TCPACKSZMIN + 100)
+#define TCPACKSZMAX (TCPACKSZMIN + 100)
 
 /* Max number of TCP streams that have own src/dst IP addrs and TCP ports */
 #define TCPACK_INFO_MAXNUM 4
 #define TCPDATA_INFO_MAXNUM 4
 #define TCPDATA_PSH_INFO_MAXNUM (8 * TCPDATA_INFO_MAXNUM)
 
-#define TCPDATA_INFO_TIMEOUT 5000	/* Remove tcpdata_info if inactive for this time (in ms) */
+#define TCPDATA_INFO_TIMEOUT                                                   \
+    5000 /* Remove tcpdata_info if inactive for this time (in ms) */
 
 #define DEFAULT_TCPACK_SUPP_RATIO 3
 #ifndef CUSTOM_TCPACK_SUPP_RATIO
