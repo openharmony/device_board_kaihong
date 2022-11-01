@@ -1026,9 +1026,6 @@ static int wl_iw_set_wap(struct net_device *dev, struct iw_request_info *info,
 #endif
         return 0;
     }
-    /* WL_ASSOC(("Assoc to %s\n", bcm_ether_ntoa((struct ether_addr
-     * *)&(awrq->sa_data), eabuf)));
-     */
     /* Reassociate to the specified AP */
     if (wext_info) {
         memcpy(&wext_info->conn_info.bssid, awrq->sa_data, ETHER_ADDR_LEN);

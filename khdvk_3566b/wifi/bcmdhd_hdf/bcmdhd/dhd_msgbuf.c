@@ -10577,8 +10577,6 @@ int dhd_prot_flow_ring_batch_suspend_request(dhd_pub_t *dhd, uint16 *ringid,
 
     /* Common msg buf hdr */
     flow_suspend_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_SUSPEND;
-    /* flow_suspend_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
-     */
     flow_suspend_rqst->msg.request_id = htol32(0); /* TBD */
 
     flow_suspend_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;

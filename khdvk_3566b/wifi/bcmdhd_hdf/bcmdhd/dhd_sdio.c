@@ -8793,21 +8793,6 @@ static void *dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no,
 
     /* if firmware path present try to download and bring up bus */
     bus->dhd->hang_report = TRUE;
-#if 0 // terence 20150325: fix for WPA/WPA2 4-way handshake fail in hostapd
-	if (dhd_download_fw_on_driverload) {
-        if ((ret = dhd_bus_start(bus->dhd)) != 0) {
-            DHD_ERROR(("%s: dhd_bus_start failed\n", __FUNCTION__));
-                goto fail;
-        }
-    } else {
-		/* Set random MAC address during boot time */
-        get_random_bytes(&bus->dhd->mac.octet[0x3], 0x3);
-		/* Adding BRCM OUI */
-        bus->dhd->mac.octet[0] = 0;
-        bus->dhd->mac.octet[1] = 0x90;
-        bus->dhd->mac.octet[0x2] = 0x4C;
-    }
-#endif
 #if defined(BT_OVER_SDIO)
     /* At this point Regulators are turned on and iconditionaly sdio bus is
      * started based upon dhd_download_fw_on_driverload check, so increase the

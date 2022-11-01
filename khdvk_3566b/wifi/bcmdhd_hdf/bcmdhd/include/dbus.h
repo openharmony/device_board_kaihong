@@ -312,19 +312,13 @@ extern int dbus_register(int vid, int pid, probe_cb_t prcb,
                          disconnect_cb_t discb, void *prarg, void *param1,
                          void *param2);
 extern int dbus_deregister(void);
-
-// extern int dbus_download_firmware(dbus_pub_t *pub);
-// extern int dbus_up(struct dhd_bus *pub);
 extern int dbus_down(dbus_pub_t *pub);
-// extern int dbus_stop(struct dhd_bus *pub);
 extern int dbus_shutdown(dbus_pub_t *pub);
 extern void dbus_flowctrl_rx(dbus_pub_t *pub, bool on);
 
 extern int dbus_send_txdata(dbus_pub_t *dbus, void *pktbuf);
 extern int dbus_send_buf(dbus_pub_t *pub, uint8 *buf, int len, void *info);
 extern int dbus_send_pkt(dbus_pub_t *pub, void *pkt, void *info);
-// extern int dbus_send_ctl(struct dhd_bus *pub, uint8 *buf, int len);
-// extern int dbus_recv_ctl(struct dhd_bus *pub, uint8 *buf, int len);
 extern int dbus_recv_bulk(dbus_pub_t *pub, uint32 ep_idx);
 extern int dbus_poll_intr(dbus_pub_t *pub);
 extern int dbus_get_stats(dbus_pub_t *pub, dbus_stats_t *stats);
@@ -340,9 +334,6 @@ extern int dbus_set_errmask(dbus_pub_t *pub, uint32 mask);
 extern int dbus_pnp_sleep(dbus_pub_t *pub);
 extern int dbus_pnp_resume(dbus_pub_t *pub, int *fw_reload);
 extern int dbus_pnp_disconnect(dbus_pub_t *pub);
-
-// extern int dhd_bus_iovar_op(dhd_pub_t *dhdp, const char *name,
-//	void *params, int plen, void *arg, int len, bool set);
 
 extern void *dhd_dbus_txq(const dbus_pub_t *pub);
 extern uint dhd_dbus_hdrlen(const dbus_pub_t *pub);

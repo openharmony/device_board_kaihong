@@ -13842,9 +13842,6 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, wl_bss_info_t *bi,
 
     CFG80211_PUT_BSS(wiphy, cbss);
 #ifdef CONFIG_AP6XXX_WIFI6_HDF
-    // WL_ERR(("bdh6 frame_len %u == %u, netdev=%s\n",
-    // le16_to_cpu(notif_bss_info->frame_len), notif_bss_info->frame_len,
-    // ndev->name));
     HdfInformBssFrameEventCallback(ndev, channel, signal, freq, mgmt,
                                    notif_bss_info->frame_len);
 #endif
