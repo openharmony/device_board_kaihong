@@ -3301,7 +3301,6 @@ s32 wl_notify_pfn_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 #ifndef WL_SCHED_SCAN
     mutex_lock(&cfg->usr_sync);
-    /* Use cfg80211_sched_scan_results(wiphy); */
     CFG80211_DISCONNECTED(ndev, 0, NULL, 0, false, GFP_KERNEL);
     mutex_unlock(&cfg->usr_sync);
 #else
