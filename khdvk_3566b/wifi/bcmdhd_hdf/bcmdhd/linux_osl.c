@@ -1642,9 +1642,6 @@ dma_addr_t BCMFASTPATH osl_sec_dma_map(osl_t *osh, void *va, uint size,
     pa_cma_page = sec_mem_elem->pa_cma_page;
 
     loffset = sec_mem_elem->pa_cma - (sec_mem_elem->pa_cma & ~(PAGE_SIZE - 1));
-    /* pa_cma_kmap_va = kmap_atomic(pa_cma_page);
-     * pa_cma_kmap_va += loffset;
-     */
 
     pa_cma_kmap_va = sec_mem_elem->vac;
     pa_cma_kmap_va = ((uint8 *)pa_cma_kmap_va + offset);
@@ -1655,7 +1652,6 @@ dma_addr_t BCMFASTPATH osl_sec_dma_map(osl_t *osh, void *va, uint size,
 #ifdef NOT_YET
         if (p == NULL) {
             memcpy(pa_cma_kmap_va, va, size);
-            /* prhex("Txpkt",pa_cma_kmap_va, size); */
         } else {
             for (skb = (struct sk_buff *)p; skb != NULL;
                  skb = PKTNEXT(osh, skb)) {
@@ -1700,7 +1696,6 @@ dma_addr_t BCMFASTPATH osl_sec_dma_map(osl_t *osh, void *va, uint size,
         dmah->segs[0].length = buflen;
     }
     sec_mem_elem->dma_handle = dma_handle;
-    /* kunmap_atomic(pa_cma_kmap_va-loffset); */
     return dma_handle;
 }
 
@@ -1753,12 +1748,7 @@ void BCMFASTPATH osl_sec_dma_unmap(osl_t *osh, dma_addr_t dma_handle, uint size,
 #endif // endif
 
     if (direction == DMA_RX) {
-
         if (p == NULL) {
-
-            /* pa_cma_kmap_va = kmap_atomic(pa_cma_page);
-             * pa_cma_kmap_va += loffset;
-             */
 
             pa_cma_kmap_va = sec_mem_elem->vac;
 
@@ -1775,7 +1765,6 @@ void BCMFASTPATH osl_sec_dma_unmap(osl_t *osh, dma_addr_t dma_handle, uint size,
             } while (read_count < 200);
             dma_unmap_page(OSH_NULL, pa_cma, size, DMA_FROM_DEVICE);
             memcpy(va, pa_cma_kmap_va, size);
-            /* kunmap_atomic(pa_cma_kmap_va); */
         }
 #ifdef NOT_YET
         else {

@@ -206,8 +206,6 @@ const chip_cisaddr_map_t chip_cisaddr_map[] = {
     {BCM4354_CHIP_ID, 2, 0x0, 0x0},
     {BCM4356_CHIP_ID, 2, 0x0, 0x0},
     {BCM4359_CHIP_ID, 9, 0x0, 0x0},
-    //	{BCM43752_CHIP_ID,	2,		0x18011120,	0x18011177},
-    //	{BCM4375_CHIP_ID,	5,		0x18011120,	0x18011177},
 };
 #endif
 
@@ -1167,12 +1165,6 @@ void dhd_conf_set_tput_patch(dhd_pub_t *dhd)
         conf->pktsetsum = TRUE;
 #ifdef BCMSDIO
         conf->dhd_dpc_prio = 0x62;
-        /* need to check if CPU can support multi-core first,
-         * so don't enable it by default.
-         */
-        //		conf->dpc_cpucore = 2;
-        //		conf->rxf_cpucore = 3;
-        //		conf->disable_proptx = 1;
         conf->frameburst = 1;
 #ifdef DYNAMIC_MAX_HDR_READ
         conf->max_hdr_read = 0x100;
@@ -1551,7 +1543,6 @@ static uint wl_he_iovt2len(uint iovt)
         case IOVT_UINT32:
             return sizeof(uint32);
         default:
-            /* ASSERT(0); */
             return 0;
     }
 }
@@ -3245,9 +3236,9 @@ bool dhd_conf_read_log_level(dhd_pub_t *dhd, char *full_param, uint len_param)
         CONFIG_MSG("dhd_console_ms = %d\n", dhd->dhd_console_ms);
     }
 #endif
-    else
+    else {
         return false;
-
+    }
     return true;
 }
 

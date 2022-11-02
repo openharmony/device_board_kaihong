@@ -28,8 +28,6 @@
 #ifndef __wlfc_host_driver_definitions_h__
 #define __wlfc_host_driver_definitions_h__
 
-/* #define OOO_DEBUG */
-
 #define KERNEL_THREAD_RETURN_TYPE int
 
 typedef int (*f_commitpkt_t)(void *ctx, void *p);

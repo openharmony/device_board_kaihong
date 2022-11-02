@@ -1816,7 +1816,7 @@ typedef struct ccx_qfl_ie ccx_qfl_ie_t;
 #define DOT11_EXT_CAP_TWT_RESPONDER 78
 #define DOT11_EXT_CAP_OBSS_NB_RU_OFDMA 79
 #define DOT11_EXT_CAP_EMBSS_ADVERTISE 80
-/* TODO: Update DOT11_EXT_CAP_MAX_IDX to reflect the highest offset.
+/* Update DOT11_EXT_CAP_MAX_IDX to reflect the highest offset.
  * Note: DOT11_EXT_CAP_MAX_IDX must only be used in attach path.
  *       It will cause ROM invalidation otherwise.
  */
@@ -3622,11 +3622,6 @@ BWL_PRE_PACKED_STRUCT struct dot11_rmrep_ftm_range {
     uint8 type;
     uint8 entry_count;
     uint8 data[2]; /* includes pad */
-                   /*
-                   dot11_ftm_range_entry_t entries[entry_count];
-                   uint8 error_count;
-                   dot11_ftm_error_entry_t errors[error_count];
-                    */
 } BWL_POST_PACKED_STRUCT;
 typedef struct dot11_rmrep_ftm_range dot11_rmrep_ftm_range_t;
 
@@ -3903,18 +3898,6 @@ typedef struct d11cnt {
 #define BRCM_PROP_OUI "\x00\x90\x4C"
 
 #define BRCM_FTM_IE_TYPE 14
-
-/* #define HT_CAP_IE_TYPE			51
- * #define HT_ADD_IE_TYPE			52
- * #define BRCM_EXTCH_IE_TYPE		53
- * #define MEMBER_OF_BRCM_PROP_IE_TYPE	54
- * #define BRCM_RELMACST_IE_TYPE		55
- * #define BRCM_EVT_WL_BSS_INFO		64
- * #define RWL_ACTION_WIFI_FRAG_TYPE	85
- * #define BTC_INFO_BRCM_PROP_IE_TYPE	90
- * #define ULB_BRCM_PROP_IE_TYPE	91
- * #define SDB_BRCM_PROP_IE_TYPE	92
- */
 
 /* Action frame type for RWL */
 #define RWL_WIFI_DEFAULT 0

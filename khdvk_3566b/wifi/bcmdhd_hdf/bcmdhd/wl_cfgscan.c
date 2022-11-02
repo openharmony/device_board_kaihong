@@ -719,7 +719,6 @@ s32 wl_escan_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
                (status == WLC_E_STATUS_NEWASSOC)) {
 #ifdef CONFIG_AP6XXX_WIFI6_HDF
         printk("scan abort status=%d\n", status);
-        // HdfScanEventCallback(ndev, HDF_WIFI_SCAN_FAILED);
 #endif
         /* Dump FW preserve buffer content */
         if (status == WLC_E_STATUS_ABORT) {
@@ -1717,7 +1716,6 @@ s32 __wl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
     if (request && (scan_req_iftype(request) == NL80211_IFTYPE_AP)) {
         WL_DBG(("Scan Command on SoftAP Interface. Ignoring...\n"));
         // terence 20161023: let it scan in SoftAP mode
-        //		return 0;
     }
 
     ndev = ndev_to_wlc_ndev(ndev, cfg);
@@ -1861,7 +1859,6 @@ s32 __wl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
 
                 if (unlikely(err)) {
                     // terence 20161023: let it scan in SoftAP mode
-                    //					goto scan_out;
                 }
             }
         }
@@ -2392,7 +2389,6 @@ static s32 wl_escan_without_scan_cache(struct bcm_cfg80211 *cfg,
 #endif /* ROAM_CHANNEL_CACHE */
             err = wl_inform_single_bss(cfg, bi, false);
 #ifdef ROAM_CHANNEL_CACHE
-            /* print_roam_cache(); */
             update_roam_cache(cfg, ioctl_version);
 #endif /* ROAM_CHANNEL_CACHE */
 
@@ -2852,12 +2848,6 @@ static void wl_scan_timeout(unsigned long data)
     (void)dhd_pcie_dump_int_regs(dhdp);
     dhd_pcie_dump_rc_conf_space_cap(dhdp);
 #endif /* BCMPCIE */
-#if 0
-    if (dhdp->memdump_enabled) {
-        dhdp->memdump_type = DUMP_TYPE_SCAN_TIMEOUT;
-        dhd_bus_mem_dump(dhdp);
-    }
-#endif /* DHD_FW_COREDUMP */
     /*
      * For the memdump sanity, blocking bus transactions for a while
      * Keeping it TRUE causes the sequential private cmd error
@@ -3311,7 +3301,6 @@ s32 wl_notify_pfn_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 #ifndef WL_SCHED_SCAN
     mutex_lock(&cfg->usr_sync);
-    /* TODO: Use cfg80211_sched_scan_results(wiphy); */
     CFG80211_DISCONNECTED(ndev, 0, NULL, 0, false, GFP_KERNEL);
     mutex_unlock(&cfg->usr_sync);
 #else

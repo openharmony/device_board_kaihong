@@ -1954,7 +1954,7 @@ uint si_chip_hostif(si_t *sih)
             break;
 
         case BCM4335_CHIP_ID:
-            /* TBD: like in 4360, do we need to check pkg? */
+            /* like in 4360, do we need to check pkg? */
             if (CST4335_CHIPMODE_USB20D(sih->chipst)) {
                 hosti = CHIP_HOSTIF_USBMODE;
             } else if (CST4335_CHIPMODE_SDIOD(sih->chipst)) {

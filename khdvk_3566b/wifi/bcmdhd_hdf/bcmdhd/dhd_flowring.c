@@ -1141,7 +1141,7 @@ void dhd_update_interface_flow_info(dhd_pub_t *dhdp, uint8 ifindex, uint8 op,
              * WDS role does not send WLC_E_LINK event after interface is up.
              * So to create flowrings for WDS, make status as TRUE in WLC_E_IF
              * itself. same is true while making the status as FALSE.
-             * TODO: Fix FW to send WLC_E_LINK for WDS role aswell. So that all
+             * Fix FW to send WLC_E_LINK for WDS role aswell. So that all
              * the interfaces are handled uniformly.
              */
             if_flow_lkup[ifindex].status = TRUE;

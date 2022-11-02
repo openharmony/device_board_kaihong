@@ -2439,7 +2439,6 @@ int hdf_cfgp2p_register_ndev(struct net_device *p2p_netdev,
                              struct net_device *primary_netdev,
                              struct wiphy *wiphy)
 {
-    // SET_NETDEV_DEV(p2p_netdev, wiphy);
     WL_MSG(p2p_netdev->name, "P2P Interface Registered\n");
     return 0;
 }

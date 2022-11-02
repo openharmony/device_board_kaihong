@@ -55,7 +55,7 @@ int hndmem_num_banks(si_t *sih, int mem)
 
     savecore = si_coreidx(sih);
 
-    /* TODO: Check whether SOCRAM core is present or not. If not, bail out */
+    /* Check whether SOCRAM core is present or not. If not, bail out */
     /* In future we need to add code for TCM based chips as well */
     if (!si_setcore(sih, SOCRAM_CORE_ID, 0)) {
         goto exit;
@@ -89,7 +89,7 @@ int hndmem_num_banks(si_t *sih, int mem)
                 break;
         }
     } else {
-        /* TODO: Figure out bank information using SOCRAM registers */
+        /* Figure out bank information using SOCRAM registers */
     }
 
     si_setcoreidx(sih, savecore);
@@ -111,7 +111,7 @@ int hndmem_bank_size(si_t *sih, hndmem_type_t mem, int bank_num)
 
     savecore = si_coreidx(sih);
 
-    /* TODO: Check whether SOCRAM core is present or not. If not, bail out */
+    /* Check whether SOCRAM core is present or not. If not, bail out */
     /* In future we need to add code for TCM based chips as well */
     if (!si_setcore(sih, SOCRAM_CORE_ID, 0)) {
         goto exit;
@@ -130,7 +130,7 @@ int hndmem_bank_size(si_t *sih, hndmem_type_t mem, int bank_num)
         bank_sz = (bank_info & WLAN_BANKXINFO_BANK_SIZE_MASK) >>
                   WLAN_BANKXINFO_BANK_SIZE_SHIFT;
     } else {
-        /* TODO: Figure out bank size using SOCRAM registers */
+        /* Figure out bank size using SOCRAM registers */
     }
 
     si_setcoreidx(sih, savecore);
@@ -154,7 +154,7 @@ uint32 hndmem_mem_base(si_t *sih, hndmem_type_t mem)
         base_addr = si_get_slaveport_addr(sih, CORE_SLAVE_PORT_1,
                                           CORE_BASE_ADDR_0, SOCRAM_CORE_ID, 0);
     } else {
-        /* TODO: Add code to get the base address of TCM */
+        /* Add code to get the base address of TCM */
         base_addr = 0;
     }
 
@@ -198,7 +198,7 @@ int hndmem_sleeppda_bank_config(si_t *sih, hndmem_type_t mem, int bank_num,
     int err = BCME_OK;
     osl_t *osh = si_osh(sih);
 
-    /* TODO: Check whether SOCRAM core is present or not. If not, bail out */
+    /* Check whether SOCRAM core is present or not. If not, bail out */
     /* In future we need to add code for TCM based chips as well */
     if (!si_setcore(sih, SOCRAM_CORE_ID, 0)) {
         err = BCME_UNSUPPORTED;
@@ -271,7 +271,7 @@ int hndmem_activepda_bank_config(si_t *sih, hndmem_type_t mem, int bank_num,
 
     savecore = si_coreidx(sih);
 
-    /* TODO: Check whether SOCRAM core is present or not. If not, bail out */
+    /* Check whether SOCRAM core is present or not. If not, bail out */
     /* In future we need to add code for TCM based chips as well */
     if (!si_setcore(sih, SOCRAM_CORE_ID, 0)) {
         err = BCME_UNSUPPORTED;
@@ -297,7 +297,7 @@ int hndmem_activepda_bank_config(si_t *sih, hndmem_type_t mem, int bank_num,
             W_REG(osh, &gciregs->wlan_bankxactivepda, 0);
         }
     } else {
-        /* TODO: Configure SOCRAM PDA using SOCRAM registers */
+        /* Configure SOCRAM PDA using SOCRAM registers */
         err = BCME_UNSUPPORTED;
     }
 

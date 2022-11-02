@@ -1087,7 +1087,7 @@ void pktpool_free(pktpool_t *pktp, void *p)
 
     ASSERT(p != NULL);
 #ifdef BCMDBG_POOL
-    /* pktpool_stop_trigger(pktp, p); */
+    
 #endif // endif
 
     pktpool_enq(pktp, p);

@@ -75,18 +75,6 @@
 extern char dhd_version[];
 extern char fw_version[];
 
-/**
- * Host configures a soft doorbell for d2h rings, by specifying a 32bit host
- * address where a value must be written. Host may also interrupt coalescing
- * on this soft doorbell.
- * Use Case: Hosts with network processors, may register with the dongle the
- * network processor's thread wakeup register and a value corresponding to the
- * core/thread context. Dongle will issue a write transaction <address,value>
- * to the PCIE RC which will need to be routed to the mapped register space, by
- * the host.
- */
-/* #define DHD_D2H_SOFT_DOORBELL_SUPPORT */
-
 /* Dependency Check */
 #if defined(IOCTLRESP_USE_CONSTMEM) && defined(DHD_USE_STATIC_CTRLBUF)
 #error "DHD_USE_STATIC_CTRLBUF is NOT working with DHD_USE_OSLPKT_FOR_RESPBUF"
@@ -1775,8 +1763,6 @@ static void *dhd_pktid_map_free(dhd_pub_t *dhd, dhd_pktid_map_handle_t *map,
  */
 #if defined(DHD_PKTID_AUDIT_ENABLED)
 #define USE_DHD_PKTID_AUDIT_LOCK 1
-/* Audit the pktidmap allocator */
-/* #define DHD_PKTID_AUDIT_MAP */
 
 /* Audit the pktid during production/consumption of workitems */
 #define DHD_PKTID_AUDIT_RING
@@ -2838,7 +2824,7 @@ static INLINE void *dhd_pktid_to_native(dhd_pktid_map_handle_t *map,
 
 #define DHD_NATIVE_TO_PKTID_SAVE(dhd, map, pkt, nkey, pa, len, dma_dir, dmah,  \
                                  secdma, pkttype)                              \
-    ({                                                                         \
+    ( {                                                                        \
         BCM_REFERENCE(dhd);                                                    \
         BCM_REFERENCE(nkey);                                                   \
         BCM_REFERENCE(dma_dir);                                                \
@@ -2848,7 +2834,7 @@ static INLINE void *dhd_pktid_to_native(dhd_pktid_map_handle_t *map,
 
 #define DHD_NATIVE_TO_PKTID(dhd, map, pkt, pa, len, dma_dir, dmah, secdma,     \
                             pkttype)                                           \
-    ({                                                                         \
+    ( {                                                                        \
         BCM_REFERENCE(dhd);                                                    \
         BCM_REFERENCE(dma_dir);                                                \
         dhd_native_to_pktid((dhd_pktid_map_handle_t *)map, (pkt), (pa), (len), \
@@ -2856,7 +2842,7 @@ static INLINE void *dhd_pktid_to_native(dhd_pktid_map_handle_t *map,
     })
 
 #define DHD_PKTID_TO_NATIVE(dhd, map, pktid, pa, len, dmah, secdma, pkttype)   \
-    ({                                                                         \
+    ( {                                                                        \
         BCM_REFERENCE(dhd);                                                    \
         BCM_REFERENCE(pkttype);                                                \
         dhd_pktid_to_native((dhd_pktid_map_handle_t *)map, (uint32)(pktid),    \
@@ -3183,7 +3169,7 @@ void dhd_set_host_cap(dhd_pub_t *dhd)
 
         if (dhdpcie_bus_get_pcie_hwa_supported(dhd->bus)) {
             DHD_ERROR(("HWA inited\n"));
-            /* TODO: Is hostcap needed? */
+            /* Is hostcap needed? */
             dhd->hwa_inited = TRUE;
         }
 
@@ -3831,7 +3817,6 @@ void dhd_lb_tx_compl_handler(unsigned long data)
         count++;
     }
 
-    /* smp_wmb(); */
     bcm_workq_cons_sync(workq);
     DHD_LB_STATS_UPDATE_TXC_HISTO(dhd, count);
 }
@@ -7169,7 +7154,6 @@ static void BCMFASTPATH dhd_prot_return_rxbuf(dhd_pub_t *dhd, uint32 pktid,
     if (prot->rxbufpost >= rxcnt) {
         prot->rxbufpost -= (uint16)rxcnt;
     } else {
-        /* ASSERT(0); */
         prot->rxbufpost = 0;
     }
 
@@ -8182,7 +8166,7 @@ static void *BCMFASTPATH dhd_prot_alloc_ring_space(dhd_pub_t *dhd,
     ret_buf = dhd_prot_get_ring_space(ring, nitems, alloced, exactly_nitems);
 
     if (ret_buf == NULL) {
-        /* HWA TODO, need to get RD pointer from different array
+        /* HWA, need to get RD pointer from different array
          * which HWA will directly write into host memory
          */
         /* if alloc failed , invalidate cached read ptr */
@@ -9467,7 +9451,7 @@ int dhd_prot_flow_ring_create(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
     /* Common msg buf hdr */
     flow_create_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_CREATE;
     flow_create_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
-    flow_create_rqst->msg.request_id = htol32(0); /* TBD */
+    flow_create_rqst->msg.request_id = htol32(0);
     flow_create_rqst->msg.flags = ctrl_ring->current_phase;
 
     flow_create_rqst->msg.epoch = ctrl_ring->seqnum % H2D_EPOCH_MODULO;
@@ -9811,7 +9795,7 @@ int dhd_prot_flow_ring_delete(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
     /* Common msg buf hdr */
     flow_delete_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_DELETE;
     flow_delete_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
-    flow_delete_rqst->msg.request_id = htol32(0); /* TBD */
+    flow_delete_rqst->msg.request_id = htol32(0);
     flow_delete_rqst->msg.flags = ring->current_phase;
 
     flow_delete_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;
@@ -9943,7 +9927,7 @@ int dhd_prot_flow_ring_flush(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
     /* Common msg buf hdr */
     flow_flush_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_FLUSH;
     flow_flush_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
-    flow_flush_rqst->msg.request_id = htol32(0); /* TBD */
+    flow_flush_rqst->msg.request_id = htol32(0);
     flow_flush_rqst->msg.flags = ring->current_phase;
     flow_flush_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;
     ring->seqnum++;
@@ -10521,7 +10505,7 @@ int dhd_prot_flow_ring_resume(dhd_pub_t *dhd, flow_ring_node_t *flow_ring_node)
     /* Common msg buf hdr */
     flow_resume_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_RESUME;
     flow_resume_rqst->msg.if_id = (uint8)flow_ring_node->flow_info.ifindex;
-    flow_resume_rqst->msg.request_id = htol32(0); /* TBD */
+    flow_resume_rqst->msg.request_id = htol32(0);
 
     flow_resume_rqst->msg.epoch = ctrl_ring->seqnum % H2D_EPOCH_MODULO;
     ctrl_ring->seqnum++;
@@ -10577,7 +10561,7 @@ int dhd_prot_flow_ring_batch_suspend_request(dhd_pub_t *dhd, uint16 *ringid,
 
     /* Common msg buf hdr */
     flow_suspend_rqst->msg.msg_type = MSG_TYPE_FLOW_RING_SUSPEND;
-    flow_suspend_rqst->msg.request_id = htol32(0); /* TBD */
+    flow_suspend_rqst->msg.request_id = htol32(0);
 
     flow_suspend_rqst->msg.epoch = ring->seqnum % H2D_EPOCH_MODULO;
     ring->seqnum++;

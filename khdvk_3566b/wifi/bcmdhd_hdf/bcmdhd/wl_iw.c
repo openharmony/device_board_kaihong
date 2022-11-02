@@ -1701,7 +1701,7 @@ static int wl_iw_get_scan(struct net_device *dev, struct iw_request_info *info,
     kfree(list);
 
     dwrq->length = event - extra;
-    dwrq->flags = 0; /* todo */
+    dwrq->flags = 0;
 
     return 0;
 }
@@ -1860,7 +1860,7 @@ static int wl_iw_iscan_get_scan(struct net_device *dev,
     } /* while (p_buf) */
 
     dwrq->length = event - extra;
-    dwrq->flags = 0; /* todo */
+    dwrq->flags = 0;
     WL_SCAN(("apcnt=%d\n", apcnt));
 
     return 0;
@@ -3954,7 +3954,6 @@ static int wl_iw_iscan(iscan_info_t *iscan, wlc_ssid_t *ssid, uint16 action)
         params->version = htod32(ISCAN_REQ_VERSION);
         params->action = htod16(action);
         params->scan_duration = htod16(0);
-        /* params_size += OFFSETOF(wl_iscan_params_t, params); */
         (void)dev_iw_iovar_setbuf(iscan->dev, "iscan", params, params_size,
                                   iscan->ioctlbuf, WLC_IOCTL_SMLEN);
     }
