@@ -291,10 +291,9 @@ int32_t hdf_bdh6_netdev_open(struct NetDevice *netDev)
 
     rtnl_lock();
     retVal = (int32_t)dhd_ops_pri.ndo_open(netdev);
-    if (0 == retVal) {
+    if (retVal == 0) {
         netDev->flags |= NET_DEVICE_IFF_RUNNING;
-    }
-    else {
+    } else {
         HDF_LOGE("%s: hdf net device open failed! ret = %d", __func__, retVal);
     }
 
@@ -332,10 +331,9 @@ int32_t hdf_bdh6_netdev_stop(struct NetDevice *netDev)
     rtnl_lock();
     retVal = (int32_t)dhd_ops_pri.ndo_stop(netdev);
     rtnl_unlock();
-    if (0 == retVal) {
+    if (retVal == 0) {
         netDev->flags &= (0xffff & ~NET_DEVICE_IFF_RUNNING);
-    }
-    else {
+    } else {
         HDF_LOGE("%s: hdf net device stop failed! ret = %d", __func__, retVal);
     }
 

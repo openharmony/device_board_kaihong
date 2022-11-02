@@ -947,7 +947,7 @@ static int wl_cfg80211_set_mac_acl(struct wiphy *wiphy,
 #endif /* WL_CFG80211_ACL */
 
 /*
- * Some external functions, TODO: move them to dhd_linux.h
+ * Some external functions, move them to dhd_linux.h
  */
 int dhd_add_monitor(const char *name, struct net_device **new_ndev);
 int dhd_del_monitor(struct net_device *ndev);
@@ -7470,7 +7470,7 @@ static s32 wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
         /* WLAN_CIPHER_SUITE_PMK is not NL80211 standard ,but BRCM proprietary
          * cipher suite. so it doesn't have right algo type too. Just for now,
          * bypass this check for backward compatibility.
-         * TODO: deprecate this proprietary way and replace to nl80211 set_pmk
+         * deprecate this proprietary way and replace to nl80211 set_pmk
          * API.
          */
         if (params->cipher != WLAN_CIPHER_SUITE_PMK)
@@ -8551,7 +8551,7 @@ static s32 wl_update_pmklist(struct net_device *dev,
     return err;
 }
 
-/* TODO: remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa
+/* remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa
  * for single entry operation.
  */
 static s32 wl_cfg80211_set_pmksa(struct wiphy *wiphy, struct net_device *dev,
@@ -8733,7 +8733,7 @@ exit:
     return err;
 }
 
-/* TODO: remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa
+/* remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa
  * for single entry operation.
  */
 static s32 wl_cfg80211_del_pmksa(struct wiphy *wiphy, struct net_device *dev,
@@ -8818,7 +8818,7 @@ static s32 wl_cfg80211_del_pmksa(struct wiphy *wiphy, struct net_device *dev,
     return err;
 }
 
-/* TODO: remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa
+/* remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa
  * for single entry operation.
  */
 static s32 wl_cfg80211_flush_pmksa(struct wiphy *wiphy, struct net_device *dev)
@@ -9252,7 +9252,6 @@ static s32 wl_cfg80211_config_p2p_pub_af_tx(
             WL_DBG(("P2P: GO_NEG_PHASE status set \n"));
             wl_set_p2p_status(cfg, GO_NEG_PHASE);
 
-            // config_af_params->search_channel = true;
             cfg->next_af_subtype = act_frm->subtype + 1;
 
             /* increase dwell time to wait for RESP frame */
@@ -11429,7 +11428,6 @@ static s32 wl_cfg80211_bcn_bringup_ap(struct net_device *dev,
             WL_DBG(("Bss is already up\n"));
         }
     } else if (dev_role == NL80211_IFTYPE_AP) {
-        //		if (!wl_get_drv_status(cfg, AP_CREATING, dev)) {
         /* Make sure fw is in proper state */
         err = wl_cfg80211_set_ap_role(cfg, dev);
         if (unlikely(err)) {
@@ -12232,7 +12230,6 @@ static s32 wl_cfg80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
     /* Set GC/STA SCB expiry timings. */
     if ((err = wl_cfg80211_set_scb_timings(cfg, dev))) {
         WL_ERR(("scb setting failed \n"));
-        //		goto fail;
     }
 
     wl_set_drv_status(cfg, CONNECTED, dev);
@@ -12692,7 +12689,6 @@ static s32 wl_cfg80211_add_set_beacon(struct wiphy *wiphy,
         if (err == BCME_UNSUPPORTED) {
             err = 0;
         }
-        //		goto fail;
     }
 
     if (wl_get_drv_status(cfg, AP_CREATED, dev)) {
@@ -13675,7 +13671,6 @@ s32 wl_inform_bss(struct bcm_cfg80211 *cfg)
 
     WL_MEM(("cfg80211 scan cache updated\n"));
 #ifdef ROAM_CHANNEL_CACHE
-    /* print_roam_cache(); */
     update_roam_cache(cfg, ioctl_version);
 #endif /* ROAM_CHANNEL_CACHE */
     return err;
@@ -17705,7 +17700,6 @@ static void wl_cfg80211_determine_vsdb_mode(struct bcm_cfg80211 *cfg)
         WL_MSG("wlan", "check primary chanspec\n");
         if (wldev_iovar_getint(primary_dev, "chanspec", (s32 *)&chanspec) ==
             BCME_OK) {
-            // chanspec = wl_chspec_driver_to_host(chanspec);
             WL_MSG("wlan", "set primary chanspec to 0x%d\n", chanspec);
             wldev_iovar_setint(primary_dev, "chanspec", chanspec);
         }
@@ -19799,7 +19793,6 @@ void wl_cfg80211_dbg_level(u32 level)
      * eventually debug level will be configured
      * in compile time by using CONFIG_XXX
      */
-    /* wl_dbg_level = level; */
 }
 
 static bool wl_is_ibssmode(struct bcm_cfg80211 *cfg, struct net_device *ndev)
@@ -24177,7 +24170,6 @@ static void wl_he_pack_uint_cb(void *ctx, uint16 id, uint16 len, uint8 *buf)
             store32_ua(buf, v32->val);
             break;
         default:
-            /* ASSERT(0); */
             break;
     }
 }
@@ -24642,7 +24634,7 @@ int wl_cfg80211_wips_event(uint16 misdeauth, char *bssid)
 
 bool wl_cfg80211_check_in_progress(struct net_device *dev)
 {
-    /* TODO: Check for cfg status like scan in progress,
+    /* Check for cfg status like scan in progress,
      * four way handshake, etc before entering Deep Sleep.
      */
     return TRUE;
@@ -24939,7 +24931,7 @@ int wl_rxchain_to_opmode_nss(int rxchain)
      * This is from operating mode field
      * in 8.4.1.50 of 802.11ac-2013
      */
-    /* TODO : Nss 3 ? */
+    /* Nss 3 ? */
     if (rxchain == 0x3) {
         return (1 << 0x4);
     } else {

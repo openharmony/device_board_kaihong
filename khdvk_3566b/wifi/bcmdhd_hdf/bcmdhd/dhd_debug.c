@@ -1433,15 +1433,6 @@ wifi_tx_packet_fate __dhd_dbg_map_tx_status_to_pkt_fate(uint16 status)
         case WLFC_CTL_PKTFLAG_EXPIRED:
             pkt_fate = TX_PKT_FATE_FW_DROP_EXPTIME;
             break;
-/* TX_PKT_FATE_FW_PKT_FREE is not support in
- * convertLegacyDebugTxPacketFateToHidl(), and it will trigger to turn off Wi-Fi
- * from Android framework
- */
-#if 0
-        case WLFC_CTL_PKTFLAG_MKTFREE:
-            pkt_fate = TX_PKT_FATE_FW_PKT_FREE;
-            break;
-#endif
         default:
             pkt_fate = TX_PKT_FATE_FW_DROP_OTHER;
             break;

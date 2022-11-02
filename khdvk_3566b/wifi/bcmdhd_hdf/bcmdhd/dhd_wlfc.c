@@ -959,10 +959,6 @@ static void _dhd_wlfc_flow_control_check(athost_wl_status_info_t *ctx,
         (ctx->hostif_flow_state[if_id] == ON)) {
         /* start traffic */
         ctx->hostif_flow_state[if_id] = OFF;
-        /*
-        WLFC_DBGMESG(("qlen:%02d, if:%02d, ->OFF, start traffic %s()\n",
-        pq->n_pkts_tot, if_id, __FUNCTION__));
-        */
         WLFC_DBGMESG(("F"));
 
         dhd_txflowcontrol(dhdp, if_id, OFF);
@@ -974,10 +970,6 @@ static void _dhd_wlfc_flow_control_check(athost_wl_status_info_t *ctx,
         ctx->hostif_flow_state[if_id] == OFF) {
         /* stop traffic */
         ctx->hostif_flow_state[if_id] = ON;
-        /*
-        WLFC_DBGMESG(("qlen:%02d, if:%02d, ->ON, stop traffic   %s()\n",
-        pq->n_pkts_tot, if_id, __FUNCTION__));
-        */
         WLFC_DBGMESG(("N"));
 
         dhd_txflowcontrol(dhdp, if_id, ON);
@@ -1109,7 +1101,6 @@ static int _dhd_wlfc_enque_suppressed(athost_wl_status_info_t *ctx, int prec,
                                      ((prec << 1) + 1), FALSE,
                                      WLFC_SEQCOUNT(entry, prec)) == FALSE) {
         ctx->stats.delayq_full_error++;
-        /* WLFC_DBGMESG(("Error: %s():%d\n", __FUNCTION__, __LINE__)); */
         WLFC_DBGMESG(("s"));
         return BCME_ERROR;
     }
@@ -2819,10 +2810,8 @@ static int _dhd_wlfc_interface_update(dhd_pub_t *dhd, uint8 *value, uint8 type)
         if (table[if_id].occupied) {
             if (type == WLFC_CTL_TYPE_INTERFACE_OPEN) {
                 table[if_id].state = WLFC_STATE_OPEN;
-                /* WLFC_DBGMESG(("INTERFACE[%d] OPEN\n", if_id)); */
             } else {
                 table[if_id].state = WLFC_STATE_CLOSE;
-                /* WLFC_DBGMESG(("INTERFACE[%d] CLOSE\n", if_id)); */
             }
             return BCME_OK;
         }

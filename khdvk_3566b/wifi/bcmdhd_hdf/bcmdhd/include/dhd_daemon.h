@@ -34,7 +34,7 @@
  * To maintain compatabily when dhd driver and dhd daemon is taken from
  * different branches, make sure to keep this file same across dhd driver branch
  * and dhd apps branch.
- * TODO: Make this file as shared between apps and dhd.ko
+ * Make this file as shared between apps and dhd.ko
  */
 
 #define BCM_TO_MAGIC 0x600DB055

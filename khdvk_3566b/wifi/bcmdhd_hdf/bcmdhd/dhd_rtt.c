@@ -541,7 +541,6 @@ static const char *ftm_map_id_to_str(int32 id,
 
 /* ftm cmd-id mapping */
 static const ftm_strmap_entry_t ftm_cmdid_map[] = {
-    /* {wl_proxd_cmd_t(WL_PROXD_CMD_xxx), "WL_PROXD_CMD_xxx" }, */
     DEF_STRMAP_ENTRY(WL_PROXD_CMD_NONE),
     DEF_STRMAP_ENTRY(WL_PROXD_CMD_GET_VERSION),
     DEF_STRMAP_ENTRY(WL_PROXD_CMD_ENABLE),
@@ -752,7 +751,7 @@ static int dhd_rtt_common_get_handler(dhd_pub_t *dhd,
  * proxd ftm <session-id> delete -- to delete a specified session wl proxd ftm
  * [<session-id>] clear-counters -- to clear counters wl proxd ftm <session-id>
  * burst-request -- on initiator: to send burst request; on target: send FTM
- * frame wl proxd ftm <session-id> collect wl proxd ftm tune     (TBD)
+ * frame wl proxd ftm <session-id> collect wl proxd ftm tune
  */
 static int dhd_rtt_common_set_handler(dhd_pub_t *dhd,
                                       const ftm_subcmd_info_t *p_subcmd_info,

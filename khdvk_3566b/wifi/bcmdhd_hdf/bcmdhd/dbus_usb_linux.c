@@ -59,11 +59,6 @@
  * should bypass the dpc and go directly up.
  */
 
-/* #define DBUS_LINUX_RXDPC */
-
-/* Dbus histogram for ntxq, nrxq, dpc parameter tuning */
-/* #define DBUS_LINUX_HIST */
-
 #include <usbrdl.h>
 #include <bcmendian.h>
 #include <linux/init.h>

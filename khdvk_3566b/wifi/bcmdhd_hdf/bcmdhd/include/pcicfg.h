@@ -52,7 +52,7 @@
 #define PCI_CFG_BIST 0xf
 #define PCI_CFG_BAR0 0x10
 /*
- * TODO: PCI_CFG_BAR1 is wrongly defined to be 0x14 whereas it should be
+ * PCI_CFG_BAR1 is wrongly defined to be 0x14 whereas it should be
  * 0x18 as per the PCIe full dongle spec. Need to modify the values below
  * correctly at a later point of time
  */

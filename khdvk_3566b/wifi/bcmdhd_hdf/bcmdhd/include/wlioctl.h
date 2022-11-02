@@ -7308,7 +7308,7 @@ typedef struct wl_pkteng_ru_v1 {
     uint8 mumimo_ltfmode;   /* ltf mode */
     uint8 trig_tx;          /* form and transmit the trigger frame */
     uint8 trig_type;        /* type of trigger frame */
-    uint8 trig_period;      /* trigger tx periodicity TBD */
+    uint8 trig_period;      /* trigger tx periodicity */
     struct ether_addr dest; /* destination address for un-associated mode */
 } wl_pkteng_ru_v1_t;
 
@@ -7331,7 +7331,7 @@ typedef struct wl_pkteng_ru_v2 {
     uint8 mumimo_ltfmode;   /* ltf mode */
     uint8 trig_tx;          /* form and transmit the trigger frame */
     uint8 trig_type;        /* type of trigger frame */
-    uint8 trig_period;      /* trigger tx periodicity TBD */
+    uint8 trig_period;      /* trigger tx periodicity */
     uint8 tgt_rssi;         /* target rssi value in encoded format */
     uint8
         pad[3]; /* 3 byte padding to make structure size a multiple of 32bits */
@@ -11324,7 +11324,7 @@ typedef uint8 wl_nan_mr_changed_t;
  */
 #ifndef BCMUTILS_ERR_CODES
 
-/** status - TBD BCME_ vs NAN status - range reserved for BCME_ */
+/** status BCME_ vs NAN status - range reserved for BCME_ */
 enum {
     /* add new status here... */
     WL_NAN_E_INVALID_TOKEN = -2135,    /* invalid token or mismatch */
@@ -11540,7 +11540,7 @@ typedef uint8 wl_nan_role_t;
 
 typedef struct wl_nan_device_state {
     wl_nan_role_t role;                 /* Sync Master, Non-Sync Master */
-    uint8 state;                        /* TBD  */
+    uint8 state;
     uint8 hopcount;                     /* Hops to the Anchor Master */
     struct ether_addr immediate_master; /* Master MAC */
     struct ether_addr anchor_master;    /* Anchor Master MAC */
@@ -11746,7 +11746,7 @@ typedef struct nan_sync_master {
 } nan_sync_master_t;
 
 /* NAN advertiser structure */
-/* TODO RSDB: add chspec to indicates core corresponds correct core */
+/* RSDB: add chspec to indicates core corresponds correct core */
 typedef struct nan_adv_entry {
     uint8 age;       /* used to remove stale entries */
     uint8 hop_count; /* for NTLV support, use bit7 for virtual NAN peer */
@@ -12185,7 +12185,7 @@ enum wl_nan_dp_cmds {
     WL_NAN_CMD_DP_STATUS = 1009
 };
 
-/* TODO Should remove this fixed length */
+/* Should remove this fixed length */
 #define WL_NAN_DATA_SVC_SPEC_INFO_LEN 32 /* arbitrary */
 #define WL_NAN_DP_MAX_SVC_INFO 0xFF
 #define WL_NAN_DATA_NDP_INST_SUPPORT 16
@@ -12384,7 +12384,7 @@ enum {
     WL_NAN_STATS_INVALID
 };
 typedef struct wl_nan_dp_stats {
-    uint32 tbd; /* TBD */
+    uint32 tbd;
 } wl_nan_dp_stats_t;
 
 typedef struct wl_nan_stats {
@@ -12450,7 +12450,7 @@ typedef struct wl_nan_nbr_rssi {
 
 typedef struct wl_nan_peer_rssi_entry {
     struct ether_addr mac; /* peer mac address */
-    uint8 flags;    /* TODO:rssi data order: latest first, oldest first etc */
+    uint8 flags;    /* rssi data order: latest first, oldest first etc */
     uint8 rssi_cnt; /* rssi data sample present */
     wl_nan_peer_rssi_t
         rssi[WL_NAN_MAC_MAX_RSSI_DATA_PER_PEER]; /* RSSI data frm peer */
@@ -12544,7 +12544,7 @@ typedef struct wl_nan_dp_req {
     uint8 tlv_params[];       /* xtlv parameters for command */
 } wl_nan_dp_req_t;
 
-/* TODO  Need to replace ndp_id with lndp_id */
+/* Need to replace ndp_id with lndp_id */
 /* Return structure to data req IOVAR */
 typedef struct wl_nan_dp_req_ret {
     struct ether_addr indi; /* Initiators data mac addr */
@@ -14770,7 +14770,7 @@ typedef uint16 wl_proxd_session_id_t;
  */
 #ifndef BCMUTILS_ERR_CODES
 
-/** status - TBD BCME_ vs proxd status - range reserved for BCME_ */
+/** status - BCME_ vs proxd status - range reserved for BCME_ */
 enum {
     WL_PROXD_E_LAST = -1056,
     WL_PROXD_E_NOAVAIL = -1056,
@@ -14970,7 +14970,6 @@ typedef struct wl_proxd_aoa_result {
     wl_proxd_session_state_t state;
     uint16 burst_num;
     uint8 pad[2];
-    /* wl_proxd_aoa_sample_t sample_avg; TBD */
 } BWL_POST_PACKED_STRUCT wl_proxd_aoa_result_t;
 #include <packed_section_end.h>
 
@@ -15189,7 +15188,7 @@ typedef struct wl_proxd_avail {
     (WL_PROXD_AVAIL_TIMESLOT_OFFSET(_avail) +                                  \
      (_num_slots) * sizeof(*WL_PROXD_AVAIL_TIMESLOT(_avail, 0)))
 
-/* collect support TBD */
+/* collect support */
 
 /** debugging */
 enum {
@@ -16880,8 +16879,8 @@ typedef struct ecounters_suspend {
 #define DCTL_FLAGS_MSWITCH (1 << 2) /**< mode switching is enabled */
 #define DCTL_FLAGS_PWRCTRL (1 << 3) /**< Tx power control is enabled */
 /* for now AGG on/off is handled separately  */
-#define DCTL_FLAGS_TX_AGG_OFF (1 << 4) /**< TBD: allow TX agg Off */
-#define DCTL_FLAGS_RX_AGG_OFF (1 << 5) /**< TBD: allow RX agg Off */
+#define DCTL_FLAGS_TX_AGG_OFF (1 << 4) /* allow TX agg Off */
+#define DCTL_FLAGS_RX_AGG_OFF (1 << 5) /* allow RX agg Off */
 /* used for dry run testing only */
 #define DCTL_FLAGS_DRYRUN (1 << 7) /**< Enables dynctl dry run mode  */
 #define IS_DYNCTL_ON(prof) ((prof->flags & DCTL_FLAGS_DYNCTL) != 0)
@@ -18165,7 +18164,7 @@ enum {
     WL_TWT_CMD_LAST
 };
 
-/* TODO: Remove the follwoing after mering TWT changes to trunk */
+/* Remove the follwoing after mering TWT changes to trunk */
 #define WL_TWT_CMD_DEF_IN_WLIOCTL 1
 
 #define WL_HEB_VER_1 1
@@ -18357,7 +18356,7 @@ typedef struct wl_twt_sdesc {
 #define WL_TWT_STATS_MAX_ITWT 4u
 
 /* Wake type */
-/* TODO: not yet finalized */
+/* not yet finalized */
 #define WL_TWT_TIME_TYPE_BSS                                                   \
     0u /* The time specified in wake_time_h/l is                               \
         * the BSS TSF time.                                                    \

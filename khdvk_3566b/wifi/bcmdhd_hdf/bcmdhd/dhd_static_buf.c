@@ -33,10 +33,8 @@ uint static_msg_level = STATIC_ERROR_LEVEL | STATIC_MSG_LEVEL;
 
 #define BCMDHD_SDIO
 #define BCMDHD_PCIE
-// #define BCMDHD_USB
 #define CONFIG_BCMDHD_VTS := y
 #define CONFIG_BCMDHD_DEBUG := y
-// #define BCMDHD_UNUSE_MEM
 
 #ifndef MAX_NUM_ADAPTERS
 #define MAX_NUM_ADAPTERS 1

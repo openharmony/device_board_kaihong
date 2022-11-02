@@ -1354,7 +1354,7 @@ int wl_escan_get_scan(struct net_device *dev, struct iw_request_info *info,
         dwrq->length = len_ret;
     }
 
-    dwrq->flags = 0; /* todo */
+    dwrq->flags = 0;
     ESCAN_SCAN(dev->name, "scanned AP count (%d)\n", scan_cnt);
 #if defined(BSSCACHE)
     ESCAN_SCAN(dev->name, "cached AP count (%d)\n", cache_cnt);

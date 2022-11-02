@@ -351,7 +351,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_avail_entry_s {
 #define NAN_VENDOR_TYPE_P2P 1
 
 /* Vendor Specific Attribute - old definition */
-/* TODO remove */
+/* remove */
 typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_vendor_attr_s {
     uint8 id;                 /* 0xDD */
     uint16 len;               /* IE length */
@@ -482,11 +482,6 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_ranging_report_attr_s {
     */
     uint8 entry_count;
     uint8 data[2]; /* includes pad */
-                   /*
-                   dot11_ftm_range_entry_t entries[entry_count];
-                   uint8 error_count;
-                   dot11_ftm_error_entry_t errors[error_count];
-                    */
 } BWL_POST_PACKED_STRUCT wifi_nan_ranging_report_attr_t;
 
 /* Ranging control flags */
@@ -1082,9 +1077,9 @@ typedef BWL_PRE_PACKED_STRUCT struct nan2_pub_act_frame_s {
     uint8 action_field;
     /* NAN_OUI 0x50-6F-9A */
     uint8 oui[DOT11_OUI_LEN];
-    /* NAN_OUI_TYPE TBD */
+    /* NAN_OUI_TYPE */
     uint8 oui_type;
-    /* NAN_OUI_SUB_TYPE TBD */
+    /* NAN_OUI_SUB_TYPE */
     uint8 oui_sub_type;
     /* One or more NAN Attributes follow */
     uint8 data[];
@@ -1563,7 +1558,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_sec_ncssk_key_desc_attr_s {
 #define NAN_SEC_NCSSK_KEY_TYPE_PAIRWISE 1 /* Pairwise */
 #define NAN_SEC_NCSSK_LIFETIME_KDE 7      /* Lifetime KDE type */
 
-/* TODO include MTK related attributes */
+/* include MTK related attributes */
 
 /* NAN Multicast service group(NMSG) definitions */
 /* Length of NMSG_ID -- (NDI * 2^16 + pub_id * 2^8 + Random_factor) */
@@ -1623,7 +1618,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wifi_nan_fac_chan_entry_s {
     uint16 aux_chan;        /* Auxiliary Channel bitmap */
 } BWL_POST_PACKED_STRUCT wifi_nan_fac_chan_entry_t;
 
-/* TODO move this from nan.h */
+/* move this from nan.h */
 #define NAN_ALL_NAN_MGMT_FRAMES                                                \
     (NAN_FRM_SCHED_AF | NAN_FRM_NDP_AF | NAN_FRM_NDL_AF | NAN_FRM_DISC_BCN |   \
      NAN_FRM_SYNC_BCN | NAN_FRM_SVC_DISC | NAN_FRM_RNG_REQ_AF |                \

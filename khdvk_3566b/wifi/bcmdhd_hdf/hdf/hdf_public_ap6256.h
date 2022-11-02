@@ -46,8 +46,6 @@ extern int32_t wl_get_all_sta(struct net_device *ndev, uint32_t *num);
 extern s32 wl_get_all_sta_info(struct net_device *ndev, char* mac, uint32_t num);
 extern int g_hdf_ifidx;
 extern int g_mgmt_tx_event_ifidx;
-//extern u64 p2p_cookie;
-//extern u32 p2p_remain_freq;
 extern struct HdfMac80211STAOps g_bdh6_staOps;
 extern struct HdfMac80211APOps g_bdh6_apOps;
 extern struct HdfMac80211P2POps g_bdh6_p2pOps;
@@ -66,8 +64,6 @@ void wl_cfg80211_add_virtual_iface_wrap(struct wiphy *wiphy, char *name, enum nl
     struct vif_params *params);
 extern int memcpy_s(void *dest, size_t dest_max, const void *src, size_t count);
 extern int32_t HdfWifiEventDelSta(struct NetDevice *netDev, const uint8_t *macAddr, uint8_t addrLen);
-/*int32_t HdfWifiEventInformBssFrame(const struct NetDevice *netDev,
-    const struct WlanChannel *channel, const struct ScannedBssInfo *bssInfo);*/
 int hdf_cfgp2p_register_ndev(struct net_device *p2p_netdev, struct net_device *primary_netdev, struct wiphy *wiphy);
 struct NetDeviceInterFace *wal_get_net_p2p_ops(void);
 int hdf_start_p2p_device(void);

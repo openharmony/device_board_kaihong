@@ -1407,7 +1407,7 @@ chanspec_t wf_channel_create_chspec_frm_opclass(uint8 opclass, uint8 channel)
 int wf_channel_create_opclass_frm_chspec(chanspec_t chspec)
 {
     BCM_REFERENCE(chspec);
-    /* TODO: Implement this function ! */
+    /* Implement this function ! */
     return 12; /* opclass 12 for basic 2G channels */
 }
 

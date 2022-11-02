@@ -61,7 +61,7 @@ struct btcoex_info {
 
 static struct btcoex_info *btcoex_info_loc = NULL;
 
-/* TODO: clean up the BT-Coex code, it still have some legacy ioctl/iovar
+/* clean up the BT-Coex code, it still have some legacy ioctl/iovar
  * functions */
 
 /* use New SCO/eSCO smart YG suppression */
