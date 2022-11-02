@@ -2528,7 +2528,6 @@ static int dhdsdio_txpkt_preprocess(dhd_bus_t *bus, void *pkt, int chan,
      *
      * 8-byte SW frame tags as the following
      *			4-byte flags: host tx seq, channel, data offset
-     *			4-byte flags: TBD
      */
 
     swhdr_offset = SDPCM_FRAMETAG_LEN;
@@ -4778,7 +4777,6 @@ static int dhdsdio_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi,
                  bus->dhd->busstate));
 
             ASSERT(bus->dhd->osh);
-            /* ASSERT(bus->cl_devid); */
 
             /* must release sdlock, since devreset also acquires it */
             dhd_os_sdunlock(bus->dhd);
@@ -5643,15 +5641,6 @@ int dhd_bus_init(dhd_pub_t *dhdp, bool enforce_mutex)
 
         /* Set bus state according to enable result */
         dhdp->busstate = DHD_BUS_DATA;
-
-        /* Need to set fn2 block size to match fn1 block size.
-         * Requests to fn2 go thru fn1. *
-         * faltwig has this code contitioned with #if !BCMSPI_ANDROID.
-         * It would be cleaner to use the ->sdh->block_sz[fno] instead of
-         * 64, but this layer has no access to sdh types.
-         */
-
-        /* bcmsdh_intr_unmask(bus->sdh); */
 
         bus->intdis = FALSE;
         if (bus->intr) {
@@ -7450,7 +7439,6 @@ exit_ucode:
 
     /* Just being here means nothing more to do for chipactive */
     if (intstatus & I_CHIPACTIVE) {
-        /* ASSERT(bus->clkstate == CLK_AVAIL); */
         intstatus &= ~I_CHIPACTIVE;
     }
 
@@ -8910,40 +8898,6 @@ static bool dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh,
                 MFREE(osh, cis[fn], SBSDIO_CIS_SIZE_LIMIT);
                 break;
             }
-#if 0
-		/* Reading the F1, F2 and F3 max blocksize values from CIS
-		  * and writing into the F1, F2 and F3	block size registers.
-		  * There is no max block size register value available for F0 in CIS register.
-		  * So, setting default value for F0 block size as 32 (which was set earlier
-		  * in iovar). IOVAR takes only one arguement.
-		  * So, we are passing the function number alongwith the value (fn<<16)
-		*/
-            if (!fn) {
-                value = F0_BLOCK_SIZE;
-            } else {
-                value = (cis[fn][0x19]<<0x8) | cis[fn][0x18] | (fn<<0x10);
-            }
-			/* Get block size from sd */
-            if (bcmsdh_iovar_op(sdh, "sd_blocksize", &fn, sizeof(int32),
-                &size, sizeof(int32), FALSE) != BCME_OK) {
-                size = 0;
-                DHD_ERROR(("%s: fail on fn %d %s get\n",
-	                __FUNCTION__, fn, "sd_blocksize"));
-            } else {
-                DHD_INFO(("%s: Initial value for fn %d %s is %d\n",
-                    __FUNCTION__, fn, "sd_blocksize", size));
-            }
-            if (size != 0 && size < value) {
-                value = size;
-            }
-            value = fn << 0x10 | value;
-            if (bcmsdh_iovar_op(sdh, "sd_blocksize", NULL, 0, &value,
-                sizeof(value), TRUE) != BCME_OK) {
-                bus->blocksize = 0;
-                DHD_ERROR(("%s: fail on fn %d %s set\n", __FUNCTION__,
-                    fn, "sd_blocksize"));
-            }
-#endif
 #ifdef DHD_DEBUG
             if (DHD_INFO_ON()) {
                 dhd_dump_cis(fn, cis[fn]);

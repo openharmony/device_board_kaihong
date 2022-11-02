@@ -262,7 +262,7 @@ typedef struct dhd_info {
 
     /* Tx load balancing */
 
-    /* TODO: Need to see if batch processing is really required in case of TX
+    /* Need to see if batch processing is really required in case of TX
      * processing. In case of RX the Dongle can send a bunch of rx completions,
      * hence we took a 3 queue approach
      * enque - adds the skbs to rx_pend_queue

@@ -409,7 +409,6 @@ typedef enum {
 
     /* Packet free by firmware. */
     TX_PKT_FATE_FW_PKT_FREE,
-
 } wifi_tx_packet_fate;
 
 typedef enum {
@@ -448,7 +447,6 @@ typedef enum {
 
     /* Dropped by driver for any other reason. */
     RX_PKT_FATE_DRV_DROP_OTHER,
-
 } wifi_rx_packet_fate;
 
 typedef enum {

@@ -1064,9 +1064,6 @@ static int dbus_usb_dlrun(void *bus)
         if (usbinfo->pub->attrib.devid == TEST_CHIP) {
             dbus_usbos_wait(osinfo, USB_DLGO_SPINWAIT);
         }
-
-        //		dbus_usb_resetcfg(usbinfo);
-        /* The Donlge may go for re-enumeration. */
     } else {
         DBUSERR(("%s: Dongle not runnable\n", __FUNCTION__));
         err = DBUS_ERR;

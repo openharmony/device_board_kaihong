@@ -1033,13 +1033,6 @@ typedef struct dhd_pub {
     char eventmask[WL_EVENTING_MASK_LEN];
     int op_mode; /* STA, HostAPD, WFD, SoftAP */
 
-    /* Set this to 1 to use a seperate interface (p2p0) for p2p operations.
-     *  For ICS MR1 releases it should be disable to be compatable with ICS MR1
-     * Framework see target dhd-cdc-sdmmc-panda-cfg80211-icsmr1-gpl-debug in
-     * Makefile
-     */
-    /* #define WL_ENABLE_P2P_IF		1 */
-
     struct mutex wl_start_stop_lock; /* lock/unlock for Android start/stop */
     struct mutex wl_softap_lock; /* lock/unlock for any SoftAP/STA settings */
 

@@ -663,8 +663,6 @@ int dhdpcie_bus_attach(osl_t *osh, dhd_bus_t **bus_ptr, volatile char *regs,
             break;
         }
 
-        /* dhd_common_init(osh); */
-
         if (dhdpcie_dongle_attach(bus)) {
             DHD_ERROR(("%s: dhdpcie_probe_attach failed\n", __FUNCTION__));
             ret = BCME_NOTREADY;
@@ -5728,7 +5726,7 @@ static int dhdpcie_bus_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi,
                     }
                     break;
                 default:
-                    // TODO: implement d11 SHM/TPL dumping
+                    // implement d11 SHM/TPL dumping
                     bcmerror = BCME_BADARG;
                     break;
             }
@@ -6703,7 +6701,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
         /* resume all interface network queue. */
         dhd_bus_start_queue(bus);
 
-        /* TODO: for NDIS also we need to use enable_irq in future */
+        /* for NDIS also we need to use enable_irq in future */
         bus->resume_intr_enable_count++;
 
         /* For Linux, Macos etc (otherthan NDIS) enable back the dongle
@@ -8724,7 +8722,7 @@ static int dhdpcie_readshared(dhd_bus_t *bus)
         }
     }
 
-    /* TODO: This need to be selected based on IPC instead of compile time */
+    /* This need to be selected based on IPC instead of compile time */
     bus->dhd->hwa_enable = TRUE;
 
     if (idma_en) {
@@ -9132,7 +9130,6 @@ int dhd_bus_init(dhd_pub_t *dhdp, bool enforce_mutex)
 
     bus->intr_enabled = TRUE;
 
-    /* bcmsdh_intr_unmask(bus->sdh); */
     bus->idletime = 0;
 
     /* Make use_d0_inform TRUE for Rev 5 for backward compatibility */
@@ -10159,7 +10156,7 @@ static int dhdpcie_cto_error_recovery(struct dhd_bus *bus)
     dhdpcie_bus_cfg_write_dword(bus, PCI_INT_STATUS, 0x4, PCI_CTO_INT_MASK);
 
     /* Halt ARM & remove reset */
-    /* TBD : we can add ARM Halt here in case */
+    /* we can add ARM Halt here in case */
 
     /* reset SPROM_CFG_TO_SB_RST */
     val = dhdpcie_bus_cfg_read_dword(bus, PCI_SPROM_CONTROL, 0x4);

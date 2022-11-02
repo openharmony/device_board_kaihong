@@ -597,7 +597,6 @@
 #define WPA_AUTH_CCKM 0x0008         /* CCKM */
 #define WPA2_AUTH_CCKM 0x0010        /* CCKM2 */
 #endif                               /* BCMCCX || BCMEXTCCX */
-/* #define WPA_AUTH_8021X 0x0020 */  /* 802.1x, reserved */
 #define WPA2_AUTH_UNSPECIFIED 0x0040 /* over 802.1x */
 #define WPA2_AUTH_PSK 0x0080         /* Pre-shared key */
 #define BRCM_AUTH_PSK 0x0100         /* BRCM specific PSK */

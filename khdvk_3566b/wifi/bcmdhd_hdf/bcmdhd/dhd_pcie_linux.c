@@ -866,7 +866,6 @@ static int dhdpcie_suspend_dev(struct pci_dev *dev)
     if (ret) {
         DHD_ERROR(("%s: pci_set_power_state error %d\n", __FUNCTION__, ret));
     }
-    //	dev->state_saved = FALSE;
     dhdpcie_suspend_dump_cfgregs(bus, "AFTER_EP_SUSPEND");
     return ret;
 }
@@ -902,9 +901,8 @@ static int dhdpcie_resume_dev(struct pci_dev *dev)
     dhdpcie_info_t *pch = pci_get_drvdata(dev);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
     pci_load_and_free_saved_state(dev, &pch->state);
-#endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+#endif
     DHD_ERROR(("%s: Enter\n", __FUNCTION__));
-    //	dev->state_saved = TRUE;
     pci_restore_state(dev);
 #ifdef FORCE_TPOWERON
     if (dhdpcie_chip_req_forced_tpoweron(pch->bus)) {

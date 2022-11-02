@@ -773,7 +773,6 @@ void hw_config_cback(void *p_mem)
 
                 uint8_t *p = (uint8_t *)(p_buf + 1);
                 ssize_t xmit_bytes = 0;
-                // /vendor/etc/firmware
                 if ((hw_cfg_cb.fw_fd = open(p_name, O_RDONLY)) == -1) {
                     HILOGE("vendor lib preload failed to open [%s]", p_name);
                 } else {

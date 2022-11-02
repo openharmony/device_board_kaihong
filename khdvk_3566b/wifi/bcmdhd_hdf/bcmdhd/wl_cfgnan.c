@@ -497,7 +497,7 @@ s32 wl_cfgnan_parse_sda_data(osl_t *osh, const uint8 *p_attr, uint16 len,
             WL_TRACE(("range limited is only valid on pub or sub\n"));
         }
 
-        /* TODO: send up */
+        /* send up */
 
         /* advance read pointer */
         p_attr++;
@@ -3031,14 +3031,14 @@ fail:
 int wl_cfgnan_support_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
                               nan_config_cmd_data_t *cmd_data)
 {
-    /* TODO: */
+    /* */
     return BCME_OK;
 }
 
 int wl_cfgnan_status_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
                              nan_config_cmd_data_t *cmd_data)
 {
-    /* TODO: */
+    /* */
     return BCME_OK;
 }
 
@@ -3698,7 +3698,7 @@ int wl_cfgnan_trigger_geofencing_ranging(struct net_device *dev,
         if (ret != BCME_OK) {
             /* Unsupported is for already ranging session for peer */
             if (ret == BCME_BUSY) {
-                /* TODO: Attempt again over a timer */
+                /* Attempt again over a timer */
                 err_at = 0x2;
             } else {
                 /* Remove target and clean ranging inst */
@@ -4207,7 +4207,7 @@ static int wl_cfgnan_sd_params_handler(struct net_device *ndev,
         }
 
         /* BIT1 - If set, host wont receive match expiry evt */
-        /* TODO: Exp not yet supported */
+        /* Exp not yet supported */
         if (CHECK_BIT(cmd_data->recv_ind_flag,
                       WL_NAN_EVENT_SUPPRESS_MATCH_EXP_BIT)) {
             WL_DBG(("Need to add match expiry event\n"));
@@ -7441,7 +7441,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
                     goto exit;
                 }
             } else {
-                /* TODO : populate status based on reason codes
+                /* populate status based on reason codes
                 For now adding it as no ACK, so that app/framework can retry
                 */
                 WL_INFORM_MEM(("TXS failed for type %d status %d token %d\n",
@@ -7470,7 +7470,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
                     ret = -EINVAL;
                     goto exit;
                 }
-            } else { /* TODO: add for other frame types if required */
+            } else { /* add for other frame types if required */
                 ret = -EINVAL;
                 goto exit;
             }
@@ -7662,7 +7662,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
                 }
 #endif /* RTT_SUPPORT */
             } else {
-                /* TODO: should we terminate service if ranging fails ? */
+                /* should we terminate service if ranging fails ? */
                 WL_INFORM_MEM(("Ranging failed or not required, " MACDBG
                                " sub_id:%d , pub_id:%d\n",
                                MAC2STRDBG(&nan_event_data->remote_nmi),

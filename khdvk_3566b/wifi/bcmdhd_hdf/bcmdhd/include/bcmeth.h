@@ -87,11 +87,6 @@
 #define BCMILCP_BCM_SUBTYPE_RESERVED 0
 #define BCMILCP_BCM_SUBTYPE_EVENT 1
 #define BCMILCP_BCM_SUBTYPE_SES 2
-/*
- * The EAPOL type is not used anymore. Instead EAPOL messages are now embedded
- * within BCMILCP_BCM_SUBTYPE_EVENT type messages
- */
-/* #define BCMILCP_BCM_SUBTYPE_EAPOL		3 */
 #define BCMILCP_BCM_SUBTYPE_DPT 4
 #define BCMILCP_BCM_SUBTYPE_DNGLEVENT 5
 

@@ -87,7 +87,6 @@ extern int dhd_tcpack_check_xmit(dhd_pub_t *dhdp, void *pkt);
 extern bool dhd_tcpack_suppress(dhd_pub_t *dhdp, void *pkt);
 extern bool dhd_tcpdata_info_get(dhd_pub_t *dhdp, void *pkt);
 extern bool dhd_tcpack_hold(dhd_pub_t *dhdp, void *pkt, int ifidx);
-/* #define DHDTCPACK_SUP_DBG */
 #if defined(DEBUG_COUNTER) && defined(DHDTCPACK_SUP_DBG)
 extern counter_tbl_t tack_tbl;
 #endif /* DEBUG_COUNTER && DHDTCPACK_SUP_DBG */
