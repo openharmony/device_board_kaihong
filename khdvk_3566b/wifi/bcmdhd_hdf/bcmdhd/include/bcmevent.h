@@ -39,7 +39,7 @@
 #define _BCMEVENT_H_
 
 #include <typedefs.h>
-/* #include <ethernet.h> -- TODO: req., excluded to overwhelming coupling (break
+/* #include <ethernet.h> -- req., excluded to overwhelming coupling (break
  * up ethernet.h) */
 #include <bcmeth.h>
 #if defined(DNGL_EVENT_SUPPORT)
@@ -294,8 +294,7 @@ typedef union bcm_event_msg_u {
 #define WLC_E_LINK_QUALITY 155   /* Link quality measurement complete */
 #define WLC_E_BSSTRANS_RESP 156  /* BSS Transition Response received */
 #define WLC_E_TWT_SETUP 157      /* TWT Setup Complete event */
-#define WLC_E_HE_TWT_SETUP                                                     \
-    157 /* TODO:Remove after merging TWT changes to trunk */
+#define WLC_E_HE_TWT_SETUP 157 /* Remove after merging TWT changes to trunk */
 #define WLC_E_NAN_CRITICAL 158     /* NAN Critical Event */
 #define WLC_E_NAN_NON_CRITICAL 159 /* NAN Non-Critical Event */
 #define WLC_E_RADAR_DETECTED 160   /* Radar Detected event */

@@ -1059,9 +1059,6 @@ typedef struct id16_map {
 
 #if defined(BCM_DBG)
 
-/* Uncomment BCM_DBG_ID16 to debug double free */
-/* #define BCM_DBG_ID16 */
-
 typedef struct id16_map_dbg {
     uint16 total;
     bool avail[0];

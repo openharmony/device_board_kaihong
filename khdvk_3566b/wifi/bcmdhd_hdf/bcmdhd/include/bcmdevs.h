@@ -296,7 +296,7 @@
 #define BCM4366_D11AC2G_ID 0x43c4
 #define BCM4366_D11AC5G_ID 0x43c5
 
-/* TBD change below values */
+/* change below values */
 #define BCM4369_D11AX_ID 0x4470   /* 4369 802.11ax dualband device */
 #define BCM4369_D11AX2G_ID 0x4471 /* 4369 802.11ax 2.4G device */
 #define BCM4369_D11AX5G_ID 0x4472 /* 4369 802.11ax 5G device */

@@ -1224,7 +1224,6 @@ uint16 ipv6_tcp_hdr_cksum(uint8 *ipv6, uint8 *tcp, uint16 tcp_len);
 }
 #endif // endif
 
-/* #define DEBUG_COUNTER */
 #ifdef DEBUG_COUNTER
 #define CNTR_TBL_MAX 10
 typedef struct _counter_tbl_t {

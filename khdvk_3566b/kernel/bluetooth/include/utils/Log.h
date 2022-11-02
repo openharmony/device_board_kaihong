@@ -19,8 +19,6 @@
 #include "hilog/log.h"
 #include "time.h"
 
-// #define VENDOR_DEBUG_2_FILE
-
 #ifdef VENDOR_DEBUG_2_FILE
 static void Print(const char *fmt, ...)
 {

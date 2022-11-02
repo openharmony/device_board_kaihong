@@ -80,17 +80,6 @@ s32 wl_ext_connect(struct net_device *dev, wl_conn_info_t *conn_info);
 #define strnicmp(str1, str2, len) strncasecmp((str1), (str2), (len))
 #endif
 
-/* terence:
- * BSSCACHE: Cache bss list
- * RSSAVG: Average RSSI of BSS list
- * RSSIOFFSET: RSSI offset
- * SORT_BSS_BY_RSSI: Sort BSS by RSSI
- */
-// #define BSSCACHE
-// #define RSSIAVG
-// #define RSSIOFFSET
-// #define RSSIOFFSET_NEW
-
 #define RSSI_MAXVAL -2
 #define RSSI_MINVAL -200
 
@@ -150,7 +139,6 @@ int wl_update_rssi_offset(struct net_device *net, int rssi);
 #define BSSCACHE_TIMEOUT 30
 #define BSSCACHE_MAXCNT 20
 #define SORT_BSS_CHANNEL
-// #define SORT_BSS_RSSI
 
 typedef struct wl_bss_cache {
     struct wl_bss_cache *next;

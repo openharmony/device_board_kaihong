@@ -906,14 +906,6 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action,
             suspend = FALSE;
             break;
     }
-#if 0
-    if (!dhd->early_suspended && suspend_mode != PM_NOTIFIER) {
-        suspend_mode = PM_NOTIFIER;
-        conf->suspend_mode = PM_NOTIFIER;
-        conf->insuspend |= (NO_TXDATA_IN_SUSPEND | NO_TXCTL_IN_SUSPEND);
-        printf("%s: switch suspend_mode to %d\n", __FUNCTION__, suspend_mode);
-    }
-#endif
     printf("%s: action=%ld, suspend=%d, suspend_mode=%d\n", __FUNCTION__,
            action, suspend, suspend_mode);
     if (suspend) {
@@ -983,7 +975,6 @@ typedef struct dhd_dev_priv {
 #include "net_device.h"
 
 extern int g_hdf_ifidx;
-// struct NetDevice * get_hdf_netdev(int ifidx);
 void BDH6_ResetDriver(void);
 struct NetDevice *GetHdfNetDeviceByLinuxInf(struct net_device *dev);
 
@@ -1951,7 +1942,6 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #ifndef SUPPORT_PM2_ONLY
     int power_mode = PM_MAX;
 #endif /* SUPPORT_PM2_ONLY */
-    /* wl_pkt_filter_enable_t	enable_parm; */
     int bcn_li_dtim = 0; /* Default bcn_li_dtim in resume mode is 0 */
     int ret = 0;
 #ifdef DHD_USE_EARLYSUSPEND
@@ -4857,9 +4847,7 @@ void dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt,
             if (ntoh16(eh->ether_type) == ETHER_TYPE_1905_1) {
                 if (!eacmp(da, ifp->_1905_al_ucast) ||
                     !eacmp(da, ifp->_1905_al_mcast)) {
-                    // skb->fwr_flood = 0;
                 } else {
-                    // skb->fwr_flood = 1;
                 }
             }
         }
@@ -6174,7 +6162,7 @@ int dhd_bus_get(wlan_bt_handle_t handle, bus_owner_t owner)
         /* update firmware and nvram path to sdio bus */
         dhd_bus_update_fw_nv_path(dhd->pub.bus, dhd->fw_path, dhd->nv_path);
         /* download the firmware, Enable F2 */
-        /* TODO: Should be done only in case of FW switch */
+        /* Should be done only in case of FW switch */
         ret = dhd_bus_devreset(dhdp, FALSE);
         dhd_bus_resume(dhdp, 1);
         if (!ret) {
@@ -7052,10 +7040,6 @@ static int dhd_stop(struct net_device *net)
 #endif /* CONFIG_IPV6 && IPV6_NDO_SUPPORT */
                 dhd_net_if_unlock_local(dhd);
             }
-#if 0
-			// terence 20161024: remove this to prevent dev_close() get stuck in dhd_hang_process
-            cancel_work_sync(dhd->dhd_deferred_wq);
-#endif
 
 #ifdef SHOW_LOGTRACE
             /* Wait till event logs work/kthread finishes */
@@ -7312,21 +7296,6 @@ static int dhd_open(struct net_device *net)
 
 #ifdef DHD_LOSSLESS_ROAMING
     dhd->pub.dequeue_prec_map = ALLPRIO;
-#endif // endif
-
-#if 0
-	/*
-	 * Force start if ifconfig_up gets called before START command
-	 *  We keep WEXT's wl_control_wl_start to provide backward compatibility
-	 *  This should be removed in the future
-	 */
-    ret = wl_control_wl_start(net);
-    if (ret != 0) {
-        DHD_ERROR(("%s: failed with code %d\n", __FUNCTION__, ret));
-        ret = -1;
-        goto exit;
-    }
-
 #endif // endif
 
     ifidx = dhd_net2idx(dhd, net);
@@ -9596,8 +9565,6 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
      * parameter is changed again (first character is not '\0')
      */
 
-    /* set default firmware and nvram path for built-in type driver */
-//	if (!dhd_download_fw_on_driverload) {
 #ifdef CONFIG_BCMDHD_FW_PATH
     fw = VENDOR_PATH CONFIG_BCMDHD_FW_PATH;
 #endif /* CONFIG_BCMDHD_FW_PATH */
@@ -9631,7 +9598,7 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
     /* Use module parameter if it is valid, EVEN IF the path has not been
      * initialized
      *
-     * TODO: need a solution for multi-chip, can't use the same firmware for all
+     * need a solution for multi-chip, can't use the same firmware for all
      * chips
      */
     if (firmware_path[0] != '\0') {
@@ -9745,15 +9712,6 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
     }
 #endif /* DHD_UCODE_DOWNLOAD */
 
-#if 0
-	/* clear the path in module parameter */
-    if (dhd_download_fw_on_driverload) {
-        firmware_path[0] = '\0';
-        nvram_path[0] = '\0';
-        clm_path[0] = '\0';
-        config_path[0] = '\0';
-    }
-#endif
 #ifdef DHD_UCODE_DOWNLOAD
     ucode_path[0] = '\0';
     DHD_ERROR(("ucode path: %s\n", dhdinfo->uc_path));
@@ -12625,7 +12583,6 @@ int dhd_register_if(dhd_pub_t *dhdp, int ifidx, bool need_rtnl_lock)
     }
 
 #ifdef CONFIG_AP6XXX_WIFI6_HDF
-    // if (0 == g_hdf_ifidx) {
     DHD_ERROR(("%s: for hdf inf %d don't register netdev\n", __FUNCTION__,
                g_hdf_ifidx));
 
@@ -12667,7 +12624,6 @@ int dhd_register_if(dhd_pub_t *dhdp, int ifidx, bool need_rtnl_lock)
            MAC2STRDBG(net->dev_addr));
 
 #if defined(SOFTAP) && defined(WL_WIRELESS_EXT) && !defined(WL_CFG80211)
-//		wl_iw_iscan_set_scan_broadcast_prep(net, 1);
 #endif // endif
 
 #if (defined(BCMPCIE) || defined(BCMLXSDMMC) || defined(BCMDBUS))
@@ -18122,7 +18078,6 @@ static int dhd_mem_dump(void *handle, void *event_info, u8 event)
         printf("%s\n", info_string);
         printf("MAC %pM\n", &dhdp->mac);
         DHD_ERROR(("%s: call BUG_ON \n", __FUNCTION__));
-        //		BUG_ON(1);
     }
     DHD_ERROR(("%s: No BUG ON, memdump type %u \n", __FUNCTION__,
                dhd->pub.memdump_type));

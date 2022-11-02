@@ -725,7 +725,7 @@ static void dhd_mschdbg_dump_data(dhd_pub_t *dhdp, void *raw_event_ptr,
             while (len >= (int)WL_MSCH_EVENT_LOG_HEAD_SIZE) {
                 msch_event_log_profiler_event_data_t *p =
                     (msch_event_log_profiler_event_data_t *)data;
-                /* TODO: How to parse MSCH if extended event tag is present ???
+                /* How to parse MSCH if extended event tag is present ???
                  */
                 prcd_event_log_hdr_t hdr;
                 int size =
@@ -831,7 +831,7 @@ void wl_mschdbg_verboselog_handler(dhd_pub_t *dhdp, void *raw_event_ptr,
     if (plog_hdr->tag == EVENT_LOG_TAG_MSCHPROFILE) {
         msch_event_log_profiler_event_data_t *p =
             (msch_event_log_profiler_event_data_t *)log_ptr;
-        /* TODO: How to parse MSCH if extended event tag is present ??? */
+        /* How to parse MSCH if extended event tag is present ??? */
         prcd_event_log_hdr_t hdr;
         uint32 s, ss;
 

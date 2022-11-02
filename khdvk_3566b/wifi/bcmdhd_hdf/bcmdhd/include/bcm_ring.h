@@ -135,9 +135,6 @@
 #define __ring_aligned
 #endif // endif
 
-/* Conditional compile for debug */
-/* #define BCM_RING_DEBUG */
-
 #define BCM_RING_EMPTY (-1)
 #define BCM_RING_FULL (-1)
 #define BCM_RING_NULL ((bcm_ring_t *)NULL)
@@ -478,7 +475,6 @@ struct bcm_workq {
 
 typedef struct bcm_workq bcm_workq_t;
 
-/* #define BCM_WORKQ_DEBUG */
 #if defined(BCM_WORKQ_DEBUG)
 #define WORKQ_ASSERT(exp) ASSERT(exp)
 #else /* ! BCM_WORKQ_DEBUG */
@@ -500,7 +496,7 @@ typedef struct bcm_workq bcm_workq_t;
 #define WORKQ_PEER_RING(workq) (&((workq)->peer->ring))
 
 #define WORKQ_ELEMENT(__elem_type, __workq, __index)                           \
-    ({                                                                         \
+    ( {                                                                        \
         WORKQ_ASSERT((__workq) != BCM_WORKQ_NULL);                             \
         WORKQ_ASSERT((__index) < ((__workq)->ring_size));                      \
         ((__elem_type *)((__workq)->buffer)) + (__index);                      \

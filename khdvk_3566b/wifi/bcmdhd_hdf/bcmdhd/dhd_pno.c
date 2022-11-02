@@ -4467,7 +4467,7 @@ int dhd_pno_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event,
     switch (event_type) {
         case WLC_E_PFN_BSSID_NET_FOUND:
         case WLC_E_PFN_BSSID_NET_LOST:
-            /* TODO : need to implement event logic using generic netlink */
+            /* need to implement event logic using generic netlink */
             break;
         case WLC_E_PFN_BEST_BATCHING:
 #ifndef GSCAN_SUPPORT

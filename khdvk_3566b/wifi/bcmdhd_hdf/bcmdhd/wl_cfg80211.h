@@ -419,7 +419,7 @@ extern char *dhd_log_dump_get_timestamp(void);
 #define WLAN_AKM_SUITE_8021X_SUITE_B_192 0x000FAC0C
 #endif /* WLAN_AKM_SUITE_8021X_SUITE_B */
 
-/* TODO: even in upstream linux(v5.0), FT-1X-SHA384 isn't defined and supported
+/* even in upstream linux(v5.0), FT-1X-SHA384 isn't defined and supported
  * yet. need to revisit here to sync correct name later.
  */
 #ifndef WLAN_AKM_SUITE_FT_8021X_SHA384

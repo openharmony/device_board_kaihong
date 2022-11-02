@@ -577,7 +577,7 @@ static int priv_cmd_errors = 0;
 #endif /* DHD_SEND_HANG_PRIVCMD_ERRORS */
 
 /**
- * Extern function declarations (TODO: move them to dhd_linux.h)
+ * Extern function declarations (move them to dhd_linux.h)
  */
 int dhd_net_bus_devreset(struct net_device *dev, uint8 flag);
 int dhd_dev_init_ioctl(struct net_device *dev);
@@ -2712,7 +2712,7 @@ static int wl_android_mbo_resp_parse_cbfn(void *ctx, const uint8 *data,
     uint16 bytes_written = 0;
 
     UNUSED_PARAMETER(len);
-    /* TODO: validate data value */
+    /* validate data value */
     if (data == NULL) {
         ANDROID_ERROR(("%s: Bad argument !!\n", __FUNCTION__));
         return -EINVAL;
@@ -3000,7 +3000,7 @@ static int wl_android_mbo_subcmd_non_pref_chan(struct net_device *dev,
                     ANDROID_ERROR(("Not all parameter presents\n"));
                     ret = -EINVAL;
                 }
-                /* TODO: add a validation check here */
+                /* add a validation check here */
                 memset_s(iov_buf, WLC_IOCTL_MEDLEN, 0, WLC_IOCTL_MEDLEN);
                 buflen = buflen_start = WLC_IOCTL_MEDLEN;
                 pxtlv = (uint8 *)&iov_buf->data[0];
@@ -4091,6 +4091,8 @@ static int wl_android_get_link_status(struct net_device *dev, char *command,
                     nss++;
                 }
             }
+            break;
+        default:
             break;
     }
 
@@ -5837,10 +5839,10 @@ int wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 #endif /* PKT_FILTER_SUPPORT */
     else if (strnicmp(command, CMD_BTCOEXSCAN_START,
                       strlen(CMD_BTCOEXSCAN_START)) == 0) {
-        /* TBD: BTCOEXSCAN-START */
+        /* BTCOEXSCAN-START */
     } else if (strnicmp(command, CMD_BTCOEXSCAN_STOP,
                         strlen(CMD_BTCOEXSCAN_STOP)) == 0) {
-        /* TBD: BTCOEXSCAN-STOP */
+        /* BTCOEXSCAN-STOP */
     } else if (strnicmp(command, CMD_BTCOEXMODE, strlen(CMD_BTCOEXMODE)) == 0) {
 #ifdef WL_CFG80211
         void *dhdp = wl_cfg80211_get_dhdp(net);
@@ -6564,7 +6566,6 @@ s32 wl_genl_send_msg(struct net_device *ndev, u32 event_type, const u8 *buf,
         int err = 0;
         /* finalize the message */
         genlmsg_end(skb, msg);
-        /* NETLINK_CB(skb).dst_group = 1; */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
         if ((err = genlmsg_multicast(skb, 0, wl_genl_mcast.id, GFP_ATOMIC)) < 0)
@@ -6747,9 +6748,6 @@ void wl_cfg80211_unregister_static_if(struct bcm_cfg80211 *cfg)
         return;
     }
 
-    /* wdev free will happen from notifier context */
-    /* free_netdev(cfg->static_ndev);
-     */
     for (i = 0; i < DHD_MAX_STATIC_IFS; i++) {
         if (cfg->static_ndev[i]) {
             unregister_netdev(cfg->static_ndev[i]);

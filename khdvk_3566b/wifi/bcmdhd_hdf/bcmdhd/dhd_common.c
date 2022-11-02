@@ -5124,7 +5124,7 @@ static int dhd_iscan_get_partial_result(void *dhdp, uint *scan_count)
     dhd_iscan_unlock();
 
     if (!(*scan_count)) {
-        /* TODO: race condition when FLUSH already called */
+        /* race condition when FLUSH already called */
         dhd_iscan_free_buf(dhdp, 0);
     }
 fail:
@@ -6479,8 +6479,6 @@ void dhd_iov_li_delete(dhd_pub_t *dhd, dll_t *list_head)
 static ecounters_cfg_t ecounters_cfg_tbl[] = {
     /* Global ecounters */
     {ECOUNTERS_STATS_TYPES_FLAG_GLOBAL, 0x0, WL_IFSTATS_XTLV_BUS_PCIE},
-    // {ECOUNTERS_STATS_TYPES_FLAG_GLOBAL, 0x0, WL_IFSTATS_XTLV_TX_AMPDU_STATS},
-    // {ECOUNTERS_STATS_TYPES_FLAG_GLOBAL, 0x0, WL_IFSTATS_XTLV_RX_AMPDU_STATS},
 
     /* Slice specific ecounters */
     {ECOUNTERS_STATS_TYPES_FLAG_SLICE, 0x0, WL_SLICESTATS_XTLV_PERIODIC_STATE},

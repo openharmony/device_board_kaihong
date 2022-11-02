@@ -3294,7 +3294,7 @@ static int wl_cfgvendor_nan_parse_dp_sec_info_args(
                 break;
         }
     }
-    /* We need to call set_config_handler b/f calling start enable TBD */
+    /* We need to call set_config_handler b/f calling start enable */
     NAN_DBG_EXIT();
     return ret;
 }
@@ -3630,7 +3630,7 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy, const void *buf,
         }
     }
 exit:
-    /* We need to call set_config_handler b/f calling start enable TBD */
+    /* We need to call set_config_handler b/f calling start enable */
     NAN_DBG_EXIT();
     return ret;
 }
@@ -4299,7 +4299,7 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy, const void *buf,
         }
     }
 exit:
-    /* We need to call set_config_handler b/f calling start enable TBD */
+    /* We need to call set_config_handler b/f calling start enable */
     NAN_DBG_EXIT();
     return ret;
 }
@@ -4761,7 +4761,7 @@ static int wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
     }
 
 exit:
-    /* We need to call set_config_handler b/f calling start enable TBD */
+    /* We need to call set_config_handler b/f calling start enable */
     NAN_DBG_EXIT();
     if (ret) {
         WL_ERR(("%s: Failed to parse attribute %d ret %d", __FUNCTION__,
@@ -4996,10 +4996,8 @@ static int wl_cfgvendor_nan_opt_params_filler(struct sk_buff *msg,
         WL_TRACE(("sdea svc info len = %d\n", event_data->sde_svc_info.dlen));
     }
     /* service control discovery range limit */
-    /* TODO: */
 
     /* service control binding bitmap */
-    /* TODO: */
 fail:
     return ret;
 }
@@ -6847,14 +6845,6 @@ static int wl_cfgvendor_dbg_get_mem_dump(struct wiphy *wiphy,
         }
     }
     if (buf_len > 0 && user_buf) {
-#if 0
-        mem_buf = vmalloc(buf_len);
-        if (!mem_buf) {
-            WL_ERR(("failed to allocate mem_buf with size : %d\n", buf_len));
-            ret = BCME_NOMEM;
-            goto exit;
-        }
-#endif
         ret = dhd_os_get_socram_dump(bcmcfg_to_prmry_ndev(cfg), &mem_buf,
                                      &buf_len);
         if (ret) {
@@ -6907,7 +6897,6 @@ static int wl_cfgvendor_dbg_get_mem_dump(struct wiphy *wiphy,
     }
 
 free_mem:
-    //	vfree(mem_buf);
     /* Free skb memory */
     if (skb) {
         kfree_skb(skb);
@@ -7455,7 +7444,7 @@ static void wl_cfgvendor_dbg_send_file_dump_evt(void *ctx, const void *data,
             goto done;
         }
     }
-    /* TODO : Similar to above function add for debug_dump, sssr_dump, and
+    /* Similar to above function add for debug_dump, sssr_dump, and
      * pktlog also. */
     cfg80211_vendor_event(skb, kflags);
     return;
