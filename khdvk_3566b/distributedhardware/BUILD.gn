@@ -15,7 +15,8 @@ import("//build/ohos.gni")
 ohos_prebuilt_etc("distributed_hardware_components_cfg") {
   source = "distributed_hardware_components_cfg.json"
   install_enable = true
-  module_install_dir = "etc"
+  module_install_dir = "etc/distributedhardware/"
+  install_images = [ chipset_base_dir ]
   part_name = "kaihong_products"
 }
 
