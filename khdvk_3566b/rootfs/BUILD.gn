@@ -27,12 +27,6 @@ ohos_prebuilt_etc("init.rk3566.usb.cfg") {
   install_enable = true
 }
 
-ohos_prebuilt_etc("init.cfg") {
-  source = "init.cfg"
-  part_name = "kaihong_products"
-  install_images = [ "system" ]
-  install_enable = true
-}
 
 ohos_prebuilt_etc("fstab.rk3566") {
   source = "fstab.rk3566"
@@ -41,27 +35,10 @@ ohos_prebuilt_etc("fstab.rk3566") {
   install_enable = true
 }
 
-if (enable_ramdisk) {
-  ohos_prebuilt_etc("fstab.required") {
-    source = "fstab.required"
-    part_name = "kaihong_products"
-    install_images = [ "ramdisk" ]
-    install_enable = true
-  }
-} else {
-  ohos_prebuilt_etc("fstab.required") {
-    source = "fstab.required"
-    part_name = "kaihong_products"
-    install_images = [ "system" ]
-    install_enable = true
-  }
-}
 
 group("init_configs") {
   deps = [
-    ":fstab.required",
     ":fstab.rk3566",
-    ":init.cfg",
     ":init.rk3566.cfg",
     ":init.rk3566.usb.cfg",
   ]

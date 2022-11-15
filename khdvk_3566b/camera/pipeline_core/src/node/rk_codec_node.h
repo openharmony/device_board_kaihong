@@ -17,7 +17,6 @@
 #include <vector>
 #include <condition_variable>
 #include <ctime>
-#include <jpeglib.h>
 #include "device_manager_adapter.h"
 #include "utils.h"
 #include "camera.h"
@@ -42,25 +41,21 @@ namespace OHOS::Camera {
         RetCode Start(const int32_t streamId) override;
         RetCode Stop(const int32_t streamId) override;
         void DeliverBuffer(std::shared_ptr<IBuffer> &buffer) override;
-        virtual RetCode Capture(const int32_t streamId,
-                                const int32_t captureId) override;
+    virtual RetCode Capture(const int32_t streamId, const int32_t captureId) override;
         RetCode CancelCapture(const int32_t streamId) override;
         RetCode Flush(const int32_t streamId);
 
     private:
         void encodeJpegToMemory(unsigned char *image, int width, int height,
-                                const char *comment, size_t *jpegSize,
-                                unsigned char **jpegBuf);
+            const char* comment, unsigned long* jpegSize, unsigned char** jpegBuf);
         int findStartCode(unsigned char *data, size_t dataSz);
-        void SerchIFps(unsigned char *buf, size_t bufSize,
-                       std::shared_ptr<IBuffer> &buffer);
+    void SerchIFps(unsigned char* buf, size_t bufSize, std::shared_ptr<IBuffer>& buffer);
         void Yuv420ToRGBA8888(std::shared_ptr<IBuffer> &buffer);
         void Yuv420ToJpeg(std::shared_ptr<IBuffer> &buffer);
         void Yuv420ToH264(std::shared_ptr<IBuffer> &buffer);
 
         static uint32_t previewWidth_;
         static uint32_t previewHeight_;
-        std::vector<std::shared_ptr<IPort>> outPutPorts_;
         void *halCtx_ = nullptr;
         int mppStatus_ = 0;
     };
