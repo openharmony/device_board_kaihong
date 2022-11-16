@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -31,19 +31,19 @@
 #define _HNDMEM_H_
 
 typedef enum {
-	MEM_SOCRAM = 0,
-	MEM_BM = 1,
-	MEM_UCM = 2,
-	MEM_SHM = 3,
-	MEM_MAX = 4
+    MEM_SOCRAM = 0,
+    MEM_BM = 1,
+    MEM_UCM = 2,
+    MEM_SHM = 3,
+    MEM_MAX = 4
 } hndmem_type_t;
 
 /* PDA (Power Down Array) configuration */
 typedef enum {
-	PDA_CONFIG_CLEAR = 0,		/* Clear PDA, i.e. Turns on the memory bank */
-	PDA_CONFIG_SET_FULL = 1,	/* Set PDA, i.e. Truns off the memory bank */
-	PDA_CONFIG_SET_PARTIAL = 2,	/* Set PDA, i.e. Truns off the memory bank */
-	PDA_CONFIG_MAX = 3
+    PDA_CONFIG_CLEAR = 0,       /* Clear PDA, i.e. Turns on the memory bank */
+    PDA_CONFIG_SET_FULL = 1,    /* Set PDA, i.e. Truns off the memory bank */
+    PDA_CONFIG_SET_PARTIAL = 2, /* Set PDA, i.e. Truns off the memory bank */
+    PDA_CONFIG_MAX = 3
 } hndmem_config_t;
 
 /* Returns the number of banks in a given memory */
@@ -61,20 +61,23 @@ extern void hndmem_dump_meminfo_all(si_t *sih);
 #endif /* BCMDEBUG */
 
 /* Configures the Sleep PDA for a particular bank for a given memory type */
-extern int  hndmem_sleeppda_bank_config(si_t *sih, hndmem_type_t mem,
-		int bank_num, hndmem_config_t config, uint32 pda);
+extern int hndmem_sleeppda_bank_config(si_t *sih, hndmem_type_t mem,
+                                       int bank_num, hndmem_config_t config,
+                                       uint32 pda);
 /* Configures the Active PDA for a particular bank for a given memory type */
 extern int hndmem_activepda_bank_config(si_t *sih, hndmem_type_t mem,
-		int bank_num, hndmem_config_t config, uint32 pda);
+                                        int bank_num, hndmem_config_t config,
+                                        uint32 pda);
 
 /* Configures the Sleep PDA for all the banks for a given memory type */
 extern int hndmem_sleeppda_config(si_t *sih, hndmem_type_t mem,
-		hndmem_config_t config);
+                                  hndmem_config_t config);
 /* Configures the Active PDA for all the banks for a given memory type */
 extern int hndmem_activepda_config(si_t *sih, hndmem_type_t mem,
-		hndmem_config_t config);
+                                   hndmem_config_t config);
 
 /* Turn off/on all the possible banks in a given memory range */
 extern int hndmem_activepda_mem_config(si_t *sih, hndmem_type_t mem,
-		uint32 mem_start, uint32 size, hndmem_config_t config);
+                                       uint32 mem_start, uint32 size,
+                                       hndmem_config_t config);
 #endif /* _HNDMEM_H_ */

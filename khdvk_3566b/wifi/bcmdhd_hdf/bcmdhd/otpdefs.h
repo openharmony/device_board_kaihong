@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -88,28 +88,25 @@
 #define CC_CLKDIV2_SPROMDIV_VAL 0X4u
 #define CC_CHIPSTATUS_STRAP_BTUART_MASK 0x40u
 #define PMU_OTP_PWR_ON_MASK 0xC47
-#define PMU_PWRUP_DELAY 500 /* in us */
+#define PMU_PWRUP_DELAY 500              /* in us */
 #define DONGLE_TREFUP_PROGRAM_DELAY 5000 /* 5ms in us */
-#define SPROM_BUSY_POLL_DELAY 5 /* 5us */
+#define SPROM_BUSY_POLL_DELAY 5          /* 5us */
 
 typedef enum {
-	BCM4355_IDX = 0,
-	BCM4364_IDX,
-	BCM4368_IDX,
-	BCM4377_IDX,
-	BCMMAX_IDX
+    BCM4355_IDX = 0,
+    BCM4364_IDX,
+    BCM4368_IDX,
+    BCM4377_IDX,
+    BCMMAX_IDX
 } chip_idx_t;
 
 typedef enum {
-	BCM4368_BTOP_IDX,
-	BCM4377_BTOP_IDX,
-	BCMMAX_BTOP_IDX
+    BCM4368_BTOP_IDX,
+    BCM4377_BTOP_IDX,
+    BCMMAX_BTOP_IDX
 } chip_idx_btop_t;
 
-typedef enum {
-	BCM4368_SFLASH_IDX,
-	BCMMAX_SFLASH_IDX
-} chip_idx_sflash_t;
+typedef enum { BCM4368_SFLASH_IDX, BCMMAX_SFLASH_IDX } chip_idx_sflash_t;
 
 extern uint32 otp_addr_offsets[];
 extern uint32 otp_usrarea_offsets[];

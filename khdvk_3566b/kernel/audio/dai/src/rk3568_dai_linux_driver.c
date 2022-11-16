@@ -42,26 +42,27 @@ struct rk_i2s_soc_data {
 
 static const struct txrx_config rk3568_txrx_config[] = {
     // base addr, reg, txonly, rxonly
-    { 0xfe410000, 0x504, RK3568_I2S1_CLK_TXONLY, RK3568_I2S1_CLK_RXONLY },
+    {0xfe410000, 0x504, RK3568_I2S1_CLK_TXONLY, RK3568_I2S1_CLK_RXONLY},
 };
 
 static int common_soc_init(struct device *dev, u32 addr)
 {
     struct rk3568_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(dev);
     AUDIO_DEVICE_LOG_DEBUG("i2s_tdm addr = %p ", i2s_tdm);
-    regmap_write(i2s_tdm->grf, rk3568_txrx_config[0].reg, rk3568_txrx_config[0].txonly);
+    regmap_write(i2s_tdm->grf, rk3568_txrx_config[0].reg,
+                 rk3568_txrx_config[0].txonly);
     return 0;
 }
 
 static const struct rk_i2s_soc_data rk3568_i2s_soc_data = {
-    .softrst_offset = 0x0400,     // offset
+    .softrst_offset = 0x0400, // offset
     .configs = rk3568_txrx_config,
     .config_count = 1,
     .init = common_soc_init,
 };
 static const struct of_device_id rockchip_i2s_tdm_match[] = {
 
-    { .compatible = "rockchip,rk3568-i2s-tdm", .data = &rk3568_i2s_soc_data },
+    {.compatible = "rockchip,rk3568-i2s-tdm", .data = &rk3568_i2s_soc_data},
     {},
 };
 static bool rockchip_i2s_tdm_wr_reg(struct device *dev, unsigned int reg)
@@ -135,14 +136,9 @@ static bool rockchip_i2s_tdm_precious_reg(struct device *dev, unsigned int reg)
 
 // regs init value map
 static const struct reg_default rockchip_i2s_tdm_reg_defaults[] = {
-    {0x00, 0x7200000f},
-    {0x04, 0x01c8000f},
-    {0x08, 0x00001f1f},
-    {0x10, 0x001f0000},
-    {0x14, 0x01f00000},
-    {0x30, 0x00003eff},
-    {0x34, 0x00003eff},
-    {0x38, 0x00000707},
+    {0x00, 0x7200000f}, {0x04, 0x01c8000f}, {0x08, 0x00001f1f},
+    {0x10, 0x001f0000}, {0x14, 0x01f00000}, {0x30, 0x00003eff},
+    {0x34, 0x00003eff}, {0x38, 0x00000707},
 };
 
 static const struct regmap_config rockchip_i2s_tdm_regmap_config = {
@@ -162,30 +158,36 @@ static const struct regmap_config rockchip_i2s_tdm_regmap_config = {
 static int i2s_tdm_runtime_suspend(struct rk3568_i2s_tdm_dev *i2s_tdm)
 {
     regcache_cache_only(i2s_tdm->regmap, true);
-    if (!IS_ERR(i2s_tdm->mclk_tx))
+    if (!IS_ERR(i2s_tdm->mclk_tx)) {
         clk_disable_unprepare(i2s_tdm->mclk_tx);
-    if (!IS_ERR(i2s_tdm->mclk_rx))
+    }
+    if (!IS_ERR(i2s_tdm->mclk_rx)) {
         clk_disable_unprepare(i2s_tdm->mclk_rx);
+    }
     return 0;
 }
 
 static int i2s_tdm_runtime_resume(struct rk3568_i2s_tdm_dev *i2s_tdm)
 {
     int ret;
-    if (!IS_ERR(i2s_tdm->mclk_tx))
+    if (!IS_ERR(i2s_tdm->mclk_tx)) {
         clk_prepare_enable(i2s_tdm->mclk_tx);
-    if (!IS_ERR(i2s_tdm->mclk_rx))
+    }
+    if (!IS_ERR(i2s_tdm->mclk_rx)) {
         clk_prepare_enable(i2s_tdm->mclk_rx);
+    }
 
     regcache_cache_only(i2s_tdm->regmap, false);
     regcache_mark_dirty(i2s_tdm->regmap);
 
     ret = regcache_sync(i2s_tdm->regmap);
     if (ret) {
-        if (!IS_ERR(i2s_tdm->mclk_tx))
+        if (!IS_ERR(i2s_tdm->mclk_tx)) {
             clk_disable_unprepare(i2s_tdm->mclk_tx);
-        if (!IS_ERR(i2s_tdm->mclk_rx))
+        }
+        if (!IS_ERR(i2s_tdm->mclk_rx)) {
             clk_disable_unprepare(i2s_tdm->mclk_rx);
+        }
     }
     return ret;
 }
@@ -203,7 +205,8 @@ static int rockchip_i2s_tdm_probe(struct platform_device *pdev)
     AUDIO_DEVICE_LOG_DEBUG("enter ");
     temp_i2s_dev = &pdev->dev;
     if (strcmp(dev_name(temp_i2s_dev), "fe410000.i2s") != 0) {
-        AUDIO_DRIVER_LOG_INFO("failed dmaDevice->name %s ", dev_name(temp_i2s_dev));
+        AUDIO_DRIVER_LOG_INFO("failed dmaDevice->name %s ",
+                              dev_name(temp_i2s_dev));
         return 0;
     }
     AUDIO_DEVICE_LOG_DEBUG("dmaDevice->name %s ", dev_name(temp_i2s_dev));
@@ -223,8 +226,10 @@ static int rockchip_i2s_tdm_probe(struct platform_device *pdev)
 
     i2s_tdm->bclk_fs = 64; // default-freq div factor is 64
     if (!of_property_read_u32(node, "rockchip,bclk-fs", &val)) {
-        if ((val >= 32) && (val % 2 == 0)) // min-freq div factor is 32, and it is an integer multiple of 2
+        if ((val >= 32) && (val % 2 == 0)) { // min-freq div factor is 32, and
+                                             // it is an integer multiple of 2
             i2s_tdm->bclk_fs = val;
+        }
     }
 
     i2s_tdm->clk_trcm = I2S_CKR_TRCM_TXRX;
@@ -280,7 +285,8 @@ static int rockchip_i2s_tdm_probe(struct platform_device *pdev)
 
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-    i2s_tdm->regmap = devm_regmap_init_mmio(&pdev->dev, devm_ioremap_resource(&pdev->dev, res),
+    i2s_tdm->regmap = devm_regmap_init_mmio(
+        &pdev->dev, devm_ioremap_resource(&pdev->dev, res),
         &rockchip_i2s_tdm_regmap_config);
     if (IS_ERR(i2s_tdm->regmap)) {
         return PTR_ERR(i2s_tdm->regmap);
@@ -294,39 +300,43 @@ static int rockchip_i2s_tdm_probe(struct platform_device *pdev)
         return ret;
     }
 
-    regmap_update_bits(i2s_tdm->regmap, I2S_DMACR, I2S_DMACR_TDL_MASK,
+    regmap_update_bits(
+        i2s_tdm->regmap, I2S_DMACR, I2S_DMACR_TDL_MASK,
         I2S_DMACR_TDL(16)); // Transmit Data Level MASK with 16bit
     regmap_update_bits(i2s_tdm->regmap, I2S_DMACR, I2S_DMACR_RDL_MASK,
-        I2S_DMACR_RDL(16)); // Receive Data Level MASK with 16bit
-    regmap_update_bits(i2s_tdm->regmap, I2S_CKR,
-        I2S_CKR_TRCM_MASK, i2s_tdm->clk_trcm);
+                       I2S_DMACR_RDL(16)); // Receive Data Level MASK with 16bit
+    regmap_update_bits(i2s_tdm->regmap, I2S_CKR, I2S_CKR_TRCM_MASK,
+                       i2s_tdm->clk_trcm);
     return 0;
 }
 
 static int rockchip_i2s_tdm_remove(struct platform_device *pdev)
 {
     struct rk3568_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(&pdev->dev);
-    
+
     i2s_tdm_runtime_suspend(i2s_tdm);
 
-    if (!IS_ERR(i2s_tdm->mclk_tx))
+    if (!IS_ERR(i2s_tdm->mclk_tx)) {
         clk_prepare_enable(i2s_tdm->mclk_tx);
-    if (!IS_ERR(i2s_tdm->mclk_rx))
+    }
+    if (!IS_ERR(i2s_tdm->mclk_rx)) {
         clk_prepare_enable(i2s_tdm->mclk_rx);
-    if (!IS_ERR(i2s_tdm->hclk))
+    }
+    if (!IS_ERR(i2s_tdm->hclk)) {
         clk_disable_unprepare(i2s_tdm->hclk);
+    }
 
     return 0;
 }
 
-
 static struct platform_driver rockchip_i2s_tdm_driver = {
     .probe = rockchip_i2s_tdm_probe,
     .remove = rockchip_i2s_tdm_remove,
-    .driver = {
-        .name = DRV_NAME,
-        .of_match_table = of_match_ptr(rockchip_i2s_tdm_match),
-        .pm = NULL,
-    },
+    .driver =
+        {
+            .name = DRV_NAME,
+            .of_match_table = of_match_ptr(rockchip_i2s_tdm_match),
+            .pm = NULL,
+        },
 };
 module_platform_driver(rockchip_i2s_tdm_driver);

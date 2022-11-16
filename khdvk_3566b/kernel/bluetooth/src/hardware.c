@@ -58,21 +58,22 @@
 #endif
 
 #if (BTHW_DBG == TRUE)
-#define BTHWDBG(param, ...)         \
-{                               \
-    HILOGD(param, ##__VA_ARGS__); \
-}
+#define BTHWDBG(param, ...)                                                    \
+    {                                                                          \
+        HILOGD(param, ##__VA_ARGS__);                                          \
+    }
 #else
-#define BTHWDBG(param, ...)         \
-{                               \
-    HILOGD(param, ##__VA_ARGS__); \
-}
+#define BTHWDBG(param, ...)                                                    \
+    {                                                                          \
+        HILOGD(param, ##__VA_ARGS__);                                          \
+    }
 #endif
 
 #define FW_PATCHFILE_EXTENSION ".hcd"
 #define FW_PATCHFILE_EXTENSION_LEN 4
-#define FW_PATCHFILE_PATH_MAXLEN 248 /* Local_Name length of return of \
-                                        HCI_Read_Local_Name */
+#define FW_PATCHFILE_PATH_MAXLEN                                               \
+    248 /* Local_Name length of return of                                      \
+           HCI_Read_Local_Name */
 
 #define HCI_CMD_MAX_LEN 258
 
@@ -102,31 +103,27 @@
 #define LOCAL_NAME_BUFFER_LEN 32
 #define LOCAL_BDADDR_PATH_BUFFER_LEN 256
 
-#define STREAM_TO_UINT16(u16, p)                                \
-do                                                              \
-{                                                               \
-    u16 = ((uint16_t)(*(p)) + (((uint16_t)(*((p) + 1))) << 8)); \
-    (p) += 2;                                                   \
-} while (0)
-#define UINT8_TO_STREAM(p, u8)  \
-do                              \
-{                               \
-    *(p)++ = (uint8_t)(u8);     \
-} while (0)
-#define UINT16_TO_STREAM(p, u16)    \
-do                                  \
-{                                   \
-    *(p)++ = (uint8_t)(u16);        \
-    *(p)++ = (uint8_t)((u16) >> 8); \
-} while (0)
-#define UINT32_TO_STREAM(p, u32)     \
-do                                   \
-{                                    \
-    *(p)++ = (uint8_t)(u32);         \
-    *(p)++ = (uint8_t)((u32) >> 8);  \
-    *(p)++ = (uint8_t)((u32) >> 16); \
-    *(p)++ = (uint8_t)((u32) >> 24); \
-} while (0)
+#define STREAM_TO_UINT16(u16, p)                                               \
+    do {                                                                       \
+        u16 = ((uint16_t)(*(p)) + (((uint16_t)(*((p) + 1))) << 8));            \
+        (p) += 2;                                                              \
+    } while (0)
+#define UINT8_TO_STREAM(p, u8)                                                 \
+    do {                                                                       \
+        *(p)++ = (uint8_t)(u8);                                                \
+    } while (0)
+#define UINT16_TO_STREAM(p, u16)                                               \
+    do {                                                                       \
+        *(p)++ = (uint8_t)(u16);                                               \
+        *(p)++ = (uint8_t)((u16) >> 8);                                        \
+    } while (0)
+#define UINT32_TO_STREAM(p, u32)                                               \
+    do {                                                                       \
+        *(p)++ = (uint8_t)(u32);                                               \
+        *(p)++ = (uint8_t)((u32) >> 8);                                        \
+        *(p)++ = (uint8_t)((u32) >> 16);                                       \
+        *(p)++ = (uint8_t)((u32) >> 24);                                       \
+    } while (0)
 
 #define SCO_INTERFACE_PCM 0
 #define SCO_INTERFACE_I2S 1
@@ -154,19 +151,16 @@ enum {
     HW_CFG_READ_BD_ADDR
 };
 
-const char *btVendorConfigState[] =
-{
-    "NONE",
-    "HW_CFG_START",
-    "HW_CFG_SET_UART_CLOCK",
-    "HW_CFG_SET_UART_BAUD_1",
-    "HW_CFG_READ_LOCAL_NAME",
-    "HW_CFG_DL_MINIDRIVER",
-    "HW_CFG_DL_FW_PATCH",
-    "HW_CFG_SET_UART_BAUD_2",
-    "HW_CFG_SET_BD_ADDR",
-    "HW_CFG_READ_BD_ADDR"   
-};
+const char *btVendorConfigState[] = {"NONE",
+                                     "HW_CFG_START",
+                                     "HW_CFG_SET_UART_CLOCK",
+                                     "HW_CFG_SET_UART_BAUD_1",
+                                     "HW_CFG_READ_LOCAL_NAME",
+                                     "HW_CFG_DL_MINIDRIVER",
+                                     "HW_CFG_DL_FW_PATCH",
+                                     "HW_CFG_SET_UART_BAUD_2",
+                                     "HW_CFG_SET_BD_ADDR",
+                                     "HW_CFG_READ_BD_ADDR"};
 
 /* h/w config control block */
 typedef struct {
@@ -225,46 +219,33 @@ static int fw_patch_settlement_delay = -1;
 static int wbs_sample_rate = SCO_WBS_SAMPLE_RATE;
 static bt_hw_cfg_cb_t hw_cfg_cb;
 
-static bt_lpm_param_t lpm_param = {
-    LPM_SLEEP_MODE,
-    LPM_IDLE_THRESHOLD,
-    LPM_HC_IDLE_THRESHOLD,
-    LPM_BT_WAKE_POLARITY,
-    LPM_HOST_WAKE_POLARITY,
-    LPM_ALLOW_HOST_SLEEP_DURING_SCO,
-    LPM_COMBINE_SLEEP_MODE_AND_LPM,
-    LPM_ENABLE_UART_TXD_TRI_STATE,
-    0, /* not applicable */
-    0, /* not applicable */
-    0, /* not applicable */
-    LPM_PULSED_HOST_WAKE
-};
+static bt_lpm_param_t lpm_param = {LPM_SLEEP_MODE,
+                                   LPM_IDLE_THRESHOLD,
+                                   LPM_HC_IDLE_THRESHOLD,
+                                   LPM_BT_WAKE_POLARITY,
+                                   LPM_HOST_WAKE_POLARITY,
+                                   LPM_ALLOW_HOST_SLEEP_DURING_SCO,
+                                   LPM_COMBINE_SLEEP_MODE_AND_LPM,
+                                   LPM_ENABLE_UART_TXD_TRI_STATE,
+                                   0, /* not applicable */
+                                   0, /* not applicable */
+                                   0, /* not applicable */
+                                   LPM_PULSED_HOST_WAKE};
 
 /* need to update the bt_sco_i2spcm_param as well
    bt_sco_i2spcm_param will be used for WBS setting
    update the bt_sco_param and bt_sco_i2spcm_param */
 static uint8_t bt_sco_param[SCO_PCM_PARAM_SIZE] = {
-    SCO_PCM_ROUTING,
-    SCO_PCM_IF_CLOCK_RATE,
-    SCO_PCM_IF_FRAME_TYPE,
-    SCO_PCM_IF_SYNC_MODE,
-    SCO_PCM_IF_CLOCK_MODE
-};
+    SCO_PCM_ROUTING, SCO_PCM_IF_CLOCK_RATE, SCO_PCM_IF_FRAME_TYPE,
+    SCO_PCM_IF_SYNC_MODE, SCO_PCM_IF_CLOCK_MODE};
 
 static uint8_t bt_pcm_data_fmt_param[PCM_DATA_FORMAT_PARAM_SIZE] = {
-    PCM_DATA_FMT_SHIFT_MODE,
-    PCM_DATA_FMT_FILL_BITS,
-    PCM_DATA_FMT_FILL_METHOD,
-    PCM_DATA_FMT_FILL_NUM,
-    PCM_DATA_FMT_JUSTIFY_MODE
-};
+    PCM_DATA_FMT_SHIFT_MODE, PCM_DATA_FMT_FILL_BITS, PCM_DATA_FMT_FILL_METHOD,
+    PCM_DATA_FMT_FILL_NUM, PCM_DATA_FMT_JUSTIFY_MODE};
 
 static uint8_t bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_SIZE] = {
-    SCO_I2SPCM_IF_MODE,
-    SCO_I2SPCM_IF_ROLE,
-    SCO_I2SPCM_IF_SAMPLE_RATE,
-    SCO_I2SPCM_IF_CLOCK_RATE
-};
+    SCO_I2SPCM_IF_MODE, SCO_I2SPCM_IF_ROLE, SCO_I2SPCM_IF_SAMPLE_RATE,
+    SCO_I2SPCM_IF_CLOCK_RATE};
 
 /*
  * The look-up table of recommended firmware settlement delay (milliseconds) on
@@ -279,11 +260,10 @@ static const fw_settlement_entry_t fw_settlement_table[] = {
 /*
  * NOTICE:
  *     If the platform plans to run I2S interface bus over I2S/PCM port of the
- *     BT Controller with the Host AP, explicitly set "SCO_USE_I2S_INTERFACE = TRUE"
- *     in the correspodning include/vnd_<target>.txt file.
- *     Otherwise, leave SCO_USE_I2S_INTERFACE undefined in the vnd_<target>.txt file.
- *     And, PCM interface will be set as the default bus format running over I2S/PCM
- *     port.
+ *     BT Controller with the Host AP, explicitly set "SCO_USE_I2S_INTERFACE =
+ * TRUE" in the correspodning include/vnd_<target>.txt file. Otherwise, leave
+ * SCO_USE_I2S_INTERFACE undefined in the vnd_<target>.txt file. And, PCM
+ * interface will be set as the default bus format running over I2S/PCM port.
  */
 #if (defined(SCO_USE_I2S_INTERFACE) && SCO_USE_I2S_INTERFACE == TRUE)
 static uint8_t sco_bus_interface = SCO_INTERFACE_I2S;
@@ -311,8 +291,7 @@ static const fw_auto_detection_entry_t fw_auto_detection_table[] = {
     {"BCM43430B0", "BCM4343B0"},  // AP6236
     {"BCM4359C0", "BCM4359C0"},   // AP6359
     {"BCM4349B1", "BCM4359B1"},   // AP6359
-    {NULL, NULL}
-};
+    {NULL, NULL}};
 #endif
 
 /******************************************************************************
@@ -351,8 +330,9 @@ uint32_t look_up_fw_settlement_delay(void)
     uint32_t ret_value;
     fw_settlement_entry_t *p_entry;
 
-    if (FW_PATCH_SETTLEMENT_DELAY_MS > 0)
+    if (FW_PATCH_SETTLEMENT_DELAY_MS > 0) {
         ret_value = FW_PATCH_SETTLEMENT_DELAY_MS;
+    }
 #if (VENDOR_LIB_RUNTIME_TUNING_ENABLED == TRUE)
     else if (fw_patch_settlement_delay >= 0) {
         ret_value = fw_patch_settlement_delay;
@@ -362,7 +342,8 @@ uint32_t look_up_fw_settlement_delay(void)
         p_entry = (fw_settlement_entry_t *)fw_settlement_table;
 
         while (p_entry->chipset_name != NULL) {
-            if (strstr(hw_cfg_cb.local_chip_name, p_entry->chipset_name) != NULL) {
+            if (strstr(hw_cfg_cb.local_chip_name, p_entry->chipset_name) !=
+                NULL) {
                 break;
             }
 
@@ -391,11 +372,13 @@ void ms_delay(uint32_t timeout)
     struct timespec delay;
     int err;
 
-    if (timeout == 0)
+    if (timeout == 0) {
         return;
+    }
 
     delay.tv_sec = timeout / BT_VENDOR_TIME_RAIDX;
-    delay.tv_nsec = BT_VENDOR_TIME_RAIDX * BT_VENDOR_TIME_RAIDX * (timeout % BT_VENDOR_TIME_RAIDX);
+    delay.tv_nsec = BT_VENDOR_TIME_RAIDX * BT_VENDOR_TIME_RAIDX *
+                    (timeout % BT_VENDOR_TIME_RAIDX);
 
     /* [u]sleep can't be used because it uses SIGALRM */
     do {
@@ -417,35 +400,35 @@ uint8_t line_speed_to_userial_baud(uint32_t line_speed)
 {
     uint8_t baud;
 
-    if (line_speed == USERIAL_LINESPEED_4M)
+    if (line_speed == USERIAL_LINESPEED_4M) {
         baud = USERIAL_BAUD_4M;
-    else if (line_speed == USERIAL_LINESPEED_3M)
+    } else if (line_speed == USERIAL_LINESPEED_3M) {
         baud = USERIAL_BAUD_3M;
-    else if (line_speed == USERIAL_LINESPEED_2M)
+    } else if (line_speed == USERIAL_LINESPEED_2M) {
         baud = USERIAL_BAUD_2M;
-    else if (line_speed == USERIAL_LINESPEED_1_5M)
+    } else if (line_speed == USERIAL_LINESPEED_1_5M) {
         baud = USERIAL_BAUD_1_5M;
-    else if (line_speed == USERIAL_LINESPEED_1M)
+    } else if (line_speed == USERIAL_LINESPEED_1M) {
         baud = USERIAL_BAUD_1M;
-    else if (line_speed == USERIAL_LINESPEED_921600)
+    } else if (line_speed == USERIAL_LINESPEED_921600) {
         baud = USERIAL_BAUD_921600;
-    else if (line_speed == USERIAL_LINESPEED_460800)
+    } else if (line_speed == USERIAL_LINESPEED_460800) {
         baud = USERIAL_BAUD_460800;
-    else if (line_speed == USERIAL_LINESPEED_230400)
+    } else if (line_speed == USERIAL_LINESPEED_230400) {
         baud = USERIAL_BAUD_230400;
-    else if (line_speed == USERIAL_LINESPEED_115200)
+    } else if (line_speed == USERIAL_LINESPEED_115200) {
         baud = USERIAL_BAUD_115200;
-    else if (line_speed == USERIAL_LINESPEED_57600)
+    } else if (line_speed == USERIAL_LINESPEED_57600) {
         baud = USERIAL_BAUD_57600;
-    else if (line_speed == USERIAL_LINESPEED_19200)
+    } else if (line_speed == USERIAL_LINESPEED_19200) {
         baud = USERIAL_BAUD_19200;
-    else if (line_speed == USERIAL_LINESPEED_9600)
+    } else if (line_speed == USERIAL_LINESPEED_9600) {
         baud = USERIAL_BAUD_9600;
-    else if (line_speed == USERIAL_LINESPEED_1200)
+    } else if (line_speed == USERIAL_LINESPEED_1200) {
         baud = USERIAL_BAUD_1200;
-    else if (line_speed == USERIAL_LINESPEED_600)
+    } else if (line_speed == USERIAL_LINESPEED_600) {
         baud = USERIAL_BAUD_600;
-    else {
+    } else {
         HILOGE("userial vendor: unsupported baud speed %d", line_speed);
         baud = USERIAL_BAUD_115200;
     }
@@ -576,7 +559,8 @@ static int OsStartTimer(timer_t timerid, int msec, int mode)
     struct itimerspec itval;
 
     itval.it_value.tv_sec = msec / BT_VENDOR_TIME_RAIDX;
-    itval.it_value.tv_nsec = (long)(msec % BT_VENDOR_TIME_RAIDX) * (BT_VENDOR_TIME_RAIDX * BT_VENDOR_TIME_RAIDX);
+    itval.it_value.tv_nsec = (long)(msec % BT_VENDOR_TIME_RAIDX) *
+                             (BT_VENDOR_TIME_RAIDX * BT_VENDOR_TIME_RAIDX);
 
     if (mode == 1) {
         itval.it_interval.tv_sec = itval.it_value.tv_sec;
@@ -612,45 +596,16 @@ static void start_fwcfg_cbtimer(void)
 
 void hw_sco_config(void);
 
-#if 0
-ssize_t hw_config_cback_set_baud1(HC_BT_HDR *p_buf, uint16_t opcode)
-{
-    uint8_t *p = (uint8_t *)(p_buf + 1);
-    ssize_t xmit_bytes = 0;
-    // /vendor/etc/firmware
-    //char* p_name = FW_PATCHFILE_LOCATION "BCM43430A1.hcd";
-    char* p_name = FW_PATCHFILE_LOCATION "BCM4345C5.hcd";
-    if ((hw_cfg_cb.fw_fd = open(p_name, O_RDONLY)) == -1) {
-        HILOGE("vendor lib preload failed to open [%s]", p_name);
-    } else {
-        /* vsc_download_minidriver */
-        UINT16_TO_STREAM(p, HCI_VSC_DOWNLOAD_MINIDRV);
-        *p = 0; /* parameter length */
-
-        p_buf->len = HCI_CMD_PREAMBLE_SIZE;
-        hw_config_set_state(HW_CFG_DL_MINIDRIVER);
-        xmit_bytes = bt_vendor_cbacks->xmit_cb(HCI_VSC_DOWNLOAD_MINIDRV, p_buf);
-    }
-
-    if (xmit_bytes <= 0) {
-        HILOGE("vendor lib preload failed to locate firmware patch file and set bdaddr");
-        xmit_bytes = hw_config_set_bdaddr(p_buf);
-    }
-
-    return xmit_bytes;
-}
-#endif
-
 ssize_t hw_config_cback_read_local_name(HC_BT_HDR *p_buf, uint16_t opcode)
 {
     uint8_t *p = (uint8_t *)(p_buf + 1);
     ssize_t xmit_bytes = 0;
-        /* vsc_download_minidriver */
-        UINT16_TO_STREAM(p, HCI_READ_LOCAL_NAME);
-        *p = 0; /* parameter length */
-        p_buf->len = HCI_CMD_PREAMBLE_SIZE;
-        hw_config_set_cbstate(HW_CFG_READ_LOCAL_NAME);
-        xmit_bytes = bt_vendor_cbacks->xmit_cb(HCI_READ_LOCAL_NAME, p_buf);
+    /* vsc_download_minidriver */
+    UINT16_TO_STREAM(p, HCI_READ_LOCAL_NAME);
+    *p = 0; /* parameter length */
+    p_buf->len = HCI_CMD_PREAMBLE_SIZE;
+    hw_config_set_cbstate(HW_CFG_READ_LOCAL_NAME);
+    xmit_bytes = bt_vendor_cbacks->xmit_cb(HCI_READ_LOCAL_NAME, p_buf);
 
     return xmit_bytes;
 }
@@ -660,10 +615,12 @@ ssize_t hw_config_cback_download_firmware(HC_BT_HDR *p_buf, uint16_t opcode)
     uint8_t *p = (uint8_t *)(p_buf + 1);
     p_buf->len = read(hw_cfg_cb.fw_fd, p, HCI_CMD_PREAMBLE_SIZE);
     if (p_buf->len > 0) {
-        if ((p_buf->len < HCI_CMD_PREAMBLE_SIZE) || (opcode == HCI_VSC_LAUNCH_RAM)) {
+        if ((p_buf->len < HCI_CMD_PREAMBLE_SIZE) ||
+            (opcode == HCI_VSC_LAUNCH_RAM)) {
             HILOGW("firmware patch file might be altered!");
         } else {
-            p_buf->len += read(hw_cfg_cb.fw_fd, p + HCI_CMD_PREAMBLE_SIZE, *(p + HCD_REC_PAYLOAD_LEN_BYTE));
+            p_buf->len += read(hw_cfg_cb.fw_fd, p + HCI_CMD_PREAMBLE_SIZE,
+                               *(p + HCD_REC_PAYLOAD_LEN_BYTE));
             STREAM_TO_UINT16(opcode, p);
             return bt_vendor_cbacks->xmit_cb(opcode, p_buf);
         }
@@ -673,20 +630,20 @@ ssize_t hw_config_cback_download_firmware(HC_BT_HDR *p_buf, uint16_t opcode)
     hw_cfg_cb.fw_fd = -1;
 
     /* Normally the firmware patch configuration file
-        * sets the new starting baud rate at 115200.
-        * So, we need update host's baud rate accordingly.
-        */
+     * sets the new starting baud rate at 115200.
+     * So, we need update host's baud rate accordingly.
+     */
     HILOGI("bt vendor lib: set UART baud 115200");
     userial_vendor_set_baud(USERIAL_BAUD_115200);
 
     /* Next, we would like to boost baud rate up again
-        * to desired working speed.
-        */
+     * to desired working speed.
+     */
     hw_cfg_cb.f_set_baud_2 = TRUE;
 
     /* Check if we need to pause a few hundred milliseconds
-        * before sending down any HCI command.
-        */
+     * before sending down any HCI command.
+     */
     int delay = look_up_fw_settlement_delay();
     HILOGI("Setting fw settlement delay to %d ", delay);
     ms_delay(delay);
@@ -709,7 +666,8 @@ ssize_t hw_config_cback_set_uart_clock(HC_BT_HDR *p_buf, uint16_t opcode)
     UINT32_TO_STREAM(p, UART_TARGET_BAUD_RATE);
 
     p_buf->len = HCI_CMD_PREAMBLE_SIZE + UPDATE_BAUDRATE_CMD_PARAM_SIZE;
-    hw_config_set_cbstate((hw_cfg_cb.f_set_baud_2) ? HW_CFG_SET_UART_BAUD_2 : HW_CFG_SET_UART_BAUD_1);
+    hw_config_set_cbstate((hw_cfg_cb.f_set_baud_2) ? HW_CFG_SET_UART_BAUD_2
+                                                   : HW_CFG_SET_UART_BAUD_1);
     return bt_vendor_cbacks->xmit_cb(HCI_VSC_UPDATE_BAUDRATE, p_buf);
 }
 
@@ -726,7 +684,7 @@ ssize_t hw_config_cback_cfg_complete(HC_BT_HDR *p_buf, uint16_t opcode)
         close(hw_cfg_cb.fw_fd);
         hw_cfg_cb.fw_fd = -1;
     }
-    
+
     return 1;
 }
 
@@ -751,13 +709,16 @@ void hw_config_cback(void *p_mem)
     const uint8_t null_bdaddr[BD_ADDR_LEN] = {0, 0, 0, 0, 0, 0};
 #endif
 
-    uint8_t status = *((uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_STATUS_RET_BYTE);
+    uint8_t status =
+        *((uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_STATUS_RET_BYTE);
     uint8_t *p = (uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_OPCODE;
     STREAM_TO_UINT16(opcode, p);
 
     /* Ask a new buffer big enough to hold any HCI commands sent in here */
-    if ((status == 0) && bt_vendor_cbacks)
-        p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE + HCI_CMD_MAX_LEN);
+    if ((status == 0) && bt_vendor_cbacks) {
+        p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE +
+                                                     HCI_CMD_MAX_LEN);
+    }
 
     if (p_buf != NULL) {
         p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
@@ -772,48 +733,46 @@ void hw_config_cback(void *p_mem)
         switch (hw_cfg_cb.state) {
             case HW_CFG_SET_UART_BAUD_1:
                 /* update baud rate of host's UART port */
-                HILOGI("bt vendor lib: set UART baud1 %i", UART_TARGET_BAUD_RATE);
-                userial_vendor_set_baud(line_speed_to_userial_baud(UART_TARGET_BAUD_RATE));
-            
-                //xmit_bytes = hw_config_cback_set_baud1(p_buf, opcode);
+                HILOGI("bt vendor lib: set UART baud1 %i",
+                       UART_TARGET_BAUD_RATE);
+                userial_vendor_set_baud(
+                    line_speed_to_userial_baud(UART_TARGET_BAUD_RATE));
+
+                // xmit_bytes = hw_config_cback_set_baud1(p_buf, opcode);
                 xmit_bytes = hw_config_cback_read_local_name(p_buf, opcode);
                 break;
             case HW_CFG_READ_LOCAL_NAME:
-                 p_tmp = p_name = (char *) (p_evt_buf + 1) + \
-                         HCI_EVT_CMD_CMPL_LOCAL_NAME_STRING;
+                p_tmp = p_name = (char *)(p_evt_buf + 1) +
+                                 HCI_EVT_CMD_CMPL_LOCAL_NAME_STRING;
 
-                for (i=0; (i < LOCAL_NAME_BUFFER_LEN)||(*(p_name+i) != 0); i++)
-                    *(p_name+i) = toupper(*(p_name+i));
-
-                if ((p_name = strstr(p_name, "BCM")) != NULL)
-                {
-                    strncpy(hw_cfg_cb.local_chip_name, p_name, \
-                            LOCAL_NAME_BUFFER_LEN-1);
+                for (i = 0; (i < LOCAL_NAME_BUFFER_LEN) || (*(p_name + i) != 0);
+                     i++) {
+                    *(p_name + i) = toupper(*(p_name + i));
                 }
-                else
-                {
-                    strncpy(hw_cfg_cb.local_chip_name, "UNKNOWN", \
-                            LOCAL_NAME_BUFFER_LEN-1);
+
+                if ((p_name = strstr(p_name, "BCM")) != NULL) {
+                    strncpy(hw_cfg_cb.local_chip_name, p_name,
+                            LOCAL_NAME_BUFFER_LEN - 1);
+                } else {
+                    strncpy(hw_cfg_cb.local_chip_name, "UNKNOWN",
+                            LOCAL_NAME_BUFFER_LEN - 1);
                     p_name = p_tmp;
                 }
 
-                hw_cfg_cb.local_chip_name[LOCAL_NAME_BUFFER_LEN-1] = 0;
-                HILOGI("Chipset %s", hw_cfg_cb.local_chip_name);  
-                if (0 == strcmp(hw_cfg_cb.local_chip_name, "BCM4345C5"))
-                {
-                   HILOGI("found BCM4345C5"); 
-                   p_name = FW_PATCHFILE_LOCATION "BCM4345C5.hcd";  
+                hw_cfg_cb.local_chip_name[LOCAL_NAME_BUFFER_LEN - 1] = 0;
+                HILOGI("Chipset %s", hw_cfg_cb.local_chip_name);
+                if (strcmp(hw_cfg_cb.local_chip_name, "BCM4345C5") == 0) {
+                    HILOGI("found BCM4345C5");
+                    p_name = FW_PATCHFILE_LOCATION "BCM4345C5.hcd";
                 }
 
-                if (0 == strcmp(hw_cfg_cb.local_chip_name, "BCM43430A1"))
-                {
-                   HILOGI("found BCM43430A1");
-                   p_name = FW_PATCHFILE_LOCATION "BCM43430A1.hcd";   
+                if (strcmp(hw_cfg_cb.local_chip_name, "BCM43430A1") == 0) {
+                    HILOGI("found BCM43430A1");
+                    p_name = FW_PATCHFILE_LOCATION "BCM43430A1.hcd";
                 }
 
                 uint8_t *p = (uint8_t *)(p_buf + 1);
                 ssize_t xmit_bytes = 0;
-                // /vendor/etc/firmware
                 if ((hw_cfg_cb.fw_fd = open(p_name, O_RDONLY)) == -1) {
                     HILOGE("vendor lib preload failed to open [%s]", p_name);
                 } else {
@@ -823,11 +782,13 @@ void hw_config_cback(void *p_mem)
 
                     p_buf->len = HCI_CMD_PREAMBLE_SIZE;
                     hw_config_set_cbstate(HW_CFG_DL_MINIDRIVER);
-                    xmit_bytes = bt_vendor_cbacks->xmit_cb(HCI_VSC_DOWNLOAD_MINIDRV, p_buf);
+                    xmit_bytes = bt_vendor_cbacks->xmit_cb(
+                        HCI_VSC_DOWNLOAD_MINIDRV, p_buf);
                 }
 
                 if (xmit_bytes <= 0) {
-                    HILOGE("vendor lib preload failed to locate firmware patch file and set bdaddr");
+                    HILOGE("vendor lib preload failed to locate firmware patch "
+                           "file and set bdaddr");
                     xmit_bytes = hw_config_set_bdaddr(p_buf);
                 }
 
@@ -847,12 +808,13 @@ void hw_config_cback(void *p_mem)
                     /* set UART clock to 48MHz */
                     UINT16_TO_STREAM(p, HCI_VSC_WRITE_UART_CLOCK_SETTING);
                     *p++ = 1; /* parameter length */
-                    *p = 1;   /* (1,"UART CLOCK 48 MHz")(2,"UART CLOCK 24 MHz") */
+                    *p = 1; /* (1,"UART CLOCK 48 MHz")(2,"UART CLOCK 24 MHz") */
 
                     p_buf->len = HCI_CMD_PREAMBLE_SIZE + 1;
                     hw_config_set_cbstate(HW_CFG_SET_UART_CLOCK);
 
-                    xmit_bytes = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_UART_CLOCK_SETTING, p_buf);
+                    xmit_bytes = bt_vendor_cbacks->xmit_cb(
+                        HCI_VSC_WRITE_UART_CLOCK_SETTING, p_buf);
                     break;
                 }
             /* fall through intentionally */
@@ -862,15 +824,19 @@ void hw_config_cback(void *p_mem)
 
             case HW_CFG_SET_UART_BAUD_2:
                 /* update baud rate of host's UART port */
-                HILOGI("bt vendor lib: set UART baud2 %i", UART_TARGET_BAUD_RATE);
-                userial_vendor_set_baud(line_speed_to_userial_baud(UART_TARGET_BAUD_RATE));
+                HILOGI("bt vendor lib: set UART baud2 %i",
+                       UART_TARGET_BAUD_RATE);
+                userial_vendor_set_baud(
+                    line_speed_to_userial_baud(UART_TARGET_BAUD_RATE));
 
 #if (USE_CONTROLLER_BDADDR == TRUE)
-                if ((xmit_bytes = hw_config_read_bdaddr(p_buf)) > 0)
+                if ((xmit_bytes = hw_config_read_bdaddr(p_buf)) > 0) {
                     break;
+                }
 #else
-                if ((xmit_bytes = hw_config_set_bdaddr(p_buf)) > 0)
+                if ((xmit_bytes = hw_config_set_bdaddr(p_buf)) > 0) {
                     break;
+                }
 #endif
             /* fall through intentionally */
             case HW_CFG_SET_BD_ADDR:
@@ -879,9 +845,11 @@ void hw_config_cback(void *p_mem)
 
 #if (USE_CONTROLLER_BDADDR == TRUE)
             case HW_CFG_READ_BD_ADDR:
-                p_tmp = (char *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_LOCAL_BDADDR_ARRAY;
+                p_tmp = (char *)(p_evt_buf + 1) +
+                        HCI_EVT_CMD_CMPL_LOCAL_BDADDR_ARRAY;
                 HILOGI("entering HW_CFG_READ_BD_ADDR");
-                if (memcmp(p_tmp, null_bdaddr, BD_ADDR_LEN) == 0 && (xmit_bytes = hw_config_set_bdaddr(p_buf)) > 0) {
+                if (memcmp(p_tmp, null_bdaddr, BD_ADDR_LEN) == 0 &&
+                    (xmit_bytes = hw_config_set_bdaddr(p_buf)) > 0) {
                     break;
                 }
                 xmit_bytes = hw_config_cback_cfg_complete(p_buf, opcode);
@@ -893,8 +861,9 @@ void hw_config_cback(void *p_mem)
     if (xmit_bytes <= 0) {
         HILOGE("vendor lib fwcfg aborted!!!");
         if (bt_vendor_cbacks) {
-            if (p_buf != NULL)
+            if (p_buf != NULL) {
                 bt_vendor_cbacks->dealloc(p_buf);
+            }
 
             bt_vendor_cbacks->init_cb(BTC_OP_RESULT_FAIL);
         }
@@ -944,8 +913,8 @@ static void hw_sco_i2spcm_proc_interface_param(void)
 
     /* Ask a new buffer to hold WRITE_SCO_PCM_INT_PARAM command */
     if (bt_vendor_cbacks) {
-        p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE
-            + HCI_CMD_PREAMBLE_SIZE + SCO_PCM_PARAM_SIZE);
+        p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(
+            BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + SCO_PCM_PARAM_SIZE);
     }
     if (p_buf) {
         p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
@@ -958,14 +927,17 @@ static void hw_sco_i2spcm_proc_interface_param(void)
         UINT16_TO_STREAM(p, HCI_VSC_WRITE_SCO_PCM_INT_PARAM);
         *p++ = SCO_PCM_PARAM_SIZE;
         memcpy_s(p, &bt_sco_param, SCO_PCM_PARAM_SIZE);
-        if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_SCO_PCM_INT_PARAM, p_buf)) == FALSE) {
+        if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_SCO_PCM_INT_PARAM,
+                                             p_buf)) == FALSE) {
             bt_vendor_cbacks->dealloc(p_buf);
-        } else
+        } else {
             return;
+        }
     }
     status = BTC_OP_RESULT_FAIL;
 
-    HILOGI("sco I2S/PCM config interface result %d [0-Success, 1-Fail]", status);
+    HILOGI("sco I2S/PCM config interface result %d [0-Success, 1-Fail]",
+           status);
 }
 
 static void hw_sco_i2spcm_proc_int_param(void)
@@ -974,11 +946,13 @@ static void hw_sco_i2spcm_proc_int_param(void)
     uint8_t ret = FALSE;
     uint8_t *p;
     HC_BT_HDR *p_buf = NULL;
-    
+
     /* Ask a new buffer to hold WRITE_PCM_DATA_FORMAT_PARAM command */
-    if (bt_vendor_cbacks)
+    if (bt_vendor_cbacks) {
         p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(
-            BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + PCM_DATA_FORMAT_PARAM_SIZE);
+            BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE +
+            PCM_DATA_FORMAT_PARAM_SIZE);
+    }
     if (p_buf) {
         p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
         p_buf->offset = 0;
@@ -990,13 +964,15 @@ static void hw_sco_i2spcm_proc_int_param(void)
         *p++ = PCM_DATA_FORMAT_PARAM_SIZE;
         memcpy_s(p, &bt_pcm_data_fmt_param, PCM_DATA_FORMAT_PARAM_SIZE);
 
-        if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_PCM_DATA_FORMAT_PARAM, p_buf)) == FALSE) {
+        if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_PCM_DATA_FORMAT_PARAM,
+            p_buf)) == FALSE) {
             bt_vendor_cbacks->dealloc(p_buf);
-        } else
+        } else {
             return;
+        }
     }
     status = BTC_OP_RESULT_FAIL;
-    
+
     HILOGI("sco I2S/PCM config int result %d [0-Success, 1-Fail]", status);
 }
 
@@ -1027,12 +1003,12 @@ static void hw_sco_i2spcm_cfg_cback(void *p_mem)
     if (status != BTC_OP_RESULT_SUCCESS) {
         return;
     }
-    
+
     if ((opcode == HCI_VSC_WRITE_I2SPCM_INTERFACE_PARAM) &&
         (sco_bus_interface == SCO_INTERFACE_PCM)) {
         hw_sco_i2spcm_proc_interface_param();
     } else if ((opcode == HCI_VSC_WRITE_SCO_PCM_INT_PARAM) &&
-             (sco_bus_interface == SCO_INTERFACE_PCM)) {
+               (sco_bus_interface == SCO_INTERFACE_PCM)) {
         hw_sco_i2spcm_proc_int_param();
     }
 }
@@ -1135,10 +1111,10 @@ uint8_t hw_lpm_enable(uint8_t turn_on)
     uint8_t *p;
     uint8_t ret = FALSE;
 
-    if (bt_vendor_cbacks)
-        p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE +
-                                                     HCI_CMD_PREAMBLE_SIZE +
-                                                     LPM_CMD_PARAM_SIZE);
+    if (bt_vendor_cbacks) {
+        p_buf = (HC_BT_HDR *)bt_vendor_cbacks->alloc(
+            BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + LPM_CMD_PARAM_SIZE);
+    }
 
     if (p_buf) {
         p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
@@ -1158,7 +1134,8 @@ uint8_t hw_lpm_enable(uint8_t turn_on)
             upio_set(UPIO_LPM_MODE, UPIO_DEASSERT, 0);
         }
 
-        if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_SLEEP_MODE, p_buf)) <= 0) {
+        if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_SLEEP_MODE,
+                                             p_buf)) <= 0) {
             bt_vendor_cbacks->dealloc(p_buf);
         }
     }
@@ -1183,7 +1160,8 @@ uint32_t hw_lpm_get_idle_timeout(void)
     /* set idle time to be LPM_IDLE_TIMEOUT_MULTIPLE times of
      * host stack idle threshold (in 300ms/25ms)
      */
-    timeout_ms = (uint32_t)lpm_param.host_stack_idle_threshold * LPM_IDLE_TIMEOUT_MULTIPLE;
+    timeout_ms = (uint32_t)lpm_param.host_stack_idle_threshold *
+                 LPM_IDLE_TIMEOUT_MULTIPLE;
     timeout_ms *= BT_VENDOR_LDM_DEFAULT_IDLE;
     return timeout_ms;
 }
@@ -1221,7 +1199,8 @@ void hw_sco_config(void)
         bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_MODE] = 1;
 
         /* set nbs clock rate as the value in SCO_I2SPCM_IF_CLOCK_RATE field */
-        sco_bus_clock_rate = bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE];
+        sco_bus_clock_rate =
+            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE];
     } else {
         /* 'Disable' I2S mode */
         bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_MODE] = 0;
@@ -1230,15 +1209,17 @@ void hw_sco_config(void)
         sco_bus_clock_rate = bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_RATE];
 
         /* sync up clock mode setting */
-        bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_MODE] = bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_MODE];
+        bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_MODE] =
+            bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_MODE];
     }
 
     if (sco_bus_wbs_clock_rate == INVALID_SCO_CLOCK_RATE) {
         /* set default wbs clock rate */
         sco_bus_wbs_clock_rate = SCO_I2SPCM_IF_CLOCK_RATE4WBS;
 
-        if (sco_bus_wbs_clock_rate < sco_bus_clock_rate)
+        if (sco_bus_wbs_clock_rate < sco_bus_clock_rate) {
             sco_bus_wbs_clock_rate = sco_bus_clock_rate;
+        }
     }
 
     /*
@@ -1260,7 +1241,8 @@ void hw_sco_config(void)
 static void hw_sco_i2spcm_config_from_command(void *p_mem, uint16_t codec)
 {
     HC_BT_HDR *p_evt_buf = (HC_BT_HDR *)p_mem;
-    bool command_success = *((uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_STATUS_RET_BYTE) == 0;
+    bool command_success =
+        *((uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_STATUS_RET_BYTE) == 0;
 
     if (command_success) {
         hw_sco_i2spcm_config(codec);
@@ -1297,25 +1279,31 @@ static void hw_sco_i2spcm_config(uint16_t codec)
         UINT16_TO_STREAM(p, HCI_VSC_WRITE_I2SPCM_INTERFACE_PARAM);
         *p++ = SCO_I2SPCM_PARAM_SIZE;
         if (codec == SCO_CODEC_CVSD) {
-            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE] = 0; /* SCO_I2SPCM_IF_SAMPLE_RATE  8k */
+            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE] =
+                0; /* SCO_I2SPCM_IF_SAMPLE_RATE  8k */
             bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE] =
                 bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_RATE] = sco_bus_clock_rate;
         } else if (codec == SCO_CODEC_MSBC) {
-            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE] = wbs_sample_rate; /* SCO_I2SPCM_IF_SAMPLE_RATE 16K */
+            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE] =
+                wbs_sample_rate; /* SCO_I2SPCM_IF_SAMPLE_RATE 16K */
             bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE] =
-                bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_RATE] = sco_bus_wbs_clock_rate;
+                bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_RATE] =
+                    sco_bus_wbs_clock_rate;
         } else {
-            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE] = 0; /* SCO_I2SPCM_IF_SAMPLE_RATE  8k */
+            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE] =
+                0; /* SCO_I2SPCM_IF_SAMPLE_RATE  8k */
             bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE] =
                 bt_sco_param[SCO_PCM_PARAM_IF_CLOCK_RATE] = sco_bus_clock_rate;
-            HILOGE("wrong codec is use in hw_sco_i2spcm_config, goes default NBS");
+            HILOGE(
+                "wrong codec is use in hw_sco_i2spcm_config, goes default NBS");
         }
         memcpy_s(p, &bt_sco_i2spcm_param, SCO_I2SPCM_PARAM_SIZE);
         cmd_u16 = HCI_VSC_WRITE_I2SPCM_INTERFACE_PARAM;
         HILOGI("I2SPCM config {0x%x, 0x%x, 0x%x, 0x%x}",
-            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_MODE], bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_ROLE],
-            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE],
-            bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE]);
+               bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_MODE],
+               bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_ROLE],
+               bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_SAMPLE_RATE],
+               bt_sco_i2spcm_param[SCO_I2SPCM_PARAM_IF_CLOCK_RATE]);
 
         if ((ret = bt_vendor_cbacks->xmit_cb(cmd_u16, p_buf)) <= 0) {
             bt_vendor_cbacks->dealloc(p_buf);
@@ -1363,7 +1351,7 @@ int hw_set_audio_state(bt_vendor_op_audio_state_t *p_state)
     if (!bt_vendor_cbacks) {
         return ret_val;
     }
-    
+
     ret_val = hw_set_SCO_codec(p_state->peer_codec);
     return ret_val;
 }
@@ -1381,7 +1369,8 @@ int hw_set_audio_state(bt_vendor_op_audio_state_t *p_state)
 int hw_set_patch_file_path(char *p_conf_name, char *p_conf_value, int param)
 {
     HILOGI("%s", __FUNCTION__);
-    if (strcpy_s(fw_patchfile_path, sizeof(fw_patchfile_path), p_conf_value) != 0) {
+    if (strcpy_s(fw_patchfile_path, sizeof(fw_patchfile_path), p_conf_value) !=
+        0) {
         return -1;
     }
     return 0;
@@ -1400,7 +1389,8 @@ int hw_set_patch_file_path(char *p_conf_name, char *p_conf_value, int param)
 int hw_set_patch_file_name(char *p_conf_name, char *p_conf_value, int param)
 {
     HILOGI("%s", __FUNCTION__);
-    if (strcpy_s(fw_patchfile_name, sizeof(fw_patchfile_name), p_conf_value) != 0) {
+    if (strcpy_s(fw_patchfile_name, sizeof(fw_patchfile_name), p_conf_value) !=
+        0) {
         return -1;
     }
     return 0;
@@ -1411,13 +1401,15 @@ int hw_set_patch_file_name(char *p_conf_name, char *p_conf_value, int param)
 **
 ** Function        hw_set_patch_settlement_delay
 **
-** Description     Give the specific firmware patch settlement time in milliseconds
+** Description     Give the specific firmware patch settlement time in
+** milliseconds
 **
 ** Returns         0 : Success
 **                 Otherwise : Fail
 **
 *******************************************************************************/
-int hw_set_patch_settlement_delay(char *p_conf_name, char *p_conf_value, int param)
+int hw_set_patch_settlement_delay(char *p_conf_name, char *p_conf_value,
+                                  int param)
 {
     fw_patch_settlement_delay = atoi(p_conf_value);
     return 0;

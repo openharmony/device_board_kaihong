@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -30,15 +30,12 @@
 #ifndef _hndlhl_h_
 #define _hndlhl_h_
 
-enum {
-	LHL_MAC_TIMER = 0,
-	LHL_ARM_TIMER = 1
-};
+enum { LHL_MAC_TIMER = 0, LHL_ARM_TIMER = 1 };
 
 typedef struct {
-	uint16 offset;
-	uint32 mask;
-	uint32 val;
+    uint16 offset;
+    uint32 mask;
+    uint32 val;
 } lhl_reg_set_t;
 
 #define LHL_REG_OFF(reg) OFFSETOF(gciregs_t, reg)
@@ -54,8 +51,8 @@ extern void si_lhl_disable_sdio_wakeup(si_t *sih);
 extern int si_lhl_set_lpoclk(si_t *sih, osl_t *osh, uint32 lpo_force);
 extern void si_set_lv_sleep_mode_lhl_config_4369(si_t *sih);
 
-#define HIB_EXT_WAKEUP_CAP(sih)  (BCM4347_CHIP(sih->chip))
+#define HIB_EXT_WAKEUP_CAP(sih) (BCM4347_CHIP(sih->chip))
 
-#define LHL_IS_PSMODE_0(sih)  (si_lhl_ps_mode(sih) == LHL_PS_MODE_0)
-#define LHL_IS_PSMODE_1(sih)  (si_lhl_ps_mode(sih) == LHL_PS_MODE_1)
+#define LHL_IS_PSMODE_0(sih) (si_lhl_ps_mode(sih) == LHL_PS_MODE_0)
+#define LHL_IS_PSMODE_1(sih) (si_lhl_ps_mode(sih) == LHL_PS_MODE_1)
 #endif /* _hndlhl_h_ */

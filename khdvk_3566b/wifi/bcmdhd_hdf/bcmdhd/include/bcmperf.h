@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -33,7 +33,7 @@
 #define BCMPERF_ENABLE_INSTRCOUNT()
 #define BCMPERF_ENABLE_ICACHE_MISS()
 #define BCMPERF_ENABLE_ICACHE_HIT()
-#define	BCMPERF_GETICACHE_MISS(x)	((x) = 0)
-#define	BCMPERF_GETICACHE_HIT(x)	((x) = 0)
-#define	BCMPERF_GETINSTRCOUNT(x)	((x) = 0)
+#define BCMPERF_GETICACHE_MISS(x) ((x) = 0)
+#define BCMPERF_GETICACHE_HIT(x) ((x) = 0)
+#define BCMPERF_GETINSTRCOUNT(x) ((x) = 0)
 #endif /* _BCMPERF_H_ */
