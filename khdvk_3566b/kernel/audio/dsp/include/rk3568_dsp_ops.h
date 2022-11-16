@@ -17,15 +17,23 @@ extern "C" {
 #endif
 #endif /* __cplusplus */
 
-int32_t DspDaiDeviceInit(struct AudioCard *card, const struct DaiDevice *device);
+int32_t DspDaiDeviceInit(struct AudioCard *card,
+                         const struct DaiDevice *device);
 int32_t DspDeviceInit(const struct DspDevice *device);
-int32_t DspDeviceReadReg(const struct DspDevice *device, const void *msgs, const uint32_t len);
-int32_t DspDeviceWriteReg(const struct DspDevice *device, const void *msgs, const uint32_t len);
-int32_t DspDaiStartup(const struct AudioCard *card, const struct DaiDevice *device);
-int32_t DspDaiHwParams(const struct AudioCard *card, const struct AudioPcmHwParams *param);
-int32_t DspDecodeAudioStream(const struct AudioCard *card, const uint8_t *buf, const struct DspDevice *device);
-int32_t DspEncodeAudioStream(const struct AudioCard *card, const uint8_t *buf, const struct DspDevice *device);
-int32_t DspEqualizerActive(const struct AudioCard *card, const uint8_t *buf, const struct DspDevice *device);
+int32_t DspDeviceReadReg(const struct DspDevice *device, const void *msgs,
+                         const uint32_t len);
+int32_t DspDeviceWriteReg(const struct DspDevice *device, const void *msgs,
+                          const uint32_t len);
+int32_t DspDaiStartup(const struct AudioCard *card,
+                      const struct DaiDevice *device);
+int32_t DspDaiHwParams(const struct AudioCard *card,
+                       const struct AudioPcmHwParams *param);
+int32_t DspDecodeAudioStream(const struct AudioCard *card, const uint8_t *buf,
+                             const struct DspDevice *device);
+int32_t DspEncodeAudioStream(const struct AudioCard *card, const uint8_t *buf,
+                             const struct DspDevice *device);
+int32_t DspEqualizerActive(const struct AudioCard *card, const uint8_t *buf,
+                           const struct DspDevice *device);
 
 #ifdef __cplusplus
 #if __cplusplus

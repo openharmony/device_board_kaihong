@@ -14,7 +14,8 @@
 
 struct panel_jdi_gt911_dev *g_panel_jdi_gt911_dev = NULL;
 
-static struct panel_jdi_gt911_dev *ToPanelSimpleDev(const struct PanelData *panel)
+static struct panel_jdi_gt911_dev *
+ToPanelSimpleDev(const struct PanelData *panel)
 {
     return (struct panel_jdi_gt911_dev *)panel->object->priv;
 }
@@ -22,7 +23,7 @@ static struct panel_jdi_gt911_dev *ToPanelSimpleDev(const struct PanelData *pane
 static int32_t panel_simple_regulator_enable(void)
 {
     int32_t err;
-		    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     if (g_panel_jdi_gt911_dev == NULL) {
         return -1;
     }
@@ -36,7 +37,7 @@ static int32_t panel_simple_regulator_enable(void)
 static int32_t panel_simple_regulator_disable(void)
 {
     int32_t err;
-		    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     if (g_panel_jdi_gt911_dev == NULL) {
         return -1;
     }
@@ -48,7 +49,7 @@ int panel_simple_loader_protect(struct drm_panel *panel)
 {
     int err;
     (void)panel;
-		    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     err = panel_simple_regulator_enable();
     if (err < 0) {
         HDF_LOGE("failed to enable supply: %d\n", err);
@@ -59,7 +60,7 @@ int panel_simple_loader_protect(struct drm_panel *panel)
 EXPORT_SYMBOL(panel_simple_loader_protect);
 
 static int32_t PanelSendCmds(struct mipi_dsi_device *dsi,
-    const struct DsiCmdDesc *cmds, int size)
+                             const struct DsiCmdDesc *cmds, int size)
 {
     int32_t i = 0;
 
@@ -81,7 +82,7 @@ static int32_t PanelOn(struct PanelData *panel)
 {
     struct panel_jdi_gt911_dev *panel_dev = NULL;
 
-	    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     panel_dev = ToPanelSimpleDev(panel);
     if (panel_dev->hw_delay.enable_delay) {
         OsalMSleep(panel_dev->hw_delay.enable_delay);
@@ -92,7 +93,7 @@ static int32_t PanelOn(struct PanelData *panel)
 static int32_t PanelOff(struct PanelData *panel)
 {
     struct panel_jdi_gt911_dev *panel_dev = NULL;
-	    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     panel_dev = ToPanelSimpleDev(panel);
     if (panel_dev->hw_delay.disable_delay) {
         OsalMSleep(panel_dev->hw_delay.disable_delay);
@@ -105,8 +106,7 @@ static int32_t PanelPrepare(struct PanelData *panel)
     int32_t ret;
     struct panel_jdi_gt911_dev *panel_dev = NULL;
 
-	    HDF_LOGI("%s enter", __func__);
-
+    HDF_LOGI("%s enter", __func__);
 
     panel_dev = ToPanelSimpleDev(panel);
     ret = regulator_enable(panel_dev->supply);
@@ -132,8 +132,8 @@ static int32_t PanelPrepare(struct PanelData *panel)
         OsalMSleep(panel_dev->hw_delay.prepare_delay);
     }
 
-    ret = PanelSendCmds(panel_dev->dsiDev, g_panelOnCode, \
-        sizeof(g_panelOnCode) / sizeof(g_panelOnCode[0]));
+    ret = PanelSendCmds(panel_dev->dsiDev, g_panelOnCode,
+                        sizeof(g_panelOnCode) / sizeof(g_panelOnCode[0]));
     if (ret != HDF_SUCCESS) {
         HDF_LOGE("%s PanelSendCmds failed", __func__);
         return HDF_FAILURE;
@@ -149,11 +149,11 @@ static int32_t PanelUnprepare(struct PanelData *panel)
 {
     int32_t ret;
     struct panel_jdi_gt911_dev *panel_dev = NULL;
-	    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     panel_dev = ToPanelSimpleDev(panel);
 
-    ret = PanelSendCmds(panel_dev->dsiDev, g_panelOffCode, \
-        sizeof(g_panelOffCode) / sizeof(g_panelOffCode[0]));
+    ret = PanelSendCmds(panel_dev->dsiDev, g_panelOffCode,
+                        sizeof(g_panelOffCode) / sizeof(g_panelOffCode[0]));
     if (ret != HDF_SUCCESS) {
         HDF_LOGE("%s PanelSendCmds failed", __func__);
         return HDF_FAILURE;
@@ -171,39 +171,43 @@ static int32_t PanelUnprepare(struct PanelData *panel)
 
 static int32_t PanelInit(struct PanelData *panel)
 {
-	    HDF_LOGI("%s enter", __func__);
+    HDF_LOGI("%s enter", __func__);
     return 0;
 }
 
-#define BLK_PWM_INDEX             4
-#define PWM_MAX_PERIOD            25000
+#define BLK_PWM_INDEX 4
+#define PWM_MAX_PERIOD 25000
 /* backlight setting */
-#define MIN_LEVEL                 0
-#define MAX_LEVEL                 255
-#define DEFAULT_LEVEL             200
+#define MIN_LEVEL 0
+#define MAX_LEVEL 255
+#define DEFAULT_LEVEL 200
 
 static struct PanelInfo g_panelInfo = {
-    .width = 1920,          /* width */
-    .height = 1200,          /* height */
-    .hbp = 60,             /* horizontal back porch */
-    .hfp = 16,         /* horizontal front porch */
-    .hsw = 20,              /* horizontal sync width */
-    .vbp = 23,              /* vertical back porch */
-    .vfp = 12,              /* vertical front porch */
-    .vsw = 3,               /* vertical sync width */
-    .clockFreq = 140000000,  /* clock */
-    .pWidth = 2700,           /* physical width */
-    .pHeight = 1600,         /* physical height */
-    .connectorType = DRM_MODE_CONNECTOR_DPI,   /* DRM_MODE_CONNECTOR_DPI=17 */
-    .blk = { BLK_PWM, MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL },
+    .width = 1920,                           /* width */
+    .height = 1200,                          /* height */
+    .hbp = 60,                               /* horizontal back porch */
+    .hfp = 16,                               /* horizontal front porch */
+    .hsw = 20,                               /* horizontal sync width */
+    .vbp = 23,                               /* vertical back porch */
+    .vfp = 12,                               /* vertical front porch */
+    .vsw = 3,                                /* vertical sync width */
+    .clockFreq = 140000000,                  /* clock */
+    .pWidth = 2700,                          /* physical width */
+    .pHeight = 1600,                         /* physical height */
+    .connectorType = DRM_MODE_CONNECTOR_DPI, /* DRM_MODE_CONNECTOR_DPI=17 */
+    .blk = {BLK_PWM, MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL},
 };
 
 static void PanelResInit(struct panel_jdi_gt911_dev *panel_dev)
 {
-    panel_dev->dsiDev->lanes = 4;  /* 4: dsi,lanes ,number of active data lanes */
-    panel_dev->dsiDev->format = MIPI_DSI_FMT_RGB888; // dsi,format pixel format for video mode MIPI_DSI_FMT_RGB888
-    panel_dev->dsiDev->mode_flags = (MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST | MIPI_DSI_MODE_LPM \
-                                          | MIPI_DSI_MODE_EOT_PACKET);
+    panel_dev->dsiDev->lanes =
+        4; /* 4: dsi,lanes ,number of active data lanes */
+    panel_dev->dsiDev->format =
+        MIPI_DSI_FMT_RGB888; // dsi,format pixel format for video mode
+                             // MIPI_DSI_FMT_RGB888
+    panel_dev->dsiDev->mode_flags =
+        (MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST | MIPI_DSI_MODE_LPM |
+         MIPI_DSI_MODE_EOT_PACKET);
     panel_dev->panel.info = &g_panelInfo;
     panel_dev->panel.init = PanelInit;
     panel_dev->panel.on = PanelOn;
@@ -211,20 +215,21 @@ static void PanelResInit(struct panel_jdi_gt911_dev *panel_dev)
     panel_dev->panel.prepare = PanelPrepare;
     panel_dev->panel.unprepare = PanelUnprepare;
     panel_dev->panel.priv = panel_dev->dsiDev;
-    panel_dev->hw_delay.disable_delay = 0; /* 50:disable_delay time */
-    panel_dev->hw_delay.enable_delay = 120; /* 120:enable_delay */
-    panel_dev->hw_delay.init_delay = 120; /* 20:init_delay */
-    panel_dev->hw_delay.prepare_delay = 120; /* 2:prepare_delay */
-    panel_dev->hw_delay.reset_delay = 120;  /* 100:reset_delay */
-    panel_dev->hw_delay.unprepare_delay = 0;  /* 20:unprepare_delay */
+    panel_dev->hw_delay.disable_delay = 0;   /* 50:disable_delay time */
+    panel_dev->hw_delay.enable_delay = 0x78;  /* 120:enable_delay */
+    panel_dev->hw_delay.init_delay = 0x78;    /* 20:init_delay */
+    panel_dev->hw_delay.prepare_delay = 0x78; /* 2:prepare_delay */
+    panel_dev->hw_delay.reset_delay = 0x78;   /* 100:reset_delay */
+    panel_dev->hw_delay.unprepare_delay = 0; /* 20:unprepare_delay */
 }
 
 int32_t PanelEntryInit(struct HdfDeviceObject *object)
 {
     struct device_node *panelNode = NULL;
     struct panel_jdi_gt911_dev *panel_dev = NULL;
-	    HDF_LOGI("%s enter", __func__);
-    panel_dev = (struct panel_jdi_gt911_dev *)OsalMemCalloc(sizeof(struct panel_jdi_gt911_dev));
+    HDF_LOGI("%s enter", __func__);
+    panel_dev = (struct panel_jdi_gt911_dev *)OsalMemCalloc(
+        sizeof(struct panel_jdi_gt911_dev));
     if (panel_dev == NULL) {
         HDF_LOGE("%s panel_dev malloc fail", __func__);
         return HDF_FAILURE;
@@ -246,30 +251,27 @@ int32_t PanelEntryInit(struct HdfDeviceObject *object)
         goto FAIL;
     }
 
-    panel_dev->enable_gpio = devm_gpiod_get_optional(&panel_dev->dsiDev->dev, "enable", GPIOD_ASIS);
+    panel_dev->enable_gpio =
+        devm_gpiod_get_optional(&panel_dev->dsiDev->dev, "enable", GPIOD_ASIS);
     if (IS_ERR(panel_dev->enable_gpio)) {
         HDF_LOGE("get enable_gpio fail");
         goto FAIL;
     }
-    panel_dev->hpd_gpio = devm_gpiod_get_optional(&panel_dev->dsiDev->dev, "hpd", GPIOD_IN);
+    panel_dev->hpd_gpio =
+        devm_gpiod_get_optional(&panel_dev->dsiDev->dev, "hpd", GPIOD_IN);
     if (IS_ERR(panel_dev->hpd_gpio)) {
         HDF_LOGE("get hpd_gpio fail");
         goto FAIL;
     }
-    panel_dev->reset_gpio = devm_gpiod_get_optional(&panel_dev->dsiDev->dev, "reset", GPIOD_ASIS);
+    panel_dev->reset_gpio =
+        devm_gpiod_get_optional(&panel_dev->dsiDev->dev, "reset", GPIOD_ASIS);
     if (IS_ERR(panel_dev->reset_gpio)) {
         HDF_LOGE("get reset_gpio fail");
         goto FAIL;
     }
 
     PanelResInit(panel_dev);
-#if 0	
-    panel_dev->panel.blDev = GetBacklightDev("hdf_pwm");
-    if (panel_dev->panel.blDev == NULL) {
-        HDF_LOGE("%s GetBacklightDev fail", __func__);
-        goto FAIL;
-    }	
-#endif	
+
     panel_dev->panel.object = object;
     object->priv = panel_dev;
 

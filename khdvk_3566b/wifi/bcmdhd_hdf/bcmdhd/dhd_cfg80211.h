@@ -12,9 +12,9 @@
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
- * you also meet, for each linked independent module, the terms and conditions of
- * the license of that module.  An independent module is a module which is not
- * derived from this software.  The special exception does not apply to any
+ * you also meet, for each linked independent module, the terms and conditions
+ * of the license of that module.  An independent module is a module which is
+ * not derived from this software.  The special exception does not apply to any
  * modifications of the software.
  *
  *      Notwithstanding the above, under no circumstances may you combine this
@@ -48,7 +48,9 @@ s32 dhd_cfg80211_set_p2p_info(struct bcm_cfg80211 *cfg, int val);
 s32 dhd_cfg80211_clean_p2p_info(struct bcm_cfg80211 *cfg);
 s32 dhd_config_dongle(struct bcm_cfg80211 *cfg);
 int dhd_cfgvendor_priv_string_handler(struct bcm_cfg80211 *cfg,
-	struct wireless_dev *wdev, const struct bcm_nlmsg_hdr *nlioc, void  *data);
+                                      struct wireless_dev *wdev,
+                                      const struct bcm_nlmsg_hdr *nlioc,
+                                      void *data);
 
 s32 wl_dongle_roam(struct net_device *ndev, u32 roamvar, u32 bcn_timeout);
 #endif /* __DHD_CFG80211__ */

@@ -13,9 +13,9 @@
 #include "securec.h"
 #include "event_hub.h"
 
-#define EV_TYPE_KEY_INDEX       0
-#define KEY_CODE_JACK_INDEX     3
-#define IRQ_CONFIRM_MS1         1
+#define EV_TYPE_KEY_INDEX 0
+#define KEY_CODE_JACK_INDEX 3
+#define IRQ_CONFIRM_MS1 1
 #define USING_LINUX_INPUT_DEVICE
 
 InputDevice *g_hdfInDev = NULL;
@@ -42,7 +42,8 @@ void SetStateSync(unsigned int id, bool state)
     ReportSync(hdfInDev);
 }
 
-static InputDevice *HdfInputDeviceInstance(void *hs, struct HdfDeviceObject *device)
+static InputDevice *HdfInputDeviceInstance(void *hs,
+                                           struct HdfDeviceObject *device)
 {
 #ifdef USING_LINUX_INPUT_DEVICE
     (void)hs;
@@ -76,7 +77,8 @@ static InputDevice *HdfInputDeviceInstance(void *hs, struct HdfDeviceObject *dev
     inputDevId.version = INPUT_DEVID_VERSION;
     hdfInDev->attrSet.id = inputDevId;
 
-    ret = strncpy_s(hdfInDev->attrSet.devName, DEV_NAME_LEN, tempStr, DEV_NAME_LEN);
+    ret = strncpy_s(hdfInDev->attrSet.devName, DEV_NAME_LEN, tempStr,
+                    DEV_NAME_LEN);
     if (ret != 0) {
         OsalMemFree(hdfInDev);
         hdfInDev = NULL;
@@ -88,7 +90,8 @@ static InputDevice *HdfInputDeviceInstance(void *hs, struct HdfDeviceObject *dev
 #endif
 }
 
-int32_t CreateAndRegisterHdfInputDevice(void *hs, struct HdfDeviceObject *device)
+int32_t CreateAndRegisterHdfInputDevice(void *hs,
+                                        struct HdfDeviceObject *device)
 {
     int32_t ret;
     InputDevice *hdfInDev = NULL;
@@ -109,8 +112,9 @@ int32_t CreateAndRegisterHdfInputDevice(void *hs, struct HdfDeviceObject *device
         OsalMemFree(hdfInDev);
         hdfInDev = NULL;
         AUDIO_DEVICE_LOG_ERR("[RegisterInputDevice] failed.");
-        /* Theoretically, the return fails. In fact, two reporting systems are used.
-           The registration of the input device is unsuccessful, and another system is still available. */
+        /* Theoretically, the return fails. In fact, two reporting systems are
+           used. The registration of the input device is unsuccessful, and
+           another system is still available. */
         return HDF_SUCCESS;
     }
 
