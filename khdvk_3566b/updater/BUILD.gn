@@ -13,28 +13,52 @@
 
 import("//build/ohos.gni")
 
+updater_usb_init_cfg_path = "//base/startup/init/services/etc/init.usb.cfg"
+updater_init_usb_configfs_path_cfg =
+    "//drivers/peripheral/usb/cfg/init.usb.configfs.cfg"
+updater_faultloggerd_cfg =
+    "//base/hiviewdfx/faultloggerd/services/config/faultloggerd.cfg"
+updater_hilog_cfg = "//base/hiviewdfx/hilog/services/hilogd/etc/hilogd.cfg"
+ohos_prebuilt_etc("updater_hilog.cfg") {
+  source = "${updater_hilog_cfg}"
+  install_images = [ "updater" ]
+  part_name = "kaihong_products"
+}
+ohos_prebuilt_etc("updater_faultloggerd.cfg") {
+  source = "${updater_faultloggerd_cfg}"
+  install_images = [ "updater" ]
+  part_name = "kaihong_products"
+}
 ohos_prebuilt_etc("updater_init.cfg") {
   source = "config/init.cfg"
   install_images = [ "updater" ]
   part_name = "kaihong_products"
 }
 
-ohos_prebuilt_etc("updater_usb_init.cfg") {
-  source = "config/init.usb.cfg"
+ohos_prebuilt_etc("updater_init_usb.cfg") {
+  source = "${updater_usb_init_cfg_path}"
   install_images = [ "updater" ]
   part_name = "kaihong_products"
 }
 
 ohos_prebuilt_etc("updater_init_usb_configfs.cfg") {
-  source = "config/init.usb.configfs.cfg"
+  source = "${updater_init_usb_configfs_path_cfg}"
   install_images = [ "updater" ]
   part_name = "kaihong_products"
 }
 
+# ohos_prebuilt_etc("updater_init_rk3568_usb.cfg") {
+#   source = "config/init.rk3568.usb.cfg"
+#   install_images = [ "updater" ]
+#   part_name = "kaihong_products"
+# }
 ohos_prebuilt_etc("signing_cert.crt") {
   source = "config/signing_cert.crt"
-  module_install_dir = "certificate"
-  install_images = [ "updater" ]
+  module_install_dir = "etc/certificate"
+  install_images = [
+    "system",
+    "updater",
+  ]
   part_name = "kaihong_products"
 }
 
@@ -56,9 +80,10 @@ group("updater_files") {
   deps = [
     ":fstab.updater",
     ":signing_cert.crt",
+    ":updater_faultloggerd.cfg",
+    ":updater_hilog.cfg",
     ":updater_init.cfg",
     ":updater_init_usb_configfs.cfg",
-    ":updater_usb_init.cfg",
   ]
   if (enable_ramdisk) {
     deps += [ ":updater_ramdisk_resource_config.ini" ]

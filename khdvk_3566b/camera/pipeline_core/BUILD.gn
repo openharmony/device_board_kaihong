@@ -88,6 +88,7 @@ ohos_shared_library("camera_pipeline_core") {
     "$camera_path/hdi_impl/include",
     "$camera_path/device_manager",
     "$camera_path/device_manager/include",
+    "$camera_path/metadata_manager/include",
     "$camera_path/pipeline_core",
     "$camera_path/pipeline_core/host_stream/include",
     "$camera_path/pipeline_core/utils",
@@ -120,7 +121,6 @@ ohos_shared_library("camera_pipeline_core") {
     "src/node",
     "//device/soc/rockchip/common/hardware/rga/include",
     "//device/soc/rockchip/common/hardware/mpp/include",
-    "//third_party/libjpeg",
     "//third_party/libexif",
 
     # hcs parser
@@ -137,12 +137,14 @@ ohos_shared_library("camera_pipeline_core") {
     "$board_camera_path:params.c",
     "$camera_path/buffer_manager:camera_buffer_manager",
     "$camera_path/device_manager:camera_device_manager",
+    "$camera_path/metadata_manager:camera_metadata_manager",
     "$hdf_uhdf_path/utils:libhdf_utils",
     "//device/soc/rockchip/common/hardware/rga:librga",
     "//device/soc/rockchip/rk3566/hardware/mpp:libmpp",
+    "//drivers/interface/camera/v1_0:libcamera_stub_1.0",
     "//drivers/peripheral/camera/hal/utils:camera_utils",
     "//drivers/peripheral/camera/interfaces/metadata:metadata",
-    "//third_party/libjpeg:libjpeg_static",
+    "//third_party/libjpeg-turbo:turbojpeg_static",
   ]
 
   if (is_standard_system) {
