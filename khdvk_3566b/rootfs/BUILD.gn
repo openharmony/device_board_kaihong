@@ -27,14 +27,12 @@ ohos_prebuilt_etc("init.rk3566.usb.cfg") {
   install_enable = true
 }
 
-
 ohos_prebuilt_etc("fstab.rk3566") {
   source = "fstab.rk3566"
   part_name = "kaihong_products"
   install_images = [ chipset_base_dir ]
   install_enable = true
 }
-
 
 group("init_configs") {
   deps = [

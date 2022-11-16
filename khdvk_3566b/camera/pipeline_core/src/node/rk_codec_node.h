@@ -29,6 +29,7 @@
 #include "mpp_mem.h"
 #include "mpp_log.h"
 #include "mpp_common.h"
+
 extern "C" {
 #include "mpi_enc_utils.h"
 }
@@ -41,15 +42,18 @@ namespace OHOS::Camera {
         RetCode Start(const int32_t streamId) override;
         RetCode Stop(const int32_t streamId) override;
         void DeliverBuffer(std::shared_ptr<IBuffer> &buffer) override;
-    virtual RetCode Capture(const int32_t streamId, const int32_t captureId) override;
+        virtual RetCode Capture(const int32_t streamId,
+                                const int32_t captureId) override;
         RetCode CancelCapture(const int32_t streamId) override;
         RetCode Flush(const int32_t streamId);
 
     private:
         void encodeJpegToMemory(unsigned char *image, int width, int height,
-            const char* comment, unsigned long* jpegSize, unsigned char** jpegBuf);
+                                const char *comment, unsigned long *jpegSize,
+                                unsigned char **jpegBuf);
         int findStartCode(unsigned char *data, size_t dataSz);
-    void SerchIFps(unsigned char* buf, size_t bufSize, std::shared_ptr<IBuffer>& buffer);
+        void SerchIFps(unsigned char *buf, size_t bufSize,
+                       std::shared_ptr<IBuffer> &buffer);
         void Yuv420ToRGBA8888(std::shared_ptr<IBuffer> &buffer);
         void Yuv420ToJpeg(std::shared_ptr<IBuffer> &buffer);
         void Yuv420ToH264(std::shared_ptr<IBuffer> &buffer);
