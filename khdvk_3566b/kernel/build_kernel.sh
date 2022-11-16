@@ -103,6 +103,7 @@ cp -arfpL ${KERNEL_OBJ_TMP_PATH}/resource.img ${IMAGES_OUT_PATH}
 # uboot 获取参考 //khdvk_3566b/README_zh.md 文档
 #cp -arfpL ${DEVICE_DIR}/loader/uboot.img ${IMAGES_OUT_PATH}
 cp -arfpL ${DEVICE_DIR}/loader/MiniLoaderAll.bin ${IMAGES_OUT_PATH}
+cp -arfpL ${DEVICE_DIR}/loader/config.cfg ${IMAGES_OUT_PATH}
 popd
 
 touch $DEVICE_DIR/kernel/build_kernel.sh

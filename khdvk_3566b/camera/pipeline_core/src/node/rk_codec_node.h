@@ -17,7 +17,6 @@
 #include <vector>
 #include <condition_variable>
 #include <ctime>
-#include <jpeglib.h>
 #include "device_manager_adapter.h"
 #include "utils.h"
 #include "camera.h"
@@ -30,6 +29,7 @@
 #include "mpp_mem.h"
 #include "mpp_log.h"
 #include "mpp_common.h"
+
 extern "C" {
 #include "mpi_enc_utils.h"
 }
@@ -49,7 +49,7 @@ namespace OHOS::Camera {
 
     private:
         void encodeJpegToMemory(unsigned char *image, int width, int height,
-                                const char *comment, size_t *jpegSize,
+                                const char *comment, unsigned long *jpegSize,
                                 unsigned char **jpegBuf);
         int findStartCode(unsigned char *data, size_t dataSz);
         void SerchIFps(unsigned char *buf, size_t bufSize,
@@ -60,7 +60,6 @@ namespace OHOS::Camera {
 
         static uint32_t previewWidth_;
         static uint32_t previewHeight_;
-        std::vector<std::shared_ptr<IPort>> outPutPorts_;
         void *halCtx_ = nullptr;
         int mppStatus_ = 0;
     };
