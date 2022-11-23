@@ -48,6 +48,7 @@ ROOT_DIR=`realpath ${KERNEL_DIR}/../../..`
 KERNEL_SRC_TMP_PATH=$KERNEL_BUILD_ROOT_DIR/kernel/
 BORAD_DIR=$DEVICE_DIR
 KERNEL_PATCH_PATH=${ROOT_DIR}/kernel/linux/patches/linux-5.10
+NEWIP_PATCH_FILE=${ROOT_DIR}/kernel/common_modules/newip/apply_newip.sh
 
 rm -rf ${KERNEL_BUILD_ROOT_DIR}
 
@@ -76,6 +77,10 @@ cp -arfp $BORAD_DIR/../../../soc/rockchip/common/vendor  $KERNEL_BUILD_ROOT_DIR/
 cp -arfp $BORAD_DIR/../../../soc/rockchip/rk3566/sdk_linux/*  $KERNEL_BUILD_ROOT_DIR/kernel/
 cp -arfp $BORAD_DIR/../../../soc/rockchip/rk3566/vendor  $KERNEL_BUILD_ROOT_DIR/kernel/
 
+#newip
+if [ -f $NEWIP_PATCH_FILE ]; then
+bash $NEWIP_PATCH_FILE ${ROOT_DIR} ${KERNEL_SRC_TMP_PATH} ${DEVICE_NAME} linux-5.10
+fi
 
 cp -arfp $BORAD_DIR/kernel/modem/option.c  $KERNEL_BUILD_ROOT_DIR/kernel/drivers/usb/serial
 
