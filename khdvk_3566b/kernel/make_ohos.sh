@@ -15,13 +15,15 @@
 
 set -e
 
-export PATH=../../../../prebuilts/clang/ohos/linux-x86_64/llvm/bin/:$PATH
+SCRIPTPATH=$(dirname $realpath "$0")
+export PATH=$(realpath $SCRIPTPATH/../../../../)/prebuilts/clang/ohos/linux-x86_64/llvm/bin/:$(realpath $SCRIPTPATH/../../../../)/prebuilts/develop_tools/pahole/bin/:$PATH
 export PRODUCT_PATH=vendor/kaihong/khdvk_3566b
 IMAGE_SIZE=64  # 64M
 IMAGE_BLOCKS=4096
 
 CPUs=`sed -n "N;/processor/p" /proc/cpuinfo|wc -l`
-MAKE="make CROSS_COMPILE=../../../../prebuilts/gcc/linux-x86/aarch64/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-"
+MAKE="make LLVM=1 LLVM_IAS=1 CROSS_COMPILE=../../../../prebuilts/gcc/linux-x86/aarch64/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-"
+
 BUILD_PATH=boot_linux
 EXTLINUX_PATH=${BUILD_PATH}/extlinux
 EXTLINUX_CONF=${EXTLINUX_PATH}/extlinux.conf
@@ -57,7 +59,7 @@ function make_extlinux_conf()
 	dtb_path=$1
 	uart=$2
 	image=$3
-	
+
 	echo "label rockchip-kernel-5.10" > ${EXTLINUX_CONF}
 	echo "	kernel /extlinux/${image}" >> ${EXTLINUX_CONF}
 	echo "	fdt /extlinux/${TOYBRICK_DTB}" >> ${EXTLINUX_CONF}
@@ -70,10 +72,12 @@ function make_kernel_image()
 	arch=$1
 	conf=$2
 	dtb=$3
-	
-	${MAKE} ARCH=${arch} ${conf}
+
+	config_base="arch/${arch}/configs/${conf}"
+	ARCH=${arch} ./scripts/kconfig/merge_config.sh ${config_base}
+
 	if [ $? -ne 0 ]; then
-		echo "FAIL: ${MAKE} ARCH=${arch} ${conf}"
+		echo "FAIL:ARCH=${arch} ./scripts/kconfig/merge_config.sh ${config_base}"
 		return -1
 	fi
 
