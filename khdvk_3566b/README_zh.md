@@ -190,7 +190,7 @@ out/khdvk_3566b/packages/phone/images/ 目录下，需要烧录的文件有 Mini
 
 烧写工具下载及使用。
 
-rk的烧录之前需要安装对应的驱动和烧录工具，下载[DriverAssitant](common/tools/windows/DriverAssitant_v5.11.zip)和[RKDevTool_Release](common/tools/windows/RKDevTool_Release_v2.91.zip)
+rk的烧录之前需要安装对应的驱动和烧录工具，下载[DriverAssitant](https://gitee.com/download_tools/khdvk_3566b/raw/master/tools/DriverAssitant_v5.11.zip)和[RKDevTool_Release](https://gitee.com/download_tools/khdvk_3566b/raw/master/tools/RKDevTool_Release_v2.84.zip)
 
 安装驱动
 
