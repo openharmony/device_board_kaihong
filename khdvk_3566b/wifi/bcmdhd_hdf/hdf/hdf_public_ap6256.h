@@ -31,7 +31,8 @@
 #else
 #define ndev_to_cfg(ndev)	(ndev)
 #endif
-#ifndef errno_t
+#ifndef ERRNO_T
+#define ERRNO_T
 typedef int errno_t;
 #endif
 
