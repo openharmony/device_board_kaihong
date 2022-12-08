@@ -410,11 +410,11 @@ int32_t hdf_p2p_netdev_ioctl(struct NetDevice *netDev, IfReq *req, int32_t cmd)
 #define MC3 3
 #define MC4 4
 #define MC5 5
-int32_t hdf_bdh6_netdev_setmacaddr(struct NetDevice *netDev, uint8_t *addr)
+int32_t hdf_bdh6_netdev_setmacaddr(struct NetDevice *netDev, void *addr)
 {
     int32_t retVal = 0;
     struct sockaddr sa;
-    const uint8_t *mac = addr;
+    const uint8_t *mac = (uint8_t *)addr;
     struct net_device *netdev = GetLinuxInfByNetDevice(netDev);
 
     HDF_LOGE("%s: start %s...", __func__, netDev->name);
@@ -439,7 +439,7 @@ int32_t hdf_bdh6_netdev_setmacaddr(struct NetDevice *netDev, uint8_t *addr)
     return retVal;
 }
 
-int32_t hdf_p2p_netdev_setmacaddr(struct NetDevice *netDev, unsigned char *addr)
+int32_t hdf_p2p_netdev_setmacaddr(struct NetDevice *netDev, void *addr)
 {
     int32_t retVal = 0;
     struct net_device *netdev = GetLinuxInfByNetDevice(netDev);
