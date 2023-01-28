@@ -45,7 +45,7 @@
 #include <wlioctl_utils.h>
 #endif
 #include <wl_iw.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #ifdef WL_ESCAN
 #include <wl_escan.h>
 #endif
@@ -1158,7 +1158,7 @@ static int wl_iw_get_aplist(struct net_device *dev,
         memcpy(addr[dwrq->length].sa_data, &bi->BSSID, ETHER_ADDR_LEN);
         addr[dwrq->length].sa_family = ARPHRD_ETHER;
         // terence 20150419: limit the max. rssi to -2 or the bss will be
-        // filtered out in android OS
+        // filtered out
         rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
         qual[dwrq->length].qual = rssi_to_qual(rssi);
         qual[dwrq->length].level = 0x100 + rssi;
@@ -1238,7 +1238,7 @@ static int wl_iw_iscan_get_aplist(struct net_device *dev,
             memcpy(addr[dwrq->length].sa_data, &bi->BSSID, ETHER_ADDR_LEN);
             addr[dwrq->length].sa_family = ARPHRD_ETHER;
             // terence 20150419: limit the max. rssi to -2 or the bss will be
-            // filtered out in android OS
+            // filtered out
             rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
             qual[dwrq->length].qual = rssi_to_qual(rssi);
             qual[dwrq->length].level = 0x100 + rssi;
@@ -1624,7 +1624,7 @@ static int wl_iw_get_scan(struct net_device *dev, struct iw_request_info *info,
         ASSERT(((uintptr)bi + dtoh32(bi->length)) <= ((uintptr)list + buflen));
 
         // terence 20150419: limit the max. rssi to -2 or the bss will be
-        // filtered out in android OS
+        // filtered out
         rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
         channel = (bi->ctl_ch == 0) ? CHSPEC_CHANNEL(bi->chanspec) : bi->ctl_ch;
         WL_SCAN(("BSSID=" MACSTR ", channel=%d, RSSI=%d, SSID=\"%s\"\n",
@@ -1775,7 +1775,7 @@ static int wl_iw_iscan_get_scan(struct net_device *dev,
             }
 
             // terence 20150419: limit the max. rssi to -2 or the bss will be
-            // filtered out in android OS
+            // filtered out
             rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
             channel =
                 (bi->ctl_ch == 0) ? CHSPEC_CHANNEL(bi->chanspec) : bi->ctl_ch;

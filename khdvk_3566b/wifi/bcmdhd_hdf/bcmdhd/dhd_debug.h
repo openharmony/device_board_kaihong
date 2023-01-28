@@ -297,7 +297,7 @@ typedef struct log_conn_event {
     tlv_log *tlvs;
     /*
      * separate parameter structure per event to be provided and optional data
-     * the event_data is expected to include an official android part, with some
+     * the event_data is expected to include an official ohos part, with some
      * parameter as transmit rate, num retries, num scan result found etc...
      * as well, event_data can include a vendor proprietary part which is
      * understood by the developer only.

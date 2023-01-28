@@ -1,26 +1,26 @@
 #ifdef WL_EXT_GENL
 #include <bcmendian.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <dhd_config.h>
 #include <net/genetlink.h>
 
 #define AGENL_ERROR(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_ERROR_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_ERROR_LEVEL) {                         \
             printk(KERN_ERR DHD_LOG_PREFIX "[%s] AGENL-ERROR) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define AGENL_TRACE(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_TRACE_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_TRACE_LEVEL) {                         \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] AGENL-TRACE) %s : " arg1,    \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define AGENL_INFO(name, arg1, args...)                                        \
     do {                                                                       \
-        if (android_msg_level & ANDROID_INFO_LEVEL) {                          \
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {                          \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] AGENL-INFO) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
@@ -219,10 +219,10 @@ static int wl_ext_set_probreq(struct net_device *dev, bool set)
 
     if (set) {
         sprintf(recv_probreq, "wl recv_probreq 1");
-        wl_android_ext_priv_cmd(dev, recv_probreq, 0, &bytes_written);
+        wl_ohos_ext_priv_cmd(dev, recv_probreq, 0, &bytes_written);
     } else {
         sprintf(recv_probreq, "wl recv_probreq 0");
-        wl_android_ext_priv_cmd(dev, recv_probreq, 0, &bytes_written);
+        wl_ohos_ext_priv_cmd(dev, recv_probreq, 0, &bytes_written);
     }
 
     return 0;
@@ -289,7 +289,7 @@ void wl_ext_probreq_event(struct net_device *dev, void *argu,
                 break;
             }
             if (rem_len < (ie->len + TLV_HDR_LEN)) {
-                ANDROID_TRACE(("%s: buffer is not enough\n", __FUNCTION__));
+                OHOS_TRACE(("%s: buffer is not enough\n", __FUNCTION__));
                 break;
             }
             memcpy(pbuf, ie, min(ie->len + TLV_HDR_LEN, rem_len));
@@ -304,7 +304,7 @@ void wl_ext_probreq_event(struct net_device *dev, void *argu,
     if (num_ie) {
         event_len = buflen - rem_len;
         AGENL_INFO(dev->name, "num_ie=%d\n", num_ie);
-        if (android_msg_level & ANDROID_INFO_LEVEL) {
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {
             prhex("buf", buf, event_len);
         }
         ret = wl_ext_genl_send(zconf, dev, buf, event_len);
@@ -347,7 +347,7 @@ static int wl_ext_genl_recv(struct sk_buff *skb, struct genl_info *info)
         pData = (char *)nla_data(na);
         DataLen = nla_len(na);
         AGENL_INFO(dev->name, "nla_len(na) : %d\n", DataLen);
-        if (android_msg_level & ANDROID_INFO_LEVEL) {
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {
             prhex("nla_data(na)", pData, DataLen);
         }
     }
@@ -359,7 +359,7 @@ static int wl_ext_genl_recv(struct sk_buff *skb, struct genl_info *info)
         AGENL_ERROR(dev->name, "probe req\n");
     } else {
         AGENL_ERROR(dev->name, "Unexpected pkt %d\n", *pData);
-        if (android_msg_level & ANDROID_INFO_LEVEL) {
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {
             prhex("nla_data(na)", pData, DataLen);
         }
     }
@@ -418,7 +418,7 @@ static int wl_ext_genl_send(struct genl_params *zconf, struct net_device *dev,
                             zconf->send_retry_cnt, zconf->bind_pid);
                 zconf->bind_pid = -1;
                 sprintf(recv_probreq, "wl recv_probreq 0");
-                wl_android_ext_priv_cmd(dev, recv_probreq, 0, &bytes_written);
+                wl_ohos_ext_priv_cmd(dev, recv_probreq, 0, &bytes_written);
             }
             return ret;
         }
@@ -461,7 +461,7 @@ static int wl_ext_genl_bind(struct sk_buff *skb, struct genl_info *info)
         pData = (char *)nla_data(na);
         DataLen = nla_len(na);
         AGENL_INFO(dev->name, "nla_len(na) : %d\n", DataLen);
-        if (android_msg_level & ANDROID_INFO_LEVEL) {
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {
             prhex("nla_data(na)", pData, DataLen);
         }
     }

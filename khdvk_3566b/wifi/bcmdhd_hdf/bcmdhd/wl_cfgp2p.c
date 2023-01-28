@@ -51,7 +51,7 @@
 #include <wl_cfgp2p.h>
 #include <wl_cfgscan.h>
 #include <wldev_common.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <dngl_stats.h>
 #include <dhd.h>
 #include <dhd_linux.h>
@@ -2557,11 +2557,11 @@ static int wl_cfgp2p_do_ioctl(struct net_device *net, struct ifreq *ifr,
     struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
 
     /* There is no ifidx corresponding to p2p0 in our firmware. So we should
-     * not Handle any IOCTL cmds on p2p0 other than ANDROID PRIVATE CMDs.
-     * For Android PRIV CMD handling map it to primary I/F
+     * not Handle any IOCTL cmds on p2p0 other than OHOS PRIVATE CMDs.
+     * For OHOS PRIV CMD handling map it to primary I/F
      */
     if (cmd == SIOCDEVPRIVATE + 1) {
-        ret = wl_android_priv_cmd(ndev, ifr);
+        ret = wl_ohos_priv_cmd(ndev, ifr);
     } else {
         CFGP2P_ERR(("%s: IOCTL req 0x%x on p2p0 I/F. Ignoring. \n",
                     __FUNCTION__, cmd));

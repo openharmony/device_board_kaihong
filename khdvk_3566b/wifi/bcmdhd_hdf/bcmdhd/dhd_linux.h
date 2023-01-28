@@ -28,7 +28,7 @@
  */
 
 /* wifi platform functions for power, interrupt and pre-alloc, either
- * from Android-like platform device data, or Broadcom wifi platform
+ * from OHOS-like platform device data, or Broadcom wifi platform
  * device data.
  *
  */
@@ -356,7 +356,7 @@ typedef struct {
 #endif // endif
 
 #if defined(BT_OVER_SDIO)
-extern void wl_android_set_wifi_on_flag(bool enable);
+extern void wl_ohos_set_wifi_on_flag(bool enable);
 #endif /* BT_OVER_SDIO */
 
 #ifdef DHD_LOG_DUMP

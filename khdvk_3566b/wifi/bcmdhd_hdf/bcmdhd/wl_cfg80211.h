@@ -67,7 +67,7 @@
     osl_spin_unlock((lock), (flags))
 
 #include <wl_cfgp2p.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #ifdef WL_NAN
 #include <wl_cfgnan.h>
 #endif /* WL_NAN */
