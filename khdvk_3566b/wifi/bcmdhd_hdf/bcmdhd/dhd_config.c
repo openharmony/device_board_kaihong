@@ -21,7 +21,7 @@
 
 #include <dhd_config.h>
 #include <dhd_dbg.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #ifdef BCMPCIE
 #include <dhd_flowring.h>
 #endif
@@ -3211,9 +3211,9 @@ bool dhd_conf_read_log_level(dhd_pub_t *dhd, char *full_param, uint len_param)
         CONFIG_MSG("dbus_msglevel = 0x%X\n", dbus_msglevel);
     }
 #endif
-    else if (!strncmp("android_msg_level=", full_param, len_param)) {
-        android_msg_level = (int)simple_strtol(data, NULL, 0);
-        CONFIG_MSG("android_msg_level = 0x%X\n", android_msg_level);
+    else if (!strncmp("ohos_msg_level=", full_param, len_param)) {
+        ohos_msg_level = (int)simple_strtol(data, NULL, 0);
+        CONFIG_MSG("ohos_msg_level = 0x%X\n", ohos_msg_level);
     } else if (!strncmp("config_msg_level=", full_param, len_param)) {
         config_msg_level = (int)simple_strtol(data, NULL, 0);
         CONFIG_MSG("config_msg_level = 0x%X\n", config_msg_level);

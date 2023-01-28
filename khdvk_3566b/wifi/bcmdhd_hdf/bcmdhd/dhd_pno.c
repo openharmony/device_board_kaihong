@@ -3030,7 +3030,7 @@ void *dhd_pno_get_gscan(dhd_pub_t *dhd, dhd_pno_gscan_cmd_cfg_t type,
             ptr->max_bssid_history_entries = 0;
             ptr->max_epno_ssid_crc32 = MAX_EPNO_SSID_NUM;
             ptr->max_epno_hidden_ssid = MAX_EPNO_HIDDEN_SSID;
-            ptr->max_white_list_ssid = MAX_WHITELIST_SSID;
+            ptr->max_allow_list_ssid = MAX_ALLOWLIST_SSID;
             ret = (void *)ptr;
             *len = sizeof(dhd_pno_gscan_capabilities_t);
             break;
@@ -4541,9 +4541,9 @@ int dhd_pno_init(dhd_pub_t *dhd)
     if (err == BCME_UNSUPPORTED) {
         _pno_state->wls_supported = FALSE;
         DHD_INFO(("Current firmware doesn't support"
-                  " Android Location Service\n"));
+                  " Location Service\n"));
     } else {
-        DHD_ERROR(("%s: Support Android Location Service\n", __FUNCTION__));
+        DHD_ERROR(("%s: Support Location Service\n", __FUNCTION__));
     }
 exit:
     MFREE(dhd->osh, buf, WLC_IOCTL_SMLEN);

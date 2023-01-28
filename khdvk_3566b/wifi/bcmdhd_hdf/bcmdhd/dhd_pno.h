@@ -190,11 +190,11 @@ typedef enum dhd_pno_mode {
     /* Wi-Fi Legacy PNO Mode */
     DHD_PNO_NONE_MODE = 0,
     DHD_PNO_LEGACY_MODE = (1 << (0)),
-    /* Wi-Fi Android BATCH SCAN Mode */
+    /* Wi-Fi BATCH SCAN Mode */
     DHD_PNO_BATCH_MODE = (1 << (1)),
-    /* Wi-Fi Android Hotlist SCAN Mode */
+    /* Wi-Fi Hotlist SCAN Mode */
     DHD_PNO_HOTLIST_MODE = (1 << (2)),
-    /* Wi-Fi Google Android SCAN Mode */
+    /* Wi-Fi GSCAN Mode */
     DHD_PNO_GSCAN_MODE = (1 << (3))
 } dhd_pno_mode_t;
 #else
@@ -202,9 +202,9 @@ typedef enum dhd_pno_mode {
     /* Wi-Fi Legacy PNO Mode */
     DHD_PNO_NONE_MODE = 0,
     DHD_PNO_LEGACY_MODE = (1 << (0)),
-    /* Wi-Fi Android BATCH SCAN Mode */
+    /* Wi-Fi BATCH SCAN Mode */
     DHD_PNO_BATCH_MODE = (1 << (1)),
-    /* Wi-Fi Android Hotlist SCAN Mode */
+    /* Wi-Fi Hotlist SCAN Mode */
     DHD_PNO_HOTLIST_MODE = (1 << (2))
 } dhd_pno_mode_t;
 #endif /* GSCAN_SUPPORT || DHD_GET_VALID_CHANNELS */
@@ -387,7 +387,7 @@ typedef struct dhd_pno_gscan_capabilities {
     int max_bssid_history_entries;
     int max_epno_ssid_crc32;
     int max_epno_hidden_ssid;
-    int max_white_list_ssid;
+    int max_allow_list_ssid;
 } dhd_pno_gscan_capabilities_t;
 
 typedef struct dhd_epno_ssid_cfg {

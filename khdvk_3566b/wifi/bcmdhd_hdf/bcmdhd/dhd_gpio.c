@@ -26,12 +26,12 @@ extern void *dhd_wlan_mem_prealloc(int section, unsigned long size);
 #ifdef BCMDHD_DTS
 /* This is sample code in dts file.
 bcmdhd {
-    compatible = "android,bcmdhd_wlan";
+    compatible = "bcmdhd_wlan";
     gpio_wl_reg_on = <&gpio GPIOH_4 GPIO_ACTIVE_HIGH>;
     gpio_wl_host_wake = <&gpio GPIOZ_15 GPIO_ACTIVE_HIGH>;
 };
 */
-#define DHD_DT_COMPAT_ENTRY "android,bcmdhd_wlan"
+#define DHD_DT_COMPAT_ENTRY "bcmdhd_wlan"
 #define GPIO_WL_REG_ON_PROPNAME "gpio_wl_reg_on"
 #define GPIO_WL_HOST_WAKE_PROPNAME "gpio_wl_host_wake"
 #endif

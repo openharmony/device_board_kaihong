@@ -43,7 +43,7 @@
 #include <bcmicmp.h>
 #include <dhd_linux_pktdump.h>
 #include <dhd_config.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 
 #define DHD_PKTDUMP(arg) printk arg
 #define DHD_PKTDUMP_MEM(arg) printk arg

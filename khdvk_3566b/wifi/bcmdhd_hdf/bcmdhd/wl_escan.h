@@ -4,7 +4,7 @@
 #include <linuxver.h>
 #include <wl_iw.h>
 #include <wl_iapsta.h>
-#include <wl_android_ext.h>
+#include <wl_ohos_ext.h>
 #include <dhd_config.h>
 
 #define ESCAN_BUF_SIZE (64 * 1024)

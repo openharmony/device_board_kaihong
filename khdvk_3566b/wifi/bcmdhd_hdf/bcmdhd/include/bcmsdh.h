@@ -245,13 +245,13 @@ extern void bcmsdh_device_remove(void *sdh);
 extern int bcmsdh_reg_sdio_notify(void *semaphore);
 extern void bcmsdh_unreg_sdio_notify(void);
 
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
 extern int bcmsdh_oob_intr_register(bcmsdh_info_t *bcmsdh,
                                     bcmsdh_cb_fn_t oob_irq_handler,
                                     void *oob_irq_handler_context);
 extern void bcmsdh_oob_intr_unregister(bcmsdh_info_t *sdh);
 extern void bcmsdh_oob_intr_set(bcmsdh_info_t *sdh, bool enable);
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 extern void bcmsdh_dev_pm_stay_awake(bcmsdh_info_t *sdh);
 extern void bcmsdh_dev_relax(bcmsdh_info_t *sdh);
 extern bool bcmsdh_dev_pm_enabled(bcmsdh_info_t *sdh);

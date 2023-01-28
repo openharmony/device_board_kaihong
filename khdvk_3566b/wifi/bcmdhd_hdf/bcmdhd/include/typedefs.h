@@ -98,10 +98,8 @@ typedef long unsigned int size_t;
  * know when it's per-port code because each file defines LINUX_PORT at the top.
  */
 #define TYPEDEF_UINT
-#ifndef TARGETENV_android
 #define TYPEDEF_USHORT
 #define TYPEDEF_ULONG
-#endif /* TARGETENV_android */
 #ifdef __KERNEL__
 #include <linux/version.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19))

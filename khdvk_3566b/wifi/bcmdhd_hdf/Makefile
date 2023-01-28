@@ -74,11 +74,11 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Wno-date-time -Dlinux -DBCMDRIVER  \
 #DHDOFILES = aiutils.o siutils.o sbutils.o bcmutils.o bcmwifi_channels.o   \
 	dhd_linux.o dhd_linux_platdev.o dhd_linux_sched.o dhd_pno.o           \
 	dhd_common.o dhd_ip.o dhd_linux_wq.o dhd_custom_gpio.o                \
-	bcmevent.o hndpmu.o linux_osl.o wldev_common.o wl_android.o           \
+	bcmevent.o hndpmu.o linux_osl.o wldev_common.o wl_ohos.o           \
 	dhd_debug_linux.o dhd_debug.o dhd_mschdbg.o dhd_dbg_ring.o            \
 	hnd_pktq.o hnd_pktpool.o bcmxtlv.o linux_pkt.o bcmstdlib_s.o frag.o   \
 	dhd_linux_exportfs.o dhd_linux_pktdump.o                              \
-	dhd_config.o dhd_ccode.o wl_event.o wl_android_ext.o wl_iapsta.o wl_escan.o  \
+	dhd_config.o dhd_ccode.o wl_event.o wl_ohos_ext.o wl_iapsta.o wl_escan.o  \
 	hdf/hdf_driver_bdh_register.o hdf/hdfinit_bdh.o \
 	hdf/net_bdh_adpater.o hdf/hdf_bdh_mac80211.o hdf/hdf_mac80211_sta.o \
 	hdf/hdf_mac80211_sta_event.o hdf/hdf_mac80211_ap.o hdf/hdf_mac80211_p2p.o \
@@ -88,11 +88,11 @@ DHDOFILES = bcmdhd/aiutils.o bcmdhd/siutils.o bcmdhd/sbutils.o bcmdhd/bcmutils.o
 	    bcmdhd/bcmwifi_channels.o bcmdhd/dhd_linux.o bcmdhd/dhd_linux_platdev.o \
 	    bcmdhd/dhd_linux_sched.o bcmdhd/dhd_pno.o bcmdhd/dhd_common.o bcmdhd/dhd_ip.o \
 	    bcmdhd/dhd_linux_wq.o bcmdhd/dhd_custom_gpio.o bcmdhd/bcmevent.o bcmdhd/hndpmu.o \
-	    bcmdhd/linux_osl.o bcmdhd/wldev_common.o bcmdhd/wl_android.o bcmdhd/dhd_debug_linux.o \
+	    bcmdhd/linux_osl.o bcmdhd/wldev_common.o bcmdhd/wl_ohos.o bcmdhd/dhd_debug_linux.o \
 	    bcmdhd/dhd_debug.o bcmdhd/dhd_mschdbg.o bcmdhd/dhd_dbg_ring.o bcmdhd/hnd_pktq.o \
 	    bcmdhd/hnd_pktpool.o bcmdhd/bcmxtlv.o bcmdhd/linux_pkt.o bcmdhd/bcmstdlib_s.o bcmdhd/frag.o \
 	    bcmdhd/dhd_linux_exportfs.o bcmdhd/dhd_linux_pktdump.o bcmdhd/dhd_config.o bcmdhd/dhd_ccode.o \
-	    bcmdhd/wl_event.o bcmdhd/wl_android_ext.o bcmdhd/wl_iapsta.o bcmdhd/wl_escan.o \
+	    bcmdhd/wl_event.o bcmdhd/wl_ohos_ext.o bcmdhd/wl_iapsta.o bcmdhd/wl_escan.o \
 	    hdf/hdf_driver_bdh_register.o hdf/hdfinit_bdh.o \
 	    hdf/net_bdh_adpater.o hdf/hdf_bdh_mac80211.o hdf/hdf_mac80211_sta.o \
 	    hdf/hdf_mac80211_sta_event.o hdf/hdf_mac80211_ap.o hdf/hdf_mac80211_p2p.o \

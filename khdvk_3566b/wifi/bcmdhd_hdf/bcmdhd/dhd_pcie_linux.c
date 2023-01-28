@@ -234,7 +234,7 @@ static int dhdpcie_smmu_init(struct pci_dev *pdev, void *smmu_cxt)
     struct device_node *root_node = NULL;
     dhdpcie_smmu_info_t *smmu_info = (dhdpcie_smmu_info_t *)smmu_cxt;
     int smmu_iova_address[2];
-    char *wlan_node = "android,bcmdhd_wlan";
+    char *wlan_node = "bcmdhd_wlan";
     char *wlan_smmu_node = "wlan-smmu-iova-address";
     int atomic_ctx = 1;
     int s1_bypass = 1;
@@ -820,7 +820,7 @@ static int dhdpcie_pm_system_resume_noirq(struct device *dev)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
 extern void dhd_dpc_tasklet_kill(dhd_pub_t *dhdp);
-#endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
 
 static void dhdpcie_suspend_dump_cfgregs(struct dhd_bus *bus,
                                          char *suspend_state)
@@ -847,16 +847,16 @@ static int dhdpcie_suspend_dev(struct pci_dev *dev)
         DHD_ERROR(("%s: PCIe link is down\n", __FUNCTION__));
         return BCME_ERROR;
     }
-#endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
     DHD_ERROR(("%s: Enter\n", __FUNCTION__));
     dhdpcie_suspend_dump_cfgregs(bus, "BEFORE_EP_SUSPEND");
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
     dhd_dpc_tasklet_kill(bus->dhd);
-#endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
     pci_save_state(dev);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
     pch->state = pci_store_saved_state(dev);
-#endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
     pci_enable_wake(dev, PCI_D0, TRUE);
     if (pci_is_enabled(dev)) {
         pci_disable_device(dev);
@@ -1380,7 +1380,7 @@ int dhdpcie_detach(dhdpcie_info_t *pch)
         if (!dhd_download_fw_on_driverload) {
             pci_load_and_free_saved_state(pch->dev, &pch->default_state);
         }
-#endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
         MFREE(pch->osh, pch, sizeof(dhdpcie_info_t));
     }
     return 0;
@@ -1936,7 +1936,7 @@ int dhdpcie_init(struct pci_dev *pdev)
 #endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
 
 #if defined(MULTIPLE_SUPPLICANT)
-        wl_android_post_init(); // terence 20120530: fix critical section in
+        wl_ohos_post_init(); // terence 20120530: fix critical section in
                                 // dhd_open and dhdsdio_probe
 #endif                          /* MULTIPLE_SUPPLICANT */
 

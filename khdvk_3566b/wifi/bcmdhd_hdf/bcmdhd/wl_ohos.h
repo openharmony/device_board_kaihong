@@ -1,5 +1,5 @@
 /*
- * Linux cfg80211 driver - Android related functions
+ * Linux cfg80211 driver - OpenHarmony OS related functions
  *
  * Copyright (C) 1999-2019, Broadcom.
  *
@@ -24,11 +24,11 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_android.h 794110 2018-12-12 05:03:21Z $
+ * $Id: wl_ohos.h 794110 2018-12-12 05:03:21Z $
  */
 
-#ifndef _wl_android_
-#define _wl_android_
+#ifndef _wl_ohos_
+#define _wl_ohos_
 
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -48,7 +48,7 @@
 #endif
 #include <wl_event.h>
 #endif
-#include <wl_android_ext.h>
+#include <wl_ohos_ext.h>
 
 /* If any feature uses the Generic Netlink Interface, put it here to enable
  * WL_GENL automatically
@@ -61,38 +61,38 @@
 #include <net/genetlink.h>
 #endif // endif
 
-typedef struct _android_wifi_priv_cmd {
+typedef struct _ohos_wifi_priv_cmd {
     char *buf;
     int used_len;
     int total_len;
-} android_wifi_priv_cmd;
+} ohos_wifi_priv_cmd;
 
 #ifdef CONFIG_COMPAT
-typedef struct _compat_android_wifi_priv_cmd {
+typedef struct _compat_ohos_wifi_priv_cmd {
     compat_caddr_t buf;
     int used_len;
     int total_len;
-} compat_android_wifi_priv_cmd;
+} compat_ohos_wifi_priv_cmd;
 #endif /* CONFIG_COMPAT */
 
 /**
- * Android platform dependent functions, feel free to add Android specific
+ * OHOS platform dependent functions, feel free to add OHOS specific
  * functions here (save the macros in dhd). Please do NOT declare functions that
- * are NOT exposed to dhd or cfg, define them as static in wl_android.c
+ * are NOT exposed to dhd or cfg, define them as static in wl_ohos.c
  */
 
 /* message levels */
-#define ANDROID_ERROR_LEVEL (1 << 0)
-#define ANDROID_TRACE_LEVEL (1 << 1)
-#define ANDROID_INFO_LEVEL (1 << 2)
-#define ANDROID_SCAN_LEVEL (1 << 3)
-#define ANDROID_DBG_LEVEL (1 << 4)
-#define ANDROID_TPUT_LEVEL (1 << 8)
-#define ANDROID_MSG_LEVEL (1 << 0)
+#define OHOS_ERROR_LEVEL (1 << 0)
+#define OHOS_TRACE_LEVEL (1 << 1)
+#define OHOS_INFO_LEVEL (1 << 2)
+#define OHOS_SCAN_LEVEL (1 << 3)
+#define OHOS_DBG_LEVEL (1 << 4)
+#define OHOS_TPUT_LEVEL (1 << 8)
+#define OHOS_MSG_LEVEL (1 << 0)
 
 #define WL_MSG(name, arg1, args...)                                            \
     do {                                                                       \
-        if (android_msg_level & ANDROID_MSG_LEVEL) {                           \
+        if (ohos_msg_level & OHOS_MSG_LEVEL) {                           \
             printk(KERN_ERR DHD_LOG_PREFIX "[%s] %s : " arg1, name, __func__,  \
                    ##args);                                                    \
         }                                                                      \
@@ -101,7 +101,7 @@ typedef struct _compat_android_wifi_priv_cmd {
 #define WL_MSG_PRINT_RATE_LIMIT_PERIOD 1000000000u /* 1s in units of ns */
 #define WL_MSG_RLMT(name, cmp, size, arg1, args...)                            \
     do {                                                                       \
-        if (android_msg_level & ANDROID_MSG_LEVEL) {                           \
+        if (ohos_msg_level & OHOS_MSG_LEVEL) {                           \
             static uint64 __err_ts = 0;                                        \
             static uint32 __err_cnt = 0;                                       \
             uint64 __cur_ts = 0;                                               \
@@ -125,16 +125,16 @@ typedef struct _compat_android_wifi_priv_cmd {
     (((uint)(ch) <= CH_MAX_2G_CHANNEL) ? WLC_BAND_2G : WLC_BAND_5G)
 
 /**
- * wl_android_init will be called from module init function (dhd_module_init
- * now), similarly wl_android_exit will be called from module exit function
+ * wl_ohos_init will be called from module init function (dhd_module_init
+ * now), similarly wl_ohos_exit will be called from module exit function
  * (dhd_module_cleanup now)
  */
-int wl_android_init(void);
-int wl_android_exit(void);
-void wl_android_post_init(void);
-int wl_android_wifi_on(struct net_device *dev);
-int wl_android_wifi_off(struct net_device *dev, bool on_failure);
-int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr);
+int wl_ohos_init(void);
+int wl_ohos_exit(void);
+void wl_ohos_post_init(void);
+int wl_ohos_wifi_on(struct net_device *dev);
+int wl_ohos_wifi_off(struct net_device *dev, bool on_failure);
+int wl_ohos_priv_cmd(struct net_device *net, struct ifreq *ifr);
 int wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len);
 
 #ifdef WL_GENL
@@ -196,15 +196,15 @@ s32 wl_netlink_send_msg(int pid, int type, int seq, const void *data,
  */
 #define MAX_NUM_MAC_FILT 10
 
-int wl_android_set_ap_mac_list(struct net_device *dev, int macmode,
+int wl_ohos_set_ap_mac_list(struct net_device *dev, int macmode,
                                struct maclist *maclist);
 #ifdef WL_BCNRECV
-extern int wl_android_bcnrecv_config(struct net_device *ndev, char *data,
+extern int wl_ohos_bcnrecv_config(struct net_device *ndev, char *data,
                                      int total_len);
-extern int wl_android_bcnrecv_stop(struct net_device *ndev, uint reason);
-extern int wl_android_bcnrecv_resume(struct net_device *ndev);
-extern int wl_android_bcnrecv_suspend(struct net_device *ndev);
-extern int wl_android_bcnrecv_event(struct net_device *ndev, uint attr_type,
+extern int wl_ohos_bcnrecv_stop(struct net_device *ndev, uint reason);
+extern int wl_ohos_bcnrecv_resume(struct net_device *ndev);
+extern int wl_ohos_bcnrecv_suspend(struct net_device *ndev);
+extern int wl_ohos_bcnrecv_event(struct net_device *ndev, uint attr_type,
                                     uint status, uint reason, uint8 *data,
                                     uint data_len);
 #endif /* WL_BCNRECV */
@@ -227,4 +227,4 @@ extern int wl_android_bcnrecv_event(struct net_device *ndev, uint attr_type,
 #define TSPEC_DEF_MIN_PHY_RATE 6000000
 #define TSPEC_DEF_DIALOG_TOKEN 7
 #endif /* WL_CAC_TS */
-#endif /* _wl_android_ */
+#endif /* _wl_ohos_ */

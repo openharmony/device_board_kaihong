@@ -511,10 +511,6 @@ const uint dhd_deferred_tx = 1;
 extern uint dhd_watchdog_ms;
 extern uint sd_f1_blocksize;
 
-#ifdef BCMSPI_ANDROID
-extern uint *dhd_spi_lockcount;
-#endif /* BCMSPI_ANDROID */
-
 extern void dhd_os_wd_timer(void *bus, uint wdtick);
 int dhd_enableOOB(dhd_pub_t *dhd, bool sleep);
 
@@ -2131,12 +2127,10 @@ int dhdsdio_func_blocksize(dhd_pub_t *dhd, int function_num, int block_size)
 }
 #endif /* USE_DYNAMIC_F2_BLKSIZE */
 
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) || defined(FORCE_WOWLAN)
+#if defined(OOB_INTR_ONLY) || defined(FORCE_WOWLAN)
 void dhd_enable_oob_intr(struct dhd_bus *bus, bool enable)
 {
-#if defined(BCMSPI_ANDROID)
-    bcmsdh_intr_enable(bus->sdh);
-#elif defined(HW_OOB) || defined(FORCE_WOWLAN)
+#if defined(HW_OOB) || defined(FORCE_WOWLAN)
     bcmsdh_enable_hw_oob_intr(bus->sdh, enable);
 #else
     sdpcmd_regs_t *regs = bus->regs;
@@ -2161,7 +2155,7 @@ void dhd_enable_oob_intr(struct dhd_bus *bus, bool enable)
     dhdsdio_clkctl(bus, CLK_SDONLY, FALSE);
 #endif /* !defined(HW_OOB) */
 }
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 
 int dhd_bus_txdata(struct dhd_bus *bus, void *pkt)
 {
@@ -4784,7 +4778,7 @@ static int dhdsdio_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi,
             dhd_os_sdlock(bus->dhd);
             break;
             /*
-             * softap firmware is updated through module parameter or android
+             * softap firmware is updated through module parameter or ohos
              * private command
              */
 
@@ -5645,9 +5639,7 @@ int dhd_bus_init(dhd_pub_t *dhdp, bool enforce_mutex)
         bus->intdis = FALSE;
         if (bus->intr) {
             DHD_INTR(("%s: enable SDIO device interrupts\n", __FUNCTION__));
-#ifndef BCMSPI_ANDROID
             bcmsdh_intr_enable(bus->sdh);
-#endif /* !BCMSPI_ANDROID */
         } else {
             DHD_INTR(("%s: disable SDIO interrupts\n", __FUNCTION__));
             bcmsdh_intr_disable(bus->sdh);
@@ -7505,11 +7497,6 @@ clkwait:
         bcmsdh_oob_intr_set(bus->sdh, TRUE);
 #endif /* defined(OOB_INTR_ONLY) */
         bcmsdh_intr_enable(sdh);
-#ifdef BCMSPI_ANDROID
-        if (*dhd_spi_lockcount == 0) {
-            bcmsdh_oob_intr_set(bus->sdh, TRUE);
-        }
-#endif /* BCMSPI_ANDROID */
     }
 
 #if defined(OOB_INTR_ONLY) && !defined(HW_OOB)
@@ -7735,9 +7722,6 @@ void dhdsdio_isr(void *arg)
         DHD_ERROR(("dhdsdio_isr() w/o interrupt configured!\n"));
     }
 
-#ifdef BCMSPI_ANDROID
-    bcmsdh_oob_intr_set(bus->sdh, FALSE);
-#endif /* BCMSPI_ANDROID */
     bcmsdh_intr_disable(sdh);
     bus->intdis = TRUE;
 
@@ -8163,7 +8147,7 @@ int dhd_bus_oob_intr_register(dhd_pub_t *dhdp)
 {
     int err = 0;
 
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
     err = bcmsdh_oob_intr_register(dhdp->bus->sdh, dhdsdio_isr, dhdp->bus);
 #endif // endif
     return err;
@@ -8171,14 +8155,14 @@ int dhd_bus_oob_intr_register(dhd_pub_t *dhdp)
 
 void dhd_bus_oob_intr_unregister(dhd_pub_t *dhdp)
 {
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
     bcmsdh_oob_intr_unregister(dhdp->bus->sdh);
 #endif // endif
 }
 
 void dhd_bus_oob_intr_set(dhd_pub_t *dhdp, bool enable)
 {
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
     bcmsdh_oob_intr_set(dhdp->bus->sdh, enable);
 #endif // endif
 }
@@ -8804,7 +8788,7 @@ static void *dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no,
 #endif /* BCMHOST_XTAL_PU_TIME_MOD */
 
 #if defined(MULTIPLE_SUPPLICANT)
-    wl_android_post_init(); // terence 20120530: fix critical section in
+    wl_ohos_post_init(); // terence 20120530: fix critical section in
                             // dhd_open and dhdsdio_probe
 #endif                      /* MULTIPLE_SUPPLICANT */
     DHD_MUTEX_UNLOCK();
@@ -9592,11 +9576,11 @@ static int dhdsdio_resume(void *context)
     DHD_BUS_BUSY_SET_RESUME_IN_PROGRESS(bus->dhd);
     DHD_LINUX_GENERAL_UNLOCK(bus->dhd, flags);
 
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
     if (dhd_os_check_if_up(bus->dhd)) {
         bcmsdh_oob_intr_set(bus->sdh, TRUE);
     }
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 
     DHD_LINUX_GENERAL_LOCK(bus->dhd, flags);
     DHD_BUS_BUSY_CLEAR_RESUME_IN_PROGRESS(bus->dhd);
@@ -10222,12 +10206,12 @@ int dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
             /* Expect app to have torn down any connection before calling */
             /* Stop the bus, disable F2 */
             dhd_bus_stop(bus, FALSE);
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
             /* Clean up any pending IRQ */
             dhd_enable_oob_intr(bus, FALSE);
             bcmsdh_oob_intr_set(bus->sdh, FALSE);
             bcmsdh_oob_intr_unregister(bus->sdh);
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 
             /* Clean tx/rx buffer pointers, detach from the dongle */
             dhdsdio_release_dongle(bus, bus->dhd->osh, TRUE, TRUE);
@@ -10276,13 +10260,13 @@ int dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
                     /* Re-init bus, enable F2 transfer */
                     bcmerror = dhd_bus_init((dhd_pub_t *)bus->dhd, FALSE);
                     if (bcmerror == BCME_OK) {
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
                         dhd_enable_oob_intr(bus, TRUE);
                         bcmsdh_oob_intr_register(bus->sdh, dhdsdio_isr, bus);
                         bcmsdh_oob_intr_set(bus->sdh, TRUE);
 #elif defined(FORCE_WOWLAN)
                         dhd_enable_oob_intr(bus, TRUE);
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 
                         bus->dhd->dongle_reset = FALSE;
                         bus->dhd->up = TRUE;
@@ -11107,10 +11091,10 @@ static int dhd_bus_ulp_reinit_fw(dhd_bus_t *bus)
             dhd_os_wd_timer(bus->dhd, dhd_watchdog_ms);
 
             dhd_ulp_set_ulp_state(bus->dhd, DHD_ULP_READY);
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
+#if defined(OOB_INTR_ONLY)
             dhd_enable_oob_intr(bus, TRUE);
             bcmsdh_oob_intr_set(bus->sdh, TRUE);
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 #ifdef DHD_DEBUG
             /* Re-enable the console messages on FW redownload to default value
              */

@@ -198,7 +198,7 @@ static u32 vendor_oui = CONFIG_DHD_SET_RANDOM_MAC_VAL;
 #include <dhd_wlfc.h>
 #endif // endif
 
-#include <wl_android.h>
+#include <wl_ohos.h>
 
 /* Maximum STA per radio */
 #define DHD_MAX_STA 32
@@ -238,9 +238,9 @@ volatile bool dhd_mmc_suspend = FALSE;
 DECLARE_WAIT_QUEUE_HEAD(dhd_dpc_wait);
 #endif /* defined(CONFIG_PM_SLEEP) */
 
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) || defined(FORCE_WOWLAN)
+#if defined(OOB_INTR_ONLY) || defined(FORCE_WOWLAN)
 extern void dhd_enable_oob_intr(struct dhd_bus *bus, bool enable);
-#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
+#endif /* defined(OOB_INTR_ONLY) */
 static void dhd_hang_process(struct work_struct *work_data);
 MODULE_LICENSE("GPL and additional rights");
 
@@ -302,7 +302,7 @@ extern wl_iw_extra_params_t g_wl_iw_params;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
 #include <linux/nl80211.h>
-#endif /* OEM_ANDROID && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)) */
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)) */
 
 #if defined(PKT_FILTER_SUPPORT) && defined(APF)
 static int __dhd_apf_add_filter(struct net_device *ndev, uint32 filter_id,
@@ -519,7 +519,7 @@ module_param(iw_msg_level, int, 0);
 #ifdef WL_CFG80211
 module_param(wl_dbg_level, int, 0);
 #endif
-module_param(android_msg_level, int, 0);
+module_param(ohos_msg_level, int, 0);
 module_param(config_msg_level, int, 0);
 
 #ifdef ARP_OFFLOAD_SUPPORT
@@ -1853,7 +1853,7 @@ void dhd_enable_packet_filter(int value, dhd_pub_t *dhd)
 #if defined(ARP_OFFLOAD_SUPPORT) && !defined(GAN_LITE_NAT_KEEPALIVE_FILTER)
             if (value && (i == DHD_ARP_FILTER_NUM) &&
                 !_turn_on_arp_filter(dhd, dhd->op_mode)) {
-                DHD_TRACE(("Do not turn on ARP white list pkt filter:"
+                DHD_TRACE(("Do not turn on ARP allow list pkt filter:"
                            "val %d, cnt %d, op_mode 0x%x\n",
                            value, i, dhd->op_mode));
                 continue;
@@ -1987,7 +1987,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #else
     int bcn_timeout = CUSTOM_BCN_TIMEOUT_SETTING;
 #endif /* CUSTOM_BCN_TIMEOUT_IN_SUSPEND && DHD_USE_EARLYSUSPEND */
-#endif /* OEM_ANDROID && BCMPCIE */
+#endif /* BCMPCIE */
 
     if (!dhd) {
         return -ENODEV;
@@ -2102,7 +2102,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
                           sizeof(bcn_li_dtim), NULL, 0, TRUE) < 0) {
                 DHD_ERROR(("%s: set dtim failed\n", __FUNCTION__));
             }
-#endif /* OEM_ANDROID && BCMPCIE */
+#endif /* BCMPCIE */
 #ifdef WL_CFG80211
             /* Disable cfg80211 feature events during suspend */
             ret = wl_cfg80211_config_suspend_events(
@@ -2149,7 +2149,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
             }
 #endif /* ENABLE_BCN_LI_BCN_WAKEUP */
 #if defined(WL_CFG80211) && defined(WL_BCNRECV)
-            ret = wl_android_bcnrecv_suspend(dhd_linux_get_primary_netdev(dhd));
+            ret = wl_ohos_bcnrecv_suspend(dhd_linux_get_primary_netdev(dhd));
             if (ret != BCME_OK) {
                 DHD_ERROR(("failed to stop beacon recv event on"
                            " suspend state (%d)\n",
@@ -2242,7 +2242,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
                              sizeof(power_mode), TRUE, 0);
 #endif /* SUPPORT_PM2_ONLY */
 #if defined(WL_CFG80211) && defined(WL_BCNRECV)
-            ret = wl_android_bcnrecv_resume(dhd_linux_get_primary_netdev(dhd));
+            ret = wl_ohos_bcnrecv_resume(dhd_linux_get_primary_netdev(dhd));
             if (ret != BCME_OK) {
                 DHD_ERROR(("failed to resume beacon recv state (%d)\n", ret));
             }
@@ -2298,7 +2298,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
             if (ret < 0) {
                 DHD_ERROR(("%s:bcn_li_ditm fail:%d\n", __FUNCTION__, ret));
             }
-#endif /* OEM_ANDROID && BCMPCIE */
+#endif /* BCMPCIE */
 #ifdef DHD_USE_EARLYSUSPEND
 #ifdef CUSTOM_BCN_TIMEOUT_IN_SUSPEND
             bcn_timeout = CUSTOM_BCN_TIMEOUT;
@@ -2995,7 +2995,6 @@ static void dhd_ifadd_event_handler(void *handle, void *event_info, u8 event)
         }
     }
 #else
-    /* This path is for non-android case */
     /* The interface name in host and in event msg are same */
     /* if name in event msg is used to create dongle if list on host */
     ndev = dhd_allocate_if(&dhd->pub, ifidx, if_event->name, if_event->mac,
@@ -6676,7 +6675,7 @@ static int dhd_ioctl_entry(struct net_device *net, struct ifreq *ifr,
     }
 
     if (cmd == SIOCDEVPRIVATE + 1) {
-        ret = wl_android_priv_cmd(net, ifr);
+        ret = wl_ohos_priv_cmd(net, ifr);
         dhd_check_hang(net, &dhd->pub, ret);
         DHD_PERIM_UNLOCK(&dhd->pub);
         DHD_OS_WAKE_UNLOCK(&dhd->pub);
@@ -7126,9 +7125,9 @@ exit:
         if (ifidx == 0 && !dhd_download_fw_on_driverload) {
 #if defined(BT_OVER_SDIO)
             dhd_bus_put(&dhd->pub, WLAN_MODULE);
-            wl_android_set_wifi_on_flag(FALSE);
+            wl_ohos_set_wifi_on_flag(FALSE);
 #else
-            wl_android_wifi_off(net, TRUE);
+            wl_ohos_wifi_off(net, TRUE);
 #ifdef WL_EXT_IAPSTA
             wl_ext_iapsta_dettach_netdev(net, ifidx);
 #endif /* WL_EXT_IAPSTA */
@@ -7186,7 +7185,7 @@ exit:
 #if defined(WL_CFG80211) &&                                                    \
     (defined(USE_INITIAL_2G_SCAN) || defined(USE_INITIAL_SHORT_DWELL_TIME))
 extern bool g_first_broadcast_scan;
-#endif /* OEM_ANDROID && WL_CFG80211 && (USE_INITIAL_2G_SCAN ||                \
+#endif /* WL_CFG80211 && (USE_INITIAL_2G_SCAN ||                \
           USE_INITIAL_SHORT_DWELL_TIME) */
 
 #ifdef WL11U
@@ -7343,12 +7342,12 @@ static int dhd_open(struct net_device *net)
 #endif /* SHOW_LOGTRACE */
 #if defined(BT_OVER_SDIO)
             ret = dhd_bus_get(&dhd->pub, WLAN_MODULE);
-            wl_android_set_wifi_on_flag(TRUE);
+            wl_ohos_set_wifi_on_flag(TRUE);
 #else
-            ret = wl_android_wifi_on(net);
+            ret = wl_ohos_wifi_on(net);
 #endif /* BT_OVER_SDIO */
             if (ret != 0) {
-                DHD_ERROR(("%s : wl_android_wifi_on failed (%d)\n",
+                DHD_ERROR(("%s : wl_ohos_wifi_on failed (%d)\n",
                            __FUNCTION__, ret));
                 ret = -1;
                 goto exit;
@@ -7446,7 +7445,7 @@ static int dhd_open(struct net_device *net)
 #endif // endif
 
         /* dhd_sync_with_dongle has been called in dhd_bus_start or
-         * wl_android_wifi_on */
+         * wl_ohos_wifi_on */
         memcpy(net->dev_addr, dhd->pub.mac.octet, ETHER_ADDR_LEN);
 
 #ifdef TOE
@@ -7527,11 +7526,11 @@ static int dhd_open(struct net_device *net)
 #if defined(ISAM_PREINIT)
         if (!dhd_download_fw_on_driverload) {
             if (dhd->pub.conf) {
-                wl_android_ext_priv_cmd(net, dhd->pub.conf->isam_init, 0,
+                wl_ohos_ext_priv_cmd(net, dhd->pub.conf->isam_init, 0,
                                         &bytes_written);
-                wl_android_ext_priv_cmd(net, dhd->pub.conf->isam_config, 0,
+                wl_ohos_ext_priv_cmd(net, dhd->pub.conf->isam_config, 0,
                                         &bytes_written);
-                wl_android_ext_priv_cmd(net, dhd->pub.conf->isam_enable, 0,
+                wl_ohos_ext_priv_cmd(net, dhd->pub.conf->isam_enable, 0,
                                         &bytes_written);
             }
         }
@@ -7769,7 +7768,7 @@ int dhd_do_driver_init(struct net_device *net)
     DHD_MUTEX_IS_LOCK_RETURN();
     DHD_MUTEX_LOCK();
 
-    /*  && defined(OEM_ANDROID) && defined(BCMSDIO) */
+    /*  && defined(BCMSDIO) */
     dhd = DHD_DEV_INFO(net);
     /* If driver is already initialized, do nothing
      */
@@ -9559,7 +9558,7 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
      *
      * The firmware_path/nvram_path module parameter may be changed by the
      * system at run time. When it changes we need to copy it to
-     * dhdinfo->fw_path. Also Android private command may change
+     * dhdinfo->fw_path. Also OHOS private command may change
      * dhdinfo->fw_path. As such we need to clear the path info in module
      * parameter after it is copied. We won't update the path until the module
      * parameter is changed again (first character is not '\0')
@@ -9743,7 +9742,7 @@ extern bool dhd_update_btfw_path(dhd_info_t *dhdinfo, char *btfw_path)
      *
      * The btfw_path module parameter may be changed by the system at run
      * time. When it changes we need to copy it to dhdinfo->btfw_path. Also
-     * Android private command may change dhdinfo->btfw_path. As such we need to
+     * OHOS private command may change dhdinfo->btfw_path. As such we need to
      * clear the path info in module parameter after it is copied. We won't
      * update the path until the module parameter is changed again (first
      * character is not '\0')
@@ -9920,7 +9919,7 @@ int dhd_bus_start(dhd_pub_t *dhdp)
 #ifdef DHD_ULP
     dhd_ulp_set_ulp_state(dhdp, DHD_ULP_DISABLED);
 #endif /* DHD_ULP */
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) ||                       \
+#if defined(OOB_INTR_ONLY) ||                        \
     defined(BCMPCIE_OOB_HOST_WAKE)
     /* Host registration for OOB interrupt */
     if (dhd_bus_oob_intr_register(dhdp)) {
@@ -9948,7 +9947,7 @@ int dhd_bus_start(dhd_pub_t *dhdp)
 #elif defined(FORCE_WOWLAN)
         /* Enable oob at firmware */
         dhd_enable_oob_intr(dhd->pub.bus, TRUE);
-#endif /* OOB_INTR_ONLY || BCMSPI_ANDROID || BCMPCIE_OOB_HOST_WAKE */
+#endif /* OOB_INTR_ONLY || BCMPCIE_OOB_HOST_WAKE */
 #ifdef PCIE_FULL_DONGLE
     {
         /* max_h2d_rings includes H2D common rings */
@@ -10257,10 +10256,10 @@ bool dhd_is_concurrent_mode(dhd_pub_t *dhd)
     }
 }
 #if !defined(AP) && defined(WLP2P)
-/* From Android JerryBean release, the concurrent mode is enabled by default and
- * the firmware name would be fw_bcmdhd.bin. So we need to determine whether P2P
- * is enabled in the STA firmware and accordingly enable concurrent mode (Apply
- * P2P settings). SoftAP firmware would still be named as fw_bcmdhd_apsta.
+/* The concurrent mode is enabled by default and the firmware name would
+ * be fw_bcmdhd.bin. So we need to determine whether P2P is enabled in
+ * the STA firmware and accordingly enable concurrent mode (Apply P2P
+ * settings). SoftAP firmware would still be named as fw_bcmdhd_apsta.
  */
 uint32 dhd_get_concurrent_capabilites(dhd_pub_t *dhd)
 {
@@ -12530,7 +12529,7 @@ int dhd_register_if(dhd_pub_t *dhdp, int ifidx, bool need_rtnl_lock)
          */
         memcpy(temp_addr, ifp->mac_addr, ETHER_ADDR_LEN);
         /*
-         * Android sets the locally administered bit to indicate that this is a
+         * OHOS sets the locally administered bit to indicate that this is a
          * portable hotspot.  This will not work in simultaneous AP/STA mode,
          * nor with P2P.  Need to set the Donlge's MAC address, and then use
          * that.
@@ -12662,7 +12661,7 @@ int dhd_register_if(dhd_pub_t *dhdp, int ifidx, bool need_rtnl_lock)
 #endif /* BT_OVER_SDIO */
         }
     }
-#endif /* OEM_ANDROID && (BCMPCIE || BCMLXSDMMC) */
+#endif /* (BCMPCIE || BCMLXSDMMC) */
     return 0;
 
 fail:
@@ -12682,7 +12681,7 @@ void dhd_bus_detach(dhd_pub_t *dhdp)
         dhd = (dhd_info_t *)dhdp->info;
         if (dhd) {
             /*
-             * In case of Android cfg80211 driver, the bus is down in dhd_stop,
+             * In case of OHOS cfg80211 driver, the bus is down in dhd_stop,
              *  calling stop again will cuase SD read/write errors.
              */
             if (dhd->pub.busstate != DHD_BUS_DOWN &&
@@ -12705,10 +12704,10 @@ void dhd_bus_detach(dhd_pub_t *dhdp)
 #endif /* BCMDBUS */
             }
 
-#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) ||                       \
+#if defined(OOB_INTR_ONLY) ||                       \
     defined(BCMPCIE_OOB_HOST_WAKE)
             dhd_bus_oob_intr_unregister(dhdp);
-#endif /* OOB_INTR_ONLY || BCMSPI_ANDROID || BCMPCIE_OOB_HOST_WAKE */
+#endif /* OOB_INTR_ONLY || BCMPCIE_OOB_HOST_WAKE */
         }
     }
 }
@@ -13256,7 +13255,7 @@ static void dhd_module_cleanup(void)
 
     dhd_bus_unregister();
 
-    wl_android_exit();
+    wl_ohos_exit();
 
     dhd_wifi_platform_unregister_drv();
     printf("%s: Exit\n", __FUNCTION__);
@@ -14422,18 +14421,11 @@ int dhd_dev_get_feature_set(struct net_device *dev)
     feature_set |= WIFI_FEATURE_LINKSTAT;
 #endif /* LINKSTAT_SUPPORT */
 
-#if defined(PNO_SUPPORT) && !defined(DISABLE_ANDROID_PNO)
+#if defined(PNO_SUPPORT)
     if (dhd_is_pno_supported(dhd)) {
         feature_set |= WIFI_FEATURE_PNO;
-#ifdef GSCAN_SUPPORT
-        /* terence 20171115: remove to get GTS PASS
-         * com.google.android.gts.wifi.WifiHostTest#testWifiScannerBatchTimestamp
-         */
-//		feature_set |= WIFI_FEATURE_GSCAN;
-//		feature_set |= WIFI_FEATURE_HAL_EPNO;
-#endif /* GSCAN_SUPPORT */
     }
-#endif /* PNO_SUPPORT && !DISABLE_ANDROID_PNO */
+#endif /* PNO_SUPPORT */
 #ifdef RSSI_MONITOR_SUPPORT
     if (FW_SUPPORTED(dhd, rssi_mon)) {
         feature_set |= WIFI_FEATURE_RSSI_MONITOR;
@@ -14454,8 +14446,8 @@ int dhd_dev_get_feature_set(struct net_device *dev)
     }
 #endif /* FILTER_IE */
 #ifdef ROAMEXP_SUPPORT
-    /* Check if the Android O roam feature is supported by FW */
-    if (!(BCME_UNSUPPORTED == dhd_dev_set_whitelist_ssid(dev, NULL, 0, true))) {
+    /* Check if the roam feature is supported by FW */
+    if (!(BCME_UNSUPPORTED == dhd_dev_set_allowlist_ssid(dev, NULL, 0, true))) {
         feature_set |= WIFI_FEATURE_CONTROL_ROAMING;
     }
 #endif /* ROAMEXP_SUPPORT */
@@ -15104,7 +15096,7 @@ int dhd_dev_set_lazy_roam_bssid_pref(struct net_device *dev,
 #endif /* GSCAN_SUPPORT */
 
 #if defined(GSCAN_SUPPORT) || defined(ROAMEXP_SUPPORT)
-int dhd_dev_set_blacklist_bssid(struct net_device *dev, maclist_t *blacklist,
+int dhd_dev_set_denylist_bssid(struct net_device *dev, maclist_t *denylist,
                                 uint32 len, uint32 flush)
 {
     int err;
@@ -15115,16 +15107,16 @@ int dhd_dev_set_blacklist_bssid(struct net_device *dev, maclist_t *blacklist,
 #endif
     int macmode;
 
-    if (blacklist) {
-        err = dhd_wl_ioctl_cmd(&(dhd->pub), WLC_SET_MACLIST, (char *)blacklist,
+    if (denylist) {
+        err = dhd_wl_ioctl_cmd(&(dhd->pub), WLC_SET_MACLIST, (char *)denylist,
                                len, TRUE, 0);
         if (err != BCME_OK) {
             DHD_ERROR(("%s : WLC_SET_MACLIST failed %d\n", __FUNCTION__, err));
             return err;
         }
     }
-    /* By default programming blacklist flushes out old values */
-    macmode = (flush && !blacklist) ? WLC_MACMODE_DISABLED : WLC_MACMODE_DENY;
+    /* By default programming denylist flushes out old values */
+    macmode = (flush && !denylist) ? WLC_MACMODE_DISABLED : WLC_MACMODE_DENY;
     err = dhd_wl_ioctl_cmd(&(dhd->pub), WLC_SET_MACMODE, (char *)&macmode,
                            sizeof(macmode), TRUE, 0);
     if (err != BCME_OK) {
@@ -15133,8 +15125,8 @@ int dhd_dev_set_blacklist_bssid(struct net_device *dev, maclist_t *blacklist,
     return err;
 }
 
-int dhd_dev_set_whitelist_ssid(struct net_device *dev,
-                               wl_ssid_whitelist_t *ssid_whitelist, uint32 len,
+int dhd_dev_set_allowlist_ssid(struct net_device *dev,
+                               wl_ssid_allowlist_t *ssid_allowlist, uint32 len,
                                uint32 flush)
 {
     int err;
@@ -15143,21 +15135,21 @@ int dhd_dev_set_whitelist_ssid(struct net_device *dev,
 #else
     dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
 #endif
-    wl_ssid_whitelist_t whitelist_ssid_flush;
+    wl_ssid_allowlist_t allowlist_ssid_flush;
 
-    if (!ssid_whitelist) {
+    if (!ssid_allowlist) {
         if (flush) {
-            ssid_whitelist = &whitelist_ssid_flush;
-            ssid_whitelist->ssid_count = 0;
+            ssid_allowlist = &allowlist_ssid_flush;
+            ssid_allowlist->ssid_count = 0;
         } else {
             DHD_ERROR(("%s : Nothing to do here\n", __FUNCTION__));
             return BCME_BADARG;
         }
     }
-    ssid_whitelist->version = SSID_WHITELIST_VERSION;
-    ssid_whitelist->flags = flush ? ROAM_EXP_CLEAR_SSID_WHITELIST : 0;
-    err = dhd_iovar(&dhd->pub, 0, "roam_exp_ssid_whitelist",
-                    (char *)ssid_whitelist, len, NULL, 0, TRUE);
+    ssid_allowlist->version = SSID_ALLOWLIST_VERSION;
+    ssid_allowlist->flags = flush ? ROAM_EXP_CLEAR_SSID_ALLOWLIST : 0;
+    err = dhd_iovar(&dhd->pub, 0, "roam_exp_ssid_allowlist",
+                    (char *)ssid_allowlist, len, NULL, 0, TRUE);
     if (err != BCME_OK) {
         DHD_ERROR(("%s : Failed to execute roam_exp_bssid_pref %d\n",
                    __FUNCTION__, err));
@@ -15772,7 +15764,7 @@ int dhd_dev_apf_get_version(struct net_device *ndev, uint32 *version)
         DHD_ERROR(("%s: firmware doesn't support APF\n", __FUNCTION__));
 
         /*
-         * Notify Android framework that APF is not supported by setting
+         * Notify framework that APF is not supported by setting
          * version as zero.
          */
         *version = 0;
@@ -19446,10 +19438,10 @@ static int do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type)
 
     fp = filp_open(dump_path, file_mode, 0664);
     if (IS_ERR(fp)) {
-        /* If android installed image, try '/data' directory */
+        /* If ohos installed image, try '/data' directory */
 #if defined(CONFIG_X86)
         DHD_ERROR((
-            "%s: File open error on Installed android image, trying /data...\n",
+            "%s: File open error on Installed ohos image, trying /data...\n",
             __FUNCTION__));
         snprintf(dump_path, sizeof(dump_path), "/data/" DHD_DEBUG_DUMP_TYPE);
         if (!dhdp->logdump_periodic_flush) {
@@ -19468,7 +19460,7 @@ static int do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type)
             ret = PTR_ERR(fp);
             DHD_ERROR(("open file error, err = %d\n", ret));
             goto exit2;
-#endif /* CONFIG_X86 && OEM_ANDROID */
+#endif /* CONFIG_X86 */
     }
 
     ret = vfs_stat(dump_path, &stat);
@@ -23039,7 +23031,7 @@ void dhd_schedule_cto_recovery(dhd_pub_t *dhdp)
 #ifdef SUPPORT_SET_TID
 /*
  * Set custom TID value for UDP frame based on UID value.
- * This will be triggered by android private command below.
+ * This will be triggered by ohos private command below.
  * DRIVER SET_TID <Mode:uint8> <Target UID:uint32> <Custom TID:uint8>
  * Mode 0(SET_TID_OFF) : Disable changing TID
  * Mode 1(SET_TID_ALL_UDP) : Change TID for all UDP frames

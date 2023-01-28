@@ -162,8 +162,7 @@ extern void dhd_log_dump_write(int type, char *binary_data, int binary_len,
 
 /* Re-using 'DHD_MSGTRACE_VAL' for controlling printing of ecounter binary event
  * logs to console and debug dump -- need to cleanup in the future to use
- * separate 'DHD_ECNTR_VAL' bitmap flag. 'DHD_MSGTRACE_VAL' will be defined only
- * for non-android builds.
+ * separate 'DHD_ECNTR_VAL' bitmap flag.
  */
 #define DHD_ECNTR_LOG(args)                                                    \
     do {                                                                       \

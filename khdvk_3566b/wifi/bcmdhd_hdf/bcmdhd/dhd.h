@@ -872,7 +872,7 @@ struct dhd_logtrace_thr_ts {
 };
 #endif /* SHOW_LOGTRACE && DHD_USE_KTHREAD_FOR_LOGTRACE */
 
-/* Enable Reserve STA flowrings only for Android */
+/* Enable Reserve STA flowrings */
 #define DHD_LIMIT_MULTI_CLIENT_FLOWRINGS
 
 typedef enum dhd_induce_error_states {
@@ -1033,7 +1033,7 @@ typedef struct dhd_pub {
     char eventmask[WL_EVENTING_MASK_LEN];
     int op_mode; /* STA, HostAPD, WFD, SoftAP */
 
-    struct mutex wl_start_stop_lock; /* lock/unlock for Android start/stop */
+    struct mutex wl_start_stop_lock; /* lock/unlock for start/stop */
     struct mutex wl_softap_lock; /* lock/unlock for any SoftAP/STA settings */
 
 #ifdef PROP_TXSTATUS
@@ -1570,7 +1570,7 @@ int dhd_pno_clean(dhd_pub_t *dhd);
 #endif /* PNO_SUPPORT */
 
 /*
- *  Wake locks are an Android power management concept. They are used by
+ *  Wake locks are a power management concept. They are used by
  * applications and services to request CPU resources.
  */
 extern int dhd_os_wake_lock(dhd_pub_t *pub);
@@ -1781,7 +1781,7 @@ void dhd_net_if_lock(struct net_device *dev);
 void dhd_net_if_unlock(struct net_device *dev);
 
 #if defined(MULTIPLE_SUPPLICANT)
-extern void wl_android_post_init(void); // terence 20120530: fix critical
+extern void wl_ohos_post_init(void); // terence 20120530: fix critical
                                         // section in dhd_open and dhdsdio_probe
 #endif
 
@@ -1946,7 +1946,7 @@ extern void dhd_bus_wakeup_work(dhd_pub_t *dhdp);
 #define WIFI_FEATURE_HOTSPOT 0x0004    /* Support for GAS/ANQP             */
 #define WIFI_FEATURE_P2P 0x0008        /* Wifi-Direct                      */
 #define WIFI_FEATURE_SOFT_AP 0x0010    /* Soft AP                          */
-#define WIFI_FEATURE_GSCAN 0x0020      /* Google-Scan APIs                 */
+#define WIFI_FEATURE_GSCAN 0x0020      /* Gscan APIs                       */
 #define WIFI_FEATURE_NAN 0x0040        /* Neighbor Awareness Networking    */
 #define WIFI_FEATURE_D2D_RTT 0x0080    /* Device-to-device RTT             */
 #define WIFI_FEATURE_D2AP_RTT 0x0100   /* Device-to-AP RTT                 */
@@ -2000,11 +2000,11 @@ extern int dhd_dev_set_lazy_roam_bssid_pref(struct net_device *dev,
                                             uint32 flush);
 #endif /* GSCAN_SUPPORT */
 #if defined(GSCAN_SUPPORT) || defined(ROAMEXP_SUPPORT)
-extern int dhd_dev_set_blacklist_bssid(struct net_device *dev,
-                                       maclist_t *blacklist, uint32 len,
+extern int dhd_dev_set_denylist_bssid(struct net_device *dev,
+                                       maclist_t *denylist, uint32 len,
                                        uint32 flush);
-extern int dhd_dev_set_whitelist_ssid(struct net_device *dev,
-                                      wl_ssid_whitelist_t *whitelist,
+extern int dhd_dev_set_allowlist_ssid(struct net_device *dev,
+                                      wl_ssid_allowlist_t *allowlist,
                                       uint32 len, uint32 flush);
 #endif /* GSCAN_SUPPORT || ROAMEXP_SUPPORT */
 
@@ -2160,7 +2160,7 @@ extern int dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd, int *dtim_period,
                                        int *bcn_interval);
 #else
 extern int dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd);
-#endif /* OEM_ANDROID && BCMPCIE */
+#endif /* BCMPCIE */
 
 extern bool dhd_support_sta_mode(dhd_pub_t *dhd);
 extern int write_to_file(dhd_pub_t *dhd, uint8 *buf, int size);
@@ -2218,7 +2218,7 @@ extern int dhd_dev_stop_mkeep_alive(dhd_pub_t *dhd_pub, uint8 mkeep_alive_id);
 
 #if defined(PKT_FILTER_SUPPORT) && defined(APF)
 /*
- * As per Google's current implementation, there will be only one APF filter.
+ * As current implementation, there will be only one APF filter.
  * Therefore, userspace doesn't bother about filter id and because of that
  * DHD has to manage the filter id.
  */
@@ -2428,7 +2428,7 @@ extern bool dhd_os_wd_timer_enabled(void *bus);
 /** Default console output poll interval */
 extern uint dhd_console_ms;
 
-extern uint android_msg_level;
+extern uint ohos_msg_level;
 extern uint config_msg_level;
 extern uint sd_msglevel;
 extern uint dump_msg_level;
@@ -2655,49 +2655,14 @@ extern uint dhd_pktgen_len;
 extern char fw_path2[MOD_PARAM_PATHLEN];
 #endif // endif
 
-#if defined(ANDROID_PLATFORM_VERSION)
-#if (ANDROID_PLATFORM_VERSION < 7)
-#define DHD_LEGACY_FILE_PATH
-#define VENDOR_PATH "/system"
-#elif (ANDROID_PLATFORM_VERSION == 7)
-#define VENDOR_PATH "/system"
-#elif (ANDROID_PLATFORM_VERSION >= 8)
-#define VENDOR_PATH "/vendor"
-#endif /* ANDROID_PLATFORM_VERSION < 7 */
-#else
 #define VENDOR_PATH ""
-#endif /* ANDROID_PLATFORM_VERSION */
-
-#if defined(ANDROID_PLATFORM_VERSION)
-#if (ANDROID_PLATFORM_VERSION < 9)
-#ifdef WL_STATIC_IF
-#undef WL_STATIC_IF
-#endif /* WL_STATIC_IF */
-#ifdef WL_STATIC_IFNAME_PREFIX
-#undef WL_STATIC_IFNAME_PREFIX
-#endif /* WL_STATIC_IFNAME_PREFIX */
-#endif /* ANDROID_PLATFORM_VERSION < 9 */
-#endif /* ANDROID_PLATFORM_VERSION */
 
 #if defined(DHD_LEGACY_FILE_PATH)
 #define PLATFORM_PATH "/data/"
 #elif defined(PLATFORM_SLP)
 #define PLATFORM_PATH "/opt/etc/"
 #else
-#if defined(ANDROID_PLATFORM_VERSION)
-#if (ANDROID_PLATFORM_VERSION >= 9)
-#define PLATFORM_PATH "/data/vendor/conn/"
-#define DHD_MAC_ADDR_EXPORT
-#define DHD_ADPS_BAM_EXPORT
-#define DHD_EXPORT_CNTL_FILE
-#define DHD_SOFTAP_DUAL_IF_INFO
-#define DHD_SEND_HANG_PRIVCMD_ERRORS
-#else
 #define PLATFORM_PATH "/data/misc/conn/"
-#endif /* ANDROID_PLATFORM_VERSION >= 9 */
-#else
-#define PLATFORM_PATH "/data/misc/conn/"
-#endif /* ANDROID_PLATFORM_VERSION */
 #endif /* DHD_LEGACY_FILE_PATH */
 
 #ifdef DHD_MAC_ADDR_EXPORT

@@ -1195,21 +1195,21 @@ typedef struct wl_bssid_pref_cfg {
     wl_bssid_pref_list_t bssids[];
 } wl_bssid_pref_cfg_t;
 
-#define SSID_WHITELIST_VERSION 1
+#define SSID_ALLOWLIST_VERSION 1
 
-#define ROAM_EXP_CLEAR_SSID_WHITELIST (1 << 0)
+#define ROAM_EXP_CLEAR_SSID_ALLOWLIST (1 << 0)
 
-/* Roam SSID whitelist, ssids in this list are ok to  */
+/* Roam SSID allowlist, ssids in this list are ok to  */
 /* be considered as targets to join when considering a roam */
 
-typedef struct wl_ssid_whitelist {
+typedef struct wl_ssid_allowlist {
     uint16 version;
     uint16 flags;
 
     uint8 ssid_count;
     uint8 reserved[3];
     wlc_ssid_t ssids[];
-} wl_ssid_whitelist_t;
+} wl_ssid_allowlist_t;
 
 #define ROAM_EXP_EVENT_VERSION 1
 
@@ -6151,7 +6151,7 @@ enum { OFF_ADAPT, SMART_ADAPT, STRICT_ADAPT, SLOW_ADAPT };
 #define PFN_HOTLIST_MAX_NUM_APS 64
 
 #define MAX_EPNO_HIDDEN_SSID 8
-#define MAX_WHITELIST_SSID 2
+#define MAX_ALLOWLIST_SSID 2
 
 /* Version 1 and 2 for various scan results structures defined below */
 #define PFN_SCANRESULTS_VERSION_V1 1
@@ -7061,7 +7061,7 @@ typedef enum wl_pkt_filter_type {
         2, /**< A pattern list (match all to match filter) */
     WL_PKT_FILTER_TYPE_ENCRYPTED_PATTERN_MATCH =
         3, /**< SECURE WOWL magic / net pattern match */
-    WL_PKT_FILTER_TYPE_APF_MATCH = 4, /* Android packet filter match */
+    WL_PKT_FILTER_TYPE_APF_MATCH = 4, /* packet filter match */
     WL_PKT_FILTER_TYPE_PATTERN_MATCH_TIMEOUT =
         5, /* Pattern matching filter with timeout event */
     WL_PKT_FILTER_TYPE_IMMEDIATE_PATTERN_MATCH =
@@ -9959,7 +9959,7 @@ typedef struct wl_pm2_sleep_ret_ext {
 #define WL_RMC_CNT_VERSION 1
 #define WL_RMC_TR_VERSION 1
 #define WL_RMC_MAX_CLIENT 32
-#define WL_RMC_FLAG_INBLACKLIST 1
+#define WL_RMC_FLAG_INDENYLIST 1
 #define WL_RMC_FLAG_ACTIVEACKER 2
 #define WL_RMC_FLAG_RELMCAST 4
 #define WL_RMC_MAX_TABLE_ENTRY 4
@@ -9994,7 +9994,7 @@ enum rmc_modes {
 
 /** Each RMC mcast client info */
 typedef struct wl_relmcast_client {
-    uint8 flag; /**< status of client such as AR, R, or blacklisted */
+    uint8 flag; /**< status of client such as AR, R, or denylisted */
     uint8 PAD;
     int16 rssi;             /**< rssi value of RMC client */
     struct ether_addr addr; /**< mac address of RMC client */
@@ -17902,21 +17902,21 @@ enum wl_idauth_xtlv_id {
     WL_IDAUTH_XTLV_GTK_ROTATION = 0x2,
     WL_IDAUTH_XTLV_EAPOL_COUNT = 0x3,
     WL_IDAUTH_XTLV_EAPOL_INTRVL = 0x4,
-    WL_IDAUTH_XTLV_BLKLIST_COUNT = 0x5,
-    WL_IDAUTH_XTLV_BLKLIST_AGE = 0x6,
+    WL_IDAUTH_XTLV_DENYLIST_COUNT = 0x5,
+    WL_IDAUTH_XTLV_DENYLIST_AGE = 0x6,
     WL_IDAUTH_XTLV_PEERS_INFO = 0x7,
     WL_IDAUTH_XTLV_COUNTERS = 0x8
 };
 enum wl_idauth_stats {
     WL_AUTH_PEER_STATE_AUTHORISED = 0x01,
-    WL_AUTH_PEER_STATE_BLACKLISTED = 0x02,
+    WL_AUTH_PEER_STATE_DENYLISTED = 0x02,
     WL_AUTH_PEER_STATE_4WAY_HS_ONGOING = 0x03,
     WL_AUTH_PEER_STATE_LAST
 };
 typedef struct {
-    uint16 state;                /* Peer State: Authorised or Blacklisted */
+    uint16 state;                /* Peer State: Authorised or Denylisted */
     struct ether_addr peer_addr; /* peer Address */
-    uint32 blklist_end_time;     /* Time of blacklist end */
+    uint32 denylist_end_time;     /* Time of denylist end */
 } auth_peer_t;
 typedef struct wl_idauth_counters {
     uint32 auth_reqs;        /* No of auth req recvd */
@@ -19247,7 +19247,7 @@ typedef struct wl_tdls_dump_summary_v1 {
     uint32 uptime;               /* time since  tdls link connected */
     uint32 tx_cnt;               /* frames txed over tdls link */
     uint32 rx_cnt;               /* frames rcvd over tdls link */
-    uint32 blist_cnt;            /* number of tdls black list */
+    uint32 denylist_cnt;         /* number of tdls deny list */
     uint32 scb_flags;            /* connected tdls scb flags */
     struct ether_addr peer_addr; /* connected peer addr */
     uint8 padding[2];

@@ -3,34 +3,34 @@
 #include <bcmendian.h>
 #include <linux/if_arp.h>
 #include <asm/uaccess.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <wl_escan.h>
 #include <dhd_config.h>
 
 #define ESCAN_ERROR(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_ERROR_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_ERROR_LEVEL) {                         \
             printk(KERN_ERR DHD_LOG_PREFIX "[%s] ESCAN-ERROR) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define ESCAN_TRACE(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_TRACE_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_TRACE_LEVEL) {                         \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] ESCAN-TRACE) %s : " arg1,    \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define ESCAN_SCAN(name, arg1, args...)                                        \
     do {                                                                       \
-        if (android_msg_level & ANDROID_SCAN_LEVEL) {                          \
+        if (ohos_msg_level & OHOS_SCAN_LEVEL) {                          \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] ESCAN-SCAN) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define ESCAN_DBG(name, arg1, args...)                                         \
     do {                                                                       \
-        if (android_msg_level & ANDROID_DBG_LEVEL) {                           \
+        if (ohos_msg_level & OHOS_DBG_LEVEL) {                           \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] ESCAN-DBG) %s : " arg1,      \
                    name, __func__, ##args);                                    \
         }                                                                      \
@@ -227,8 +227,7 @@ static void wl_escan_dump_bss(struct net_device *dev,
         rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
     }
 #else
-    // terence 20150419: limit the max. rssi to -2 or the bss will be filtered
-    // out in android OS
+    // terence 20150419: limit the max. rssi to -2 or the bss will be filtered out
     rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
 #endif
     chanspec = wl_chspec_driver_to_host(escan->ioctl_ver, bi->chanspec);
@@ -1083,8 +1082,7 @@ static int wl_escan_merge_scan_results(struct net_device *dev,
         rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
     }
 #else
-    // terence 20150419: limit the max. rssi to -2 or the bss will be filtered
-    // out in android OS
+    // terence 20150419: limit the max. rssi to -2 or the bss will be filtered out
     rssi = MIN(dtoh16(bi->RSSI), RSSI_MAXVAL);
 #endif
     chanspec = wl_chspec_driver_to_host(escan->ioctl_ver, bi->chanspec);

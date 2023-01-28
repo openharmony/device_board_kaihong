@@ -37,7 +37,7 @@
 
 #include <wl_cfg80211.h>
 #include <wl_cfgscan.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <wl_cfgnan.h>
 
 #include <dngl_stats.h>
@@ -878,7 +878,7 @@ int wl_cfgnan_config_eventmask(struct net_device *ndev,
         setbit(event_mask, NAN_EVENT_MAP(WL_NAN_EVENT_STOP));
     } else {
         /*
-         * Android framework event mask configuration.
+         * Event mask configuration.
          */
         nan_buf->is_set = false;
         memset(resp_buf, 0, sizeof(resp_buf));
@@ -2696,10 +2696,10 @@ static void wl_cfgnan_send_stop_event(struct bcm_cfg80211 *cfg)
     defined(WL_VENDOR_EXT_SUPPORT)
     ret =
         wl_cfgvendor_send_nan_event(cfg->wdev->wiphy, bcmcfg_to_prmry_ndev(cfg),
-                                    GOOGLE_NAN_EVENT_DISABLED, nan_event_data);
+                                    OHOS_NAN_EVENT_DISABLED, nan_event_data);
     if (ret != BCME_OK) {
         WL_ERR(("Failed to send event to nan hal, (%d)\n",
-                GOOGLE_NAN_EVENT_DISABLED));
+                OHOS_NAN_EVENT_DISABLED));
     }
 #endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) ||                   \
           defined(WL_VENDOR_EXT_SUPPORT) */
@@ -6663,7 +6663,7 @@ static s32 wl_nan_dp_cmn_event_data(struct bcm_cfg80211 *cfg, void *event_data,
                        OFFSETOF(bcm_xtlv_t, data);
         *nan_opts_len = data_len - *tlvs_offset;
         if (event_num == WL_NAN_EVENT_PEER_DATAPATH_IND) {
-            *hal_event_id = GOOGLE_NAN_EVENT_DATA_REQUEST;
+            *hal_event_id = OHOS_NAN_EVENT_DATA_REQUEST;
 #ifdef WL_NAN_DISC_CACHE
             svc_info = wl_cfgnan_get_svc_inst(cfg, nan_event_data->pub_id, 0);
             if (svc_info) {
@@ -6692,7 +6692,7 @@ static s32 wl_nan_dp_cmn_event_data(struct bcm_cfg80211 *cfg, void *event_data,
             }
 #endif /* WL_NAN_DISC_CACHE */
         } else if (event_num == WL_NAN_EVENT_DATAPATH_ESTB) {
-            *hal_event_id = GOOGLE_NAN_EVENT_DATA_CONFIRMATION;
+            *hal_event_id = OHOS_NAN_EVENT_DATA_CONFIRMATION;
             if (ev_dp->role == NAN_DP_ROLE_INITIATOR) {
                 ret = memcpy_s(&nan_event_data->responder_ndi, ETHER_ADDR_LEN,
                                &ev_dp->responder_ndi, ETHER_ADDR_LEN);
@@ -6739,7 +6739,7 @@ static s32 wl_nan_dp_cmn_event_data(struct bcm_cfg80211 *cfg, void *event_data,
             WL_TRACE(("Responder status %d\n", nan_event_data->status));
         } else if (event_num == WL_NAN_EVENT_DATAPATH_END) {
             /* Mapping to common struct between DHD and HAL */
-            *hal_event_id = GOOGLE_NAN_EVENT_DATA_END;
+            *hal_event_id = OHOS_NAN_EVENT_DATA_END;
 #ifdef WL_NAN_DISC_CACHE
             if (ev_dp->role != NAN_DP_ROLE_INITIATOR) {
                 /* Only at Responder side,
@@ -6871,7 +6871,7 @@ static int wl_cfgnan_event_disc_result(struct bcm_cfg80211 *cfg,
     defined(WL_VENDOR_EXT_SUPPORT)
     ret = wl_cfgvendor_send_nan_event(
         cfg->wdev->wiphy, bcmcfg_to_prmry_ndev(cfg),
-        GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH, nan_event_data);
+        OHOS_NAN_EVENT_SUBSCRIBE_MATCH, nan_event_data);
     if (ret != BCME_OK) {
         WL_ERR(("Failed to send event to nan hal\n"));
     }
@@ -7359,7 +7359,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
                 OSL_SMP_WMB();
                 wake_up(&cfg->nancfg.nan_event_wait);
             }
-            hal_event_id = GOOGLE_NAN_EVENT_DE_EVENT;
+            hal_event_id = OHOS_NAN_EVENT_DE_EVENT;
             break;
         }
         case WL_NAN_EVENT_TERMINATED: {
@@ -7402,9 +7402,9 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
             }
 
             if (pev->svctype == NAN_SC_SUBSCRIBE) {
-                hal_event_id = GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED;
+                hal_event_id = OHOS_NAN_EVENT_SUBSCRIBE_TERMINATED;
             } else {
-                hal_event_id = GOOGLE_NAN_EVENT_PUBLISH_TERMINATED;
+                hal_event_id = OHOS_NAN_EVENT_PUBLISH_TERMINATED;
             }
 #ifdef WL_NAN_DISC_CACHE
             if (pev->reason != NAN_TERM_REASON_USER_REQ) {
@@ -7419,7 +7419,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 
         case WL_NAN_EVENT_RECEIVE: {
             nan_opts_len = data_len;
-            hal_event_id = GOOGLE_NAN_EVENT_FOLLOWUP;
+            hal_event_id = OHOS_NAN_EVENT_FOLLOWUP;
             xtlv_opt = BCM_IOV_CMD_OPT_ALIGN_NONE;
             break;
         }
@@ -7459,7 +7459,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
             nan_event_data->reason = txs->reason_code;
             nan_event_data->token = txs->host_seq;
             if (txs->type == WL_NAN_FRM_TYPE_FOLLOWUP) {
-                hal_event_id = GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND;
+                hal_event_id = OHOS_NAN_EVENT_TRANSMIT_FOLLOWUP_IND;
                 xtlv = (bcm_xtlv_t *)(txs->opt_tlvs);
                 if (txs->opt_tlvs_len && xtlv->id == WL_NAN_XTLV_SD_TXS) {
                     txs_sd = (wl_nan_event_sd_txs_t *)xtlv->data;
@@ -7479,7 +7479,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 
         case WL_NAN_EVENT_DISCOVERY_RESULT: {
             nan_opts_len = data_len;
-            hal_event_id = GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH;
+            hal_event_id = OHOS_NAN_EVENT_SUBSCRIBE_MATCH;
             xtlv_opt = BCM_IOV_CMD_OPT_ALIGN_NONE;
             break;
         }
@@ -7628,7 +7628,7 @@ s32 wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
     }
 
 #ifdef WL_NAN_DISC_CACHE
-    if (hal_event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH) {
+    if (hal_event_id == OHOS_NAN_EVENT_SUBSCRIBE_MATCH) {
 #ifdef RTT_SUPPORT
         u8 rtt_invalid_reason = RTT_STATE_VALID;
         bool role_concur_state = 0;
