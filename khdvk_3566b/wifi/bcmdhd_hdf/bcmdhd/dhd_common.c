@@ -62,14 +62,14 @@
 #include <dhd_mschdbg.h>
 #include <msgtrace.h>
 #include <dhd_config.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 
 #ifdef WL_CFG80211
 #include <wl_cfg80211.h>
 #endif // endif
 #if defined(PNO_SUPPORT)
 #include <dhd_pno.h>
-#endif /* OEM_ANDROID && PNO_SUPPORT */
+#endif /* PNO_SUPPORT */
 #ifdef RTT_SUPPORT
 #include <dhd_rtt.h>
 #endif // endif
@@ -1579,7 +1579,7 @@ static int dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi,
             break;
 
         case IOV_GVAL(IOV_WLMSGLEVEL):
-            printf("android_msg_level=0x%x\n", android_msg_level);
+            printf("ohos_msg_level=0x%x\n", ohos_msg_level);
             printf("config_msg_level=0x%x\n", config_msg_level);
 #if defined(WL_WIRELESS_EXT)
             int_val = (int32)iw_msg_level;
@@ -1594,9 +1594,9 @@ static int dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi,
             break;
 
         case IOV_SVAL(IOV_WLMSGLEVEL):
-            if (int_val & DHD_ANDROID_VAL) {
-                android_msg_level = (uint)(int_val & 0xFFFF);
-                printf("android_msg_level=0x%x\n", android_msg_level);
+            if (int_val & DHD_OHOS_VAL) {
+                ohos_msg_level = (uint)(int_val & 0xFFFF);
+                printf("ohos_msg_level=0x%x\n", ohos_msg_level);
             }
             if (int_val & DHD_CONFIG_VAL) {
                 config_msg_level = (uint)(int_val & 0xFFFF);
@@ -3497,7 +3497,7 @@ void dngl_host_event_process(dhd_pub_t *dhdp, bcm_dngl_event_t *event,
 #endif /* DNGL_EVENT_SUPPORT */
 
 /* Stub for now. Will become real function as soon as shim
- * is being integrated to Android, Linux etc.
+ * is being integrated to Linux.
  */
 int wl_event_process_default(wl_event_msg_t *event,
                              struct wl_evt_pport *evt_pport)
@@ -5256,7 +5256,7 @@ int dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd, int *dtim_period,
 
     return bcn_li_dtim;
 }
-#else  /* OEM_ANDROID && BCMPCIE */
+#else  /* BCMPCIE */
 int dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
 {
     int bcn_li_dtim = 1; /* deafult no dtim skip setting */
@@ -5340,7 +5340,7 @@ int dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
 exit:
     return bcn_li_dtim;
 }
-#endif /* OEM_ANDROID && BCMPCIE */
+#endif /* BCMPCIE */
 
 #ifdef CONFIG_SILENT_ROAM
 int dhd_sroam_set_mon(dhd_pub_t *dhd, bool set)
@@ -5534,7 +5534,7 @@ int wl_parse_ssid_list_tlv(char **list_str, wlc_ssid_ext_t *ssid, int max,
 }
 
 #if defined(WL_WIRELESS_EXT)
-/* Android ComboSCAN support */
+/* ComboSCAN support */
 
 /*
  *  data parsing from ComboScan tlv list

@@ -1,26 +1,26 @@
 
-#include <wl_android.h>
+#include <wl_ohos.h>
 #ifdef WL_EVENT
 #include <bcmendian.h>
 #include <dhd_config.h>
 
 #define EVENT_ERROR(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_ERROR_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_ERROR_LEVEL) {                         \
             printk(KERN_ERR DHD_LOG_PREFIX "[%s] EVENT-ERROR) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define EVENT_TRACE(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_TRACE_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_TRACE_LEVEL) {                         \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] EVENT-TRACE) %s : " arg1,    \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define EVENT_DBG(name, arg1, args...)                                         \
     do {                                                                       \
-        if (android_msg_level & ANDROID_DBG_LEVEL) {                           \
+        if (ohos_msg_level & OHOS_DBG_LEVEL) {                           \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] EVENT-DBG) %s : " arg1,      \
                    name, __func__, ##args);                                    \
         }                                                                      \

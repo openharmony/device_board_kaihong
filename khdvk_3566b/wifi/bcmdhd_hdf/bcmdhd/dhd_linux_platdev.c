@@ -38,7 +38,7 @@
 #include <dhd.h>
 #include <dhd_bus.h>
 #include <dhd_linux.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #if defined(CONFIG_WIFI_CONTROL_FUNC)
 #include <linux/wlan_plat.h>
 #endif // endif
@@ -356,7 +356,7 @@ static int wifi_plat_dev_drv_probe(struct platform_device *pdev)
     int irq, gpio;
 #endif /* CONFIG_DTS */
 
-    /* Android style wifi platform data device ("bcmdhd_wlan" or "bcm4329_wlan")
+    /* Some wifi platform data device ("bcmdhd_wlan" or "bcm4329_wlan")
      * is kept for backward compatibility and supports only 1 adapter
      */
     ASSERT(dhd_wifi_platdata != NULL);
@@ -423,7 +423,7 @@ static int wifi_plat_dev_drv_remove(struct platform_device *pdev)
 {
     wifi_adapter_info_t *adapter;
 
-    /* Android style wifi platform data device ("bcmdhd_wlan" or "bcm4329_wlan")
+    /* Some wifi platform data device ("bcmdhd_wlan" or "bcm4329_wlan")
      * is kept for backward compatibility and supports only 1 adapter
      */
     ASSERT(dhd_wifi_platdata != NULL);
@@ -471,7 +471,7 @@ static int wifi_plat_dev_drv_resume(struct platform_device *pdev)
 #ifdef CONFIG_DTS
 static const struct of_device_id wifi_device_dt_match[] = {
     {
-        .compatible = "android,bcmdhd_wlan",
+        .compatible = "bcmdhd_wlan",
     },
     {},
 };
@@ -717,8 +717,7 @@ int dhd_wifi_platform_register_drv(void)
     struct device *dev;
 
     /* register Broadcom wifi platform data driver if multi-chip is enabled,
-     * otherwise use Android style wifi platform data (aka wifi control
-     * function) if it exists
+     * otherwise use wifi platform data (aka wifi control function) if it exists
      *
      * to support multi-chip DHD, Broadcom wifi platform data device must
      * be added in kernel early boot (e.g. board config file).
@@ -874,7 +873,7 @@ static int dhd_wifi_platform_load_sdio(void)
 #endif // endif
 
     if (dhd_wifi_platdata == NULL) {
-        DHD_ERROR(("DHD wifi platform data is required for Android build\n"));
+        DHD_ERROR(("DHD wifi platform data is required for OHOS build\n"));
         DHD_ERROR(("DHD registering bus directly\n"));
         /* x86 bring-up PC needs no power-up operations */
         err = dhd_bus_register();
@@ -1071,7 +1070,7 @@ static int dhd_wifi_platform_load()
     int err = 0;
     printf("%s: Enter\n", __FUNCTION__);
 
-    wl_android_init();
+    wl_ohos_init();
 
     if ((err = dhd_wifi_platform_load_usb())) {
         goto end;
@@ -1083,11 +1082,11 @@ static int dhd_wifi_platform_load()
 
 end:
     if (err) {
-        wl_android_exit();
+        wl_ohos_exit();
     }
 #if !defined(MULTIPLE_SUPPLICANT)
     else {
-        wl_android_post_init();
+        wl_ohos_post_init();
     }
 #endif
 

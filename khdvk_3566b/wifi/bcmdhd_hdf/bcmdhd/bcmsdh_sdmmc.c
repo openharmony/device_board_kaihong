@@ -1844,7 +1844,7 @@ int sdioh_start(sdioh_info_t *sd, int stage)
 
 int sdioh_stop(sdioh_info_t *sd)
 {
-    /* MSM7201A Android sdio stack has bug with interrupt
+    /* MSM7201A sdio stack has bug with interrupt
         So internaly within SDIO stack they are polling
         which cause issue when device is turned off. So
         unregister interrupt with SDIO stack to stop the

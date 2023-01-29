@@ -69,7 +69,7 @@
 #include <fils.h>
 #include <frag.h>
 #endif /* WL_FILS */
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <dngl_stats.h>
 #include <dhd.h>
 #include <dhd_linux.h>
@@ -249,7 +249,7 @@ extern int g_mgmt_tx_event_ifidx;
  * regulatory domain are to be done here.
  *
  * this definition reuires disabling missing-field-initializer warning
- * as the ieee80211_regdomain definition differs in plain linux and in Android
+ * as the ieee80211_regdomain definition differs in plain linux
  */
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__) &&                       \
     (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 0x6))
@@ -352,9 +352,6 @@ static const char *wl_if_state_strs[WL_IF_STATE_MAX + 1] = {
     "WL_IF_STATE_MAX"};
 
 #ifdef BCMWAPI_WPI
-#if defined(ANDROID_PLATFORM_VERSION) && (ANDROID_PLATFORM_VERSION >= 8)
-/* WAPI define in ieee80211.h is used */
-#else
 #undef WLAN_AKM_SUITE_WAPI_PSK
 #define WLAN_AKM_SUITE_WAPI_PSK 0x000FAC04
 
@@ -363,7 +360,6 @@ static const char *wl_if_state_strs[WL_IF_STATE_MAX + 1] = {
 
 #undef NL80211_WAPI_VERSION_1
 #define NL80211_WAPI_VERSION_1 1 << 2
-#endif /* ANDROID_PLATFORM_VERSION && ANDROID_PLATFORM_VERSION >= 8 */
 #endif /* BCMWAPI_WPI */
 
 /* Data Element Definitions */
@@ -2070,7 +2066,7 @@ void wl_cfg80211_iface_state_ops(struct wireless_dev *wdev,
         case WL_IF_CREATE_REQ:
 #ifdef WL_BCNRECV
             /* check fakeapscan in progress then abort */
-            wl_android_bcnrecv_stop(ndev, WL_BCNRECV_CONCURRENCY);
+            wl_ohos_bcnrecv_stop(ndev, WL_BCNRECV_CONCURRENCY);
 #endif /* WL_BCNRECV */
             wl_cfg80211_scan_abort(cfg);
             wl_wlfc_enable(cfg, true);
@@ -2224,7 +2220,7 @@ static s32 wl_cfg80211_p2p_if_del(struct wiphy *wiphy,
 fail:
     /* Even in failure case, attempt to remove the host data structure.
      * Firmware would be cleaned up via WiFi reset done by the
-     * user space from hang event context (for android only).
+     * user space from hang event context.
      */
     bzero(cfg->p2p->vir_ifname, IFNAMSIZ);
     wl_to_p2p_bss_bssidx(cfg, cfg_type) = -1;
@@ -2979,7 +2975,7 @@ static s32 _wl_cfg80211_check_axi_error(struct bcm_cfg80211 *cfg)
 }
 #endif /* DNGL_AXI_ERROR_LOGGING */
 
-/* All Android/Linux private/Vendor Interface calls should make
+/* All private/Vendor Interface calls should make
  *  use of below API for interface creation.
  */
 struct wireless_dev *wl_cfg80211_add_if(struct bcm_cfg80211 *cfg,
@@ -6876,14 +6872,14 @@ static
 
 set_ssid:
 #if defined(ROAMEXP_SUPPORT)
-    /* Clear Blacklist bssid and Whitelist ssid list before join issue
+    /* Clear Denylist bssid and Allowlist ssid list before join issue
      * This is temporary fix since currently firmware roaming is not
-     * disabled by android framework before SSID join from framework
+     * disabled by framework before SSID join from framework
      */
-    /* Flush blacklist bssid content */
-    dhd_dev_set_blacklist_bssid(dev, NULL, 0, true);
-    /* Flush whitelist ssid content */
-    dhd_dev_set_whitelist_ssid(dev, NULL, 0, true);
+    /* Flush denylist bssid content */
+    dhd_dev_set_denylist_bssid(dev, NULL, 0, true);
+    /* Flush allowlist ssid content */
+    dhd_dev_set_allowlist_ssid(dev, NULL, 0, true);
 #endif /* ROAMEXP_SUPPORT */
     bzero(&join_params, sizeof(join_params));
     join_params_size = sizeof(join_params.ssid);
@@ -7386,7 +7382,7 @@ void wl_cfg80211_block_arp(struct net_device *dev, int enable)
         /* Add ARP filter */
         dhd_packet_filter_add_remove(dhdp, TRUE, DHD_BROADCAST_ARP_FILTER_NUM);
 
-        /* Enable ARP packet filter - blacklist */
+        /* Enable ARP packet filter - denylist */
         dhd_master_mode = FALSE;
         dhd_pktfilter_offload_enable(
             dhdp, dhdp->pktfilter[DHD_BROADCAST_ARP_FILTER_NUM], TRUE,
@@ -8126,7 +8122,7 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev, u8 *mac,
 #endif
 #if !defined(RSSIAVG) && !defined(RSSIOFFSET)
             // terence 20150419: limit the max. rssi to -2 or the bss will be
-            // filtered out in android OS
+            // filtered out
             rssi = MIN(rssi, RSSI_MAXVAL);
 #endif
             sinfo->filled |= STA_INFO_BIT(INFO_SIGNAL);
@@ -8924,7 +8920,7 @@ static s32 wl_cfg80211_remain_on_channel(struct wiphy *wiphy,
 
 #ifdef WL_BCNRECV
     /* check fakeapscan in progress then abort */
-    wl_android_bcnrecv_stop(ndev, WL_BCNRECV_LISTENBUSY);
+    wl_ohos_bcnrecv_stop(ndev, WL_BCNRECV_LISTENBUSY);
 #endif /* WL_BCNRECV */
 #ifdef WL_CFG80211_SYNC_GON
     if (wl_get_drv_status_all(cfg, WAITING_NEXT_ACT_FRM_LISTEN)) {
@@ -13748,8 +13744,7 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, wl_bss_info_t *bi,
         wl_update_rssi_offset(bcmcfg_to_prmry_ndev(cfg), notif_bss_info->rssi);
 #endif
 #if !defined(RSSIAVG) && !defined(RSSIOFFSET)
-    // terence 20150419: limit the max. rssi to -2 or the bss will be filtered
-    // out in android OS
+    // terence 20150419: limit the max. rssi to -2 or the bss will be filtered out
     notif_bss_info->rssi = MIN(notif_bss_info->rssi, RSSI_MAXVAL);
 #endif
     memcpy(mgmt->bssid, &bi->BSSID, ETHER_ADDR_LEN);
@@ -14177,7 +14172,7 @@ static s32 wl_notify_connect_status_ap(struct bcm_cfg80211 *cfg,
             wake_up_interruptible(&cfg->netif_change_event);
 #ifdef WL_BCNRECV
             /* check fakeapscan is in progress, if progress then abort */
-            wl_android_bcnrecv_stop(ndev, WL_BCNRECV_CONCURRENCY);
+            wl_ohos_bcnrecv_stop(ndev, WL_BCNRECV_CONCURRENCY);
 #endif /* WL_BCNRECV */
 #ifdef WL_EXT_IAPSTA
             wl_ext_in4way_sync(ndev, 0, WL_EXT_STATUS_AP_ENABLED, NULL);
@@ -15431,7 +15426,7 @@ static s32 wl_handle_rssi_monitor_event(struct bcm_cfg80211 *cfg,
             monitor_data.cur_rssi = evt_data->cur_rssi;
             memcpy(&monitor_data.BSSID, &e->addr, ETHER_ADDR_LEN);
             wl_cfgvendor_send_async_event(wiphy, ndev,
-                                          GOOGLE_RSSI_MONITOR_EVENT,
+                                          OHOS_RSSI_MONITOR_EVENT,
                                           &monitor_data, sizeof(monitor_data));
         } else {
             WL_ERR(("Version mismatch %d, expected %d", evt_data->version,
@@ -15704,7 +15699,7 @@ static s32 wl_notify_roam_start_status(struct bcm_cfg80211 *cfg,
     int event_type;
 
     event_type = WIFI_EVENT_ROAM_SCAN_STARTED;
-    wl_cfgvendor_send_async_event(wiphy, ndev, GOOGLE_ROAM_EVENT_START,
+    wl_cfgvendor_send_async_event(wiphy, ndev, OHOS_ROAM_EVENT_START,
                                   &event_type, sizeof(int));
 #endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) ||                   \
           (WL_VENDOR_EXT_SUPPORT) */
@@ -19192,10 +19187,6 @@ static s32 __wl_cfg80211_up(struct bcm_cfg80211 *cfg)
         return err;
     }
 
-    /* terence 20180108: this patch will cause to kernel panic with below
-     * steps in Android 4.4 with kernel 3.4
-     * insmod bcmdhd.ko; hostapd /data/misc/wifi/hostapd.conf
-     */
     /* Always bring up interface in STA mode.
      * Did observe , if previous SofAP Bringup/cleanup
      * is not done properly, iftype is stuck with AP mode.
@@ -21831,7 +21822,7 @@ static int wl_cfg80211_set_mac_acl(struct wiphy *wiphy,
 
     /* if acl == NULL, macmode is still disabled.. */
     if (macmode == MACLIST_MODE_DISABLED) {
-        if ((ret = wl_android_set_ap_mac_list(cfgdev, macmode, NULL)) != 0) {
+        if ((ret = wl_ohos_set_ap_mac_list(cfgdev, macmode, NULL)) != 0) {
             WL_ERR(("wl_cfg80211_set_mac_acl: Setting MAC list"
                     " failed error=%d\n",
                     ret));
@@ -21862,7 +21853,7 @@ static int wl_cfg80211_set_mac_acl(struct wiphy *wiphy,
         memcpy(&list->ea[i], &acl->mac_addrs[i], ETHER_ADDR_LEN);
     }
     /* set the list */
-    if ((ret = wl_android_set_ap_mac_list(cfgdev, macmode, list)) != 0) {
+    if ((ret = wl_ohos_set_ap_mac_list(cfgdev, macmode, list)) != 0) {
         WL_ERR(("wl_cfg80211_set_mac_acl: Setting MAC list failed error=%d\n",
                 ret));
     }
@@ -23975,7 +23966,7 @@ static s32 wl_bcnrecv_aborted_event_handler(struct bcm_cfg80211 *cfg,
     struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
     /* Abort fakeapscan, when Roam is in progress */
     if (status == WLC_E_STATUS_RXBCN_ABORT) {
-        wl_android_bcnrecv_stop(ndev, WL_BCNRECV_ROAMABORT);
+        wl_ohos_bcnrecv_stop(ndev, WL_BCNRECV_ROAMABORT);
     } else {
         WL_ERR(("UNKNOWN STATUS. status:%d\n", status));
     }

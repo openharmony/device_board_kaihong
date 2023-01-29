@@ -579,9 +579,9 @@ uint32 get_mem_val_from_file(void)
                 ("%s: File [%s] doesn't exist\n", __FUNCTION__, filepath));
             goto done;
         }
-#else  /* Non Brix Android platform */
+#else
         goto done;
-#endif /* CONFIG_X86 && OEM_ANDROID */
+#endif /* CONFIG_X86 */
     }
 
     /* Handle success case */

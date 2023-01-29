@@ -3,7 +3,7 @@
 #include <net/rtnetlink.h>
 #include <bcmendian.h>
 #include <dhd_linux.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <dhd_config.h>
 #ifdef WL_CFG80211
 #include <wl_cfg80211.h>
@@ -14,28 +14,28 @@
 
 #define IAPSTA_ERROR(name, arg1, args...)                                      \
     do {                                                                       \
-        if (android_msg_level & ANDROID_ERROR_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_ERROR_LEVEL) {                         \
             printk(KERN_ERR DHD_LOG_PREFIX "[%s] IAPSTA-ERROR) %s : " arg1,    \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define IAPSTA_TRACE(name, arg1, args...)                                      \
     do {                                                                       \
-        if (android_msg_level & ANDROID_TRACE_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_TRACE_LEVEL) {                         \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] IAPSTA-TRACE) %s : " arg1,   \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define IAPSTA_INFO(name, arg1, args...)                                       \
     do {                                                                       \
-        if (android_msg_level & ANDROID_INFO_LEVEL) {                          \
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {                          \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] IAPSTA-INFO) %s : " arg1,    \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define IAPSTA_DBG(name, arg1, args...)                                        \
     do {                                                                       \
-        if (android_msg_level & ANDROID_DBG_LEVEL) {                           \
+        if (ohos_msg_level & OHOS_DBG_LEVEL) {                           \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] IAPSTA-DBG) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
@@ -1259,7 +1259,7 @@ int wl_ext_isam_peer_path(struct net_device *dev, char *command, int total_len)
     int dump_written = 0;
     int i;
 
-    if (command || android_msg_level & ANDROID_INFO_LEVEL) {
+    if (command || ohos_msg_level & OHOS_INFO_LEVEL) {
         if (command) {
             dump_buf = command;
             dump_len = total_len;
@@ -3404,7 +3404,7 @@ static void wl_tput_dump(struct wl_apsta_params *apsta_params,
     s32 rate = 0;
     dhd_if_t *ifp = NULL;
 
-    if (!(android_msg_level & ANDROID_TPUT_LEVEL)) {
+    if (!(ohos_msg_level & OHOS_TPUT_LEVEL)) {
         return;
     }
 
@@ -4681,7 +4681,7 @@ int wl_ext_isam_status(struct net_device *dev, char *command, int total_len)
     int dump_len = WLC_IOCTL_MEDLEN;
     int dump_written = 0;
 
-    if (command || android_msg_level & ANDROID_INFO_LEVEL) {
+    if (command || ohos_msg_level & OHOS_INFO_LEVEL) {
         if (command) {
             dump_buf = command;
             dump_len = total_len;

@@ -394,7 +394,7 @@ void wl_event_to_network_order(wl_event_msg_t *evt);
 #define WLC_E_STATUS_PSK_AUTH_MIC_WPA_ERR 2     /* MIC error */
 #define WLC_E_STATUS_PSK_AUTH_IE_MISMATCH_ERR 3 /* IE Missmatch error */
 #define WLC_E_STATUS_PSK_AUTH_REPLAY_COUNT_ERR 4
-#define WLC_E_STATUS_PSK_AUTH_PEER_BLACKISTED 5 /* Blaclisted peer */
+#define WLC_E_STATUS_PSK_AUTH_PEER_DENYLISTED 5 /* Denylisted peer */
 #define WLC_E_STATUS_PSK_AUTH_GTK_REKEY_FAIL 6  /* GTK event status code */
 
 /* SDB transition status code */

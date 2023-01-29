@@ -10,7 +10,7 @@
 #include <bcmendian.h>
 #include <ethernet.h>
 
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <linux/if_arp.h>
 #include <asm/uaccess.h>
 #include <linux/wireless.h>
@@ -34,28 +34,28 @@
 
 #define AEXT_ERROR(name, arg1, args...)                                        \
     do {                                                                       \
-        if (android_msg_level & ANDROID_ERROR_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_ERROR_LEVEL) {                         \
             printk(KERN_ERR DHD_LOG_PREFIX "[%s] AEXT-ERROR) %s : " arg1,      \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define AEXT_TRACE(name, arg1, args...)                                        \
     do {                                                                       \
-        if (android_msg_level & ANDROID_TRACE_LEVEL) {                         \
+        if (ohos_msg_level & OHOS_TRACE_LEVEL) {                         \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] AEXT-TRACE) %s : " arg1,     \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define AEXT_INFO(name, arg1, args...)                                         \
     do {                                                                       \
-        if (android_msg_level & ANDROID_INFO_LEVEL) {                          \
+        if (ohos_msg_level & OHOS_INFO_LEVEL) {                          \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] AEXT-INFO) %s : " arg1,      \
                    name, __func__, ##args);                                    \
         }                                                                      \
     } while (0)
 #define AEXT_DBG(name, arg1, args...)                                          \
     do {                                                                       \
-        if (android_msg_level & ANDROID_DBG_LEVEL) {                           \
+        if (ohos_msg_level & OHOS_DBG_LEVEL) {                           \
             printk(KERN_INFO DHD_LOG_PREFIX "[%s] AEXT-DBG) %s : " arg1, name, \
                    __func__, ##args);                                          \
         }                                                                      \
@@ -1139,9 +1139,9 @@ static int wl_ext_wlmsglevel(struct net_device *dev, char *command,
     sscanf(command, "%*s %x", &val);
 
     if (val >= 0) {
-        if (val & DHD_ANDROID_VAL) {
-            android_msg_level = (uint)(val & 0xFFFF);
-            WL_MSG(dev->name, "android_msg_level=0x%x\n", android_msg_level);
+        if (val & DHD_OHOS_VAL) {
+            ohos_msg_level = (uint)(val & 0xFFFF);
+            WL_MSG(dev->name, "ohos_msg_level=0x%x\n", ohos_msg_level);
         }
 #if defined(WL_WIRELESS_EXT)
         else if (val & DHD_IW_VAL) {
@@ -1163,7 +1163,7 @@ static int wl_ext_wlmsglevel(struct net_device *dev, char *command,
         }
     } else {
         bytes_written += snprintf(command + bytes_written, total_len,
-                                  "android_msg_level=0x%x", android_msg_level);
+                                  "ohos_msg_level=0x%x", ohos_msg_level);
 #if defined(WL_WIRELESS_EXT)
         bytes_written += snprintf(command + bytes_written, total_len,
                                   "\niw_msg_level=0x%x", iw_msg_level);
@@ -2254,7 +2254,7 @@ static int wl_ext_gtk_key_info(struct net_device *dev, char *data,
     }
 
 exit:
-    if (android_msg_level & ANDROID_INFO_LEVEL) {
+    if (ohos_msg_level & OHOS_INFO_LEVEL) {
         prhex("kck", (uchar *)keyinfo.KCK, RSN_KCK_LENGTH);
         prhex("kek", (uchar *)keyinfo.KEK, RSN_KEK_LENGTH);
         prhex("replay_ctr", (uchar *)keyinfo.ReplayCounter, RSN_REPLAY_LEN);
@@ -2530,7 +2530,7 @@ static int wl_ext_gpio_notify(struct net_device *dev, char *data, char *command,
             }
             AEXT_INFO(dev->name, "index=%d, len=%d\n", notify.index,
                       notify.len);
-            if (android_msg_level & ANDROID_INFO_LEVEL) {
+            if (ohos_msg_level & OHOS_INFO_LEVEL) {
                 prhex("payload", (uchar *)notify.payload, notify.len);
             }
             ret = wl_ext_iovar_setbuf(dev, "bcol_gpio_noti", (char *)&notify,
@@ -2895,7 +2895,7 @@ exit:
     return ret;
 }
 
-int wl_android_ext_priv_cmd(struct net_device *net, char *command,
+int wl_ohos_ext_priv_cmd(struct net_device *net, char *command,
                             int total_len, int *bytes_written)
 {
     int ret = 0;
@@ -3167,7 +3167,7 @@ int wl_ext_get_best_channel(struct net_device *net,
         }
     }
 
-    if (android_msg_level & ANDROID_INFO_LEVEL) {
+    if (ohos_msg_level & OHOS_INFO_LEVEL) {
         struct bcmstrbuf strbuf;
         char *tmp_buf = NULL;
         tmp_buf = kmalloc(WLC_IOCTL_SMLEN, GFP_KERNEL);

@@ -49,7 +49,7 @@ extern void *dhd_wlan_mem_prealloc(int section, unsigned long size);
 #define WLAN_HOST_WAKE_GPIO 493
 
 static int wlan_reg_on = -1;
-#define DHD_DT_COMPAT_ENTRY "android,bcmdhd_wlan"
+#define DHD_DT_COMPAT_ENTRY "bcmdhd_wlan"
 #define WIFI_WL_REG_ON_PROPNAME "wl_reg_on"
 
 static int wlan_host_wake_up = -1;
