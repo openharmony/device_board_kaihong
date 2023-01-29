@@ -70,7 +70,7 @@
 #include <bcmip.h>
 #include <bcmipv6.h>
 #include <bcmtcp.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 
 #ifdef BCMDRIVER
 
@@ -3811,7 +3811,7 @@ void dump_nvram(char *varbuf, int column, unsigned int n, unsigned int len)
     char vars[128];
 
     if (((n == 0) && (varbuf[0] == '#')) ||
-        ((column == 0) && (android_msg_level & ANDROID_INFO_LEVEL))) {
+        ((column == 0) && (ohos_msg_level & OHOS_INFO_LEVEL))) {
         memset(vars, 0x00, sizeof(vars));
         for (m = n; m < len && (m - n) < (sizeof(vars) - 1); m++) {
             if (varbuf[m] == '\n') {

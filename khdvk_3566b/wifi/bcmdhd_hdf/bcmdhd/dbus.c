@@ -2791,7 +2791,7 @@ void *dhd_dbus_probe_cb(void *arg, const char *desc, uint32 bustype,
         }
         pub->hang_report = TRUE;
 #if defined(MULTIPLE_SUPPLICANT)
-        wl_android_post_init(); // terence 20120530: fix critical section in
+        wl_ohos_post_init(); // terence 20120530: fix critical section in
                                 // dhd_open and dhdsdio_probe
 #endif
         g_pub = pub;

@@ -41,7 +41,7 @@
 
 #include <dhd_dbg.h>
 #include <dhd_config.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 
 #ifdef PROP_TXSTATUS /* a form of flow control between host and dongle */
 #include <wlfc_proto.h>

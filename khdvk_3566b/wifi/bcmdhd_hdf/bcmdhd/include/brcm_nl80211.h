@@ -32,7 +32,7 @@
 #define _brcm_nl80211_h_
 
 #define OUI_BRCM 0x001018
-#define OUI_GOOGLE 0x001A11
+#define OUI_OHOS 0x001A11
 
 enum wl_vendor_subcmd {
     BRCM_VENDOR_SCMD_UNSPEC = 0,

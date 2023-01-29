@@ -128,12 +128,6 @@
 #define USB_SUSPEND_AVAILABLE
 #endif
 
-/* Define alternate fw/nvram paths used in Android */
-#ifdef OEM_ANDROID
-#define CONFIG_ANDROID_BCMDHD_FW_PATH "broadcom/dhd/firmware/fw.bin.trx"
-#define CONFIG_ANDROID_BCMDHD_NVRAM_PATH "broadcom/dhd/nvrams/nvm.txt"
-#endif /* OEM_ANDROID */
-
 static inline int usb_submit_urb_linux(struct urb *urb)
 {
 #ifdef BCM_MAX_URB_LEN
@@ -3275,14 +3269,11 @@ static void *dbus_get_fwfile(int devid, int chiprev, uint8 **fw, int *fwlen,
                              uint16 boardtype, uint16 boardrev)
 {
     const struct firmware *firmware = NULL;
-#ifndef OEM_ANDROID
     s8 *device_id = NULL;
     s8 *chip_rev = "";
-#endif /* OEM_ANDROID */
     s8 file_name[64];
     int ret;
 
-#ifndef OEM_ANDROID
     switch (devid) {
         case BCM4350_CHIP_ID:
         case BCM4354_CHIP_ID:
@@ -3332,9 +3323,6 @@ static void *dbus_get_fwfile(int devid, int chiprev, uint8 **fw, int *fwlen,
     /* Load firmware */
     snprintf(file_name, sizeof(file_name), "brcm/bcm%s%s-firmware.bin",
              device_id, chip_rev);
-#else
-    snprintf(file_name, sizeof(file_name), "%s", CONFIG_ANDROID_BCMDHD_FW_PATH);
-#endif /* OEM_ANDROID */
 
     ret = dbus_request_firmware(file_name, &firmware);
     if (ret) {
@@ -3351,14 +3339,11 @@ static void *dbus_get_nvfile(int devid, int chiprev, uint8 **fw, int *fwlen,
                              uint16 boardtype, uint16 boardrev)
 {
     const struct firmware *firmware = NULL;
-#ifndef OEM_ANDROID
     s8 *device_id = NULL;
     s8 *chip_rev = "";
-#endif /* OEM_ANDROID */
     s8 file_name[64];
     int ret;
 
-#ifndef OEM_ANDROID
     switch (devid) {
         case BCM4350_CHIP_ID:
         case BCM4354_CHIP_ID:
@@ -3412,22 +3397,16 @@ static void *dbus_get_nvfile(int devid, int chiprev, uint8 **fw, int *fwlen,
     /* Load board specific nvram file */
     snprintf(file_name, sizeof(file_name), "brcm/bcm%s%s-%2x-%2x.nvm",
              device_id, chip_rev, boardtype, boardrev);
-#else
-    snprintf(file_name, sizeof(file_name), "%s",
-             CONFIG_ANDROID_BCMDHD_NVRAM_PATH);
-#endif /* OEM_ANDROID */
 
     ret = dbus_request_firmware(file_name, &firmware);
     if (ret) {
         DBUSERR(("fail to request nvram %s\n", file_name));
 
-#ifndef OEM_ANDROID
         /* Load generic nvram file */
         snprintf(file_name, sizeof(file_name), "brcm/bcm%s%s.nvm", device_id,
                  chip_rev);
 
         ret = dbus_request_firmware(file_name, &firmware);
-#endif /* OEM_ANDROID */
         if (ret) {
             DBUSERR(("fail to request nvram %s\n", file_name));
             return NULL;

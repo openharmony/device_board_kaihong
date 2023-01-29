@@ -12,7 +12,7 @@
 #include "hdf_log.h"
 #include "hdf_touch.h"
 #include "input_i2c_ops.h"
-#include "touch_gt911.h"
+#include "touch_jdi_gt911.h"
 
 #define MAX_POINT 5
 
@@ -53,10 +53,8 @@ static int32_t ChipDetect(ChipDevice *device)
     xSolution = (buf[GT_SOLU_X_HIGH] << ONE_BYTE_OFFSET) | buf[GT_SOLU_X_LOW];
     ySolution = (buf[GT_SOLU_Y_HIGH] << ONE_BYTE_OFFSET) | buf[GT_SOLU_Y_LOW];
 #if defined(CONFIG_ARCH_ROCKCHIP)
-    if (buf[GT_PROD_ID_1ST] != '5' || buf[GT_PROD_ID_2ND] != '6' ||
-        buf[GT_PROD_ID_3RD] != '8' || buf[GT_PROD_ID_4TH] != '8') {
-        HDF_LOGE("%s: ID wrong,IC FW version is 0x%x", __func__, version);
-        return HDF_FAILURE;
+    if (version != 0x1020 || buf[GT_PROD_ID_1ST] != '9' ||
+        buf[GT_PROD_ID_2ND] != '2') {
     }
 #endif
     HDF_LOGI("%s: IC FW version is 0x%x", __func__, version);
@@ -119,22 +117,13 @@ static void ParsePointData(ChipDevice *device, FrameData *frame, uint8_t *buf,
                 resX / resY;
 #elif defined(CONFIG_ARCH_ROCKCHIP)
             frame->fingers[i].x =
-                resX - ((buf[GT_POINT_SIZE * i + GT_X_LOW] & ONE_BYTE_MASK) |
-                        ((buf[GT_POINT_SIZE * i + GT_X_HIGH] & ONE_BYTE_MASK)
-                         << ONE_BYTE_OFFSET));
+                ((buf[GT_POINT_SIZE * i + GT_X_LOW] & ONE_BYTE_MASK) |
+                 ((buf[GT_POINT_SIZE * i + GT_X_HIGH] & ONE_BYTE_MASK)
+                  << ONE_BYTE_OFFSET));
             frame->fingers[i].y =
-                resY - ((buf[GT_POINT_SIZE * i + GT_Y_LOW] & ONE_BYTE_MASK) |
-                        ((buf[GT_POINT_SIZE * i + GT_Y_HIGH] & ONE_BYTE_MASK)
-                         << ONE_BYTE_OFFSET));
-#elif defined(LOSCFG_PLATFORM_STM32MP157)
-            frame->fingers[i].x =
-                (buf[GT_POINT_SIZE * i + GT_X_LOW] & ONE_BYTE_MASK) |
-                ((buf[GT_POINT_SIZE * i + GT_X_HIGH] & ONE_BYTE_MASK)
-                 << ONE_BYTE_OFFSET);
-            frame->fingers[i].y =
-                (buf[GT_POINT_SIZE * i + GT_Y_LOW] & ONE_BYTE_MASK) |
-                ((buf[GT_POINT_SIZE * i + GT_Y_HIGH] & ONE_BYTE_MASK)
-                 << ONE_BYTE_OFFSET);
+                ((buf[GT_POINT_SIZE * i + GT_Y_LOW] & ONE_BYTE_MASK) |
+                 ((buf[GT_POINT_SIZE * i + GT_Y_HIGH] & ONE_BYTE_MASK)
+                  << ONE_BYTE_OFFSET));
 #else
             frame->fingers[i].y =
                 (buf[GT_POINT_SIZE * i + GT_X_LOW] & ONE_BYTE_MASK) |
@@ -172,6 +161,8 @@ static void ParsePointData(ChipDevice *device, FrameData *frame, uint8_t *buf,
                   << ONE_BYTE_OFFSET));
         }
         frame->fingers[i].valid = true;
+        HDF_LOGE("%s: frame->fingers[%d].x = %d,frame->fingers[%d].y = %d",
+                 __func__, i, frame->fingers[i].x, i, frame->fingers[i].y);
     }
 }
 
@@ -189,6 +180,8 @@ static int32_t ChipDataHandle(ChipDevice *device)
     reg[1] = GT_BUF_STATE_ADDR & ONE_BYTE_MASK;
     ret = InputI2cRead(i2cClient, reg, GT_ADDR_LEN, &touchStatus, 1);
     if (ret < 0 || touchStatus == GT_EVENT_INVALID) {
+        HDF_LOGE("InputI2cRead fail || ouchStatus is GT_EVENT_INVALID %s",
+                 __func__);
         return HDF_FAILURE;
     }
 
@@ -218,6 +211,7 @@ static int32_t ChipDataHandle(ChipDevice *device)
 EXIT:
     OsalMutexUnlock(&device->driver->mutex);
     if (ChipCleanBuffer(i2cClient) != HDF_SUCCESS) {
+        HDF_LOGE("ChipCleanBuffer fail %s", __func__);
         return HDF_FAILURE;
     }
     return HDF_SUCCESS;

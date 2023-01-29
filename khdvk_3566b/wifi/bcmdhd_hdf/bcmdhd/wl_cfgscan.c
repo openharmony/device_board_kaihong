@@ -61,7 +61,7 @@
 #include <wl_cfgscan.h>
 #include <wl_cfgp2p.h>
 #include <bcmdevs.h>
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <dngl_stats.h>
 #include <dhd.h>
 #include <dhd_linux.h>
@@ -273,7 +273,7 @@ static s32 wl_bcnrecv_result_handler(struct bcm_cfg80211 *cfg,
         bcn_recv->system_time = ((u64)ts.tv_sec * 0xF4240) + ts.tv_nsec / 0x3E8;
         bcn_recv->timestamp[0] = bi->timestamp[0];
         bcn_recv->timestamp[1] = bi->timestamp[1];
-        if ((err = wl_android_bcnrecv_event(
+        if ((err = wl_ohos_bcnrecv_event(
                  cfgdev_to_wlc_ndev(cfgdev, cfg), BCNRECV_ATTR_BCNINFO, 0, 0,
                  (uint8 *)bcn_recv, sizeof(*bcn_recv))) != BCME_OK) {
             WL_ERR(("failed to send bcnrecv event, error:%d\n", err));
@@ -1659,7 +1659,7 @@ static s32 wl_cfgscan_handle_scanbusy(struct bcm_cfg80211 *cfg,
             dhd_os_send_hang_message(dhdp);
 #else
             WL_ERR(("%s: HANG event is unsupported\n", __FUNCTION__));
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27) && OEM_ANDROID */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27) */
 
             bzero(&bssid, sizeof(bssid));
             if ((ret = wldev_ioctl_get(ndev, WLC_GET_BSSID, &bssid,
@@ -1745,7 +1745,7 @@ s32 __wl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
     }
 #ifdef WL_BCNRECV
     /* check fakeapscan in progress then abort */
-    wl_android_bcnrecv_stop(ndev, WL_BCNRECV_SCANBUSY);
+    wl_ohos_bcnrecv_stop(ndev, WL_BCNRECV_SCANBUSY);
 #endif /* WL_BCNRECV */
 
 #ifdef WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST
@@ -3290,7 +3290,7 @@ s32 wl_notify_pfn_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 #ifdef GSCAN_SUPPORT
     ptr = dhd_dev_process_epno_result(ndev, data, event, &send_evt_bytes);
     if (ptr) {
-        wl_cfgvendor_send_async_event(wiphy, ndev, GOOGLE_SCAN_EPNO_EVENT, ptr,
+        wl_cfgvendor_send_async_event(wiphy, ndev, OHOS_SCAN_EPNO_EVENT, ptr,
                                       send_evt_bytes);
         MFREE(cfg->osh, ptr, send_evt_bytes);
     }
@@ -3338,14 +3338,14 @@ s32 wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
                     event_type = *((int *)data);
                 }
                 wl_cfgvendor_send_async_event(wiphy, ndev,
-                                              GOOGLE_GSCAN_BATCH_SCAN_EVENT,
+                                              OHOS_GSCAN_BATCH_SCAN_EVENT,
                                               &event_type, sizeof(int));
             }
             break;
         case WLC_E_PFN_SCAN_COMPLETE:
             event_type = WIFI_SCAN_COMPLETE;
             wl_cfgvendor_send_async_event(wiphy, ndev,
-                                          GOOGLE_SCAN_COMPLETE_EVENT,
+                                          OHOS_SCAN_COMPLETE_EVENT,
                                           &event_type, sizeof(int));
             break;
         case WLC_E_PFN_BSSID_NET_FOUND:
@@ -3354,7 +3354,7 @@ s32 wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
             if (ptr) {
                 wl_cfgvendor_send_hotlist_event(
                     wiphy, ndev, ptr, send_evt_bytes,
-                    GOOGLE_GSCAN_GEOFENCE_FOUND_EVENT);
+                    OHOS_GSCAN_GEOFENCE_FOUND_EVENT);
                 dhd_dev_gscan_hotlist_cache_cleanup(ndev, HOTLIST_FOUND);
             } else {
                 err = -ENOMEM;
@@ -3371,7 +3371,7 @@ s32 wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
                 if (ptr) {
                     wl_cfgvendor_send_hotlist_event(
                         wiphy, ndev, ptr, send_evt_bytes,
-                        GOOGLE_GSCAN_GEOFENCE_LOST_EVENT);
+                        OHOS_GSCAN_GEOFENCE_LOST_EVENT);
                     dhd_dev_gscan_hotlist_cache_cleanup(ndev, HOTLIST_LOST);
                     MFREE(cfg->osh, ptr, buf_len);
                 } else {
@@ -3386,7 +3386,7 @@ s32 wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
                                                     &send_evt_bytes);
             if (ptr) {
                 wl_cfgvendor_send_async_event(wiphy, ndev,
-                                              GOOGLE_SCAN_FULL_RESULTS_EVENT,
+                                              OHOS_SCAN_FULL_RESULTS_EVENT,
                                               ptr, send_evt_bytes);
                 MFREE(cfg->osh, ptr, send_evt_bytes);
             } else {
@@ -3398,7 +3398,7 @@ s32 wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
                 dhd_dev_process_epno_result(ndev, data, event, &send_evt_bytes);
             if (ptr) {
                 wl_cfgvendor_send_async_event(
-                    wiphy, ndev, GOOGLE_SCAN_EPNO_EVENT, ptr, send_evt_bytes);
+                    wiphy, ndev, OHOS_SCAN_EPNO_EVENT, ptr, send_evt_bytes);
                 MFREE(cfg->osh, ptr, send_evt_bytes);
             } else {
                 err = -ENOMEM;

@@ -79,7 +79,7 @@
 #ifdef WL_NAN
 #include <wl_cfgnan.h>
 #endif /* WL_NAN */
-#include <wl_android.h>
+#include <wl_ohos.h>
 #include <wl_cfgvendor.h>
 #ifdef PROP_TXSTATUS
 #include <dhd_wlfc.h>
@@ -295,7 +295,7 @@ static int wl_cfgvendor_get_feature_set_matrix(struct wiphy *wiphy,
         goto exit;
     }
 
-    err = nla_put_u32(skb, ANDR_WIFI_ATTRIBUTE_NUM_FEATURE_SET,
+    err = nla_put_u32(skb, OHOS_WIFI_ATTRIBUTE_NUM_FEATURE_SET,
                       MAX_FEATURE_SET_CONCURRRENT_GROUPS);
     if (unlikely(err)) {
         kfree_skb(skb);
@@ -304,7 +304,7 @@ static int wl_cfgvendor_get_feature_set_matrix(struct wiphy *wiphy,
     for (i = 0; i < MAX_FEATURE_SET_CONCURRRENT_GROUPS; i++) {
         reply = dhd_dev_get_feature_set_matrix(bcmcfg_to_prmry_ndev(cfg), i);
         if (reply != WIFI_FEATURE_INVALID) {
-            err = nla_put_u32(skb, ANDR_WIFI_ATTRIBUTE_FEATURE_SET, reply);
+            err = nla_put_u32(skb, OHOS_WIFI_ATTRIBUTE_FEATURE_SET, reply);
             if (unlikely(err)) {
                 kfree_skb(skb);
                 goto exit;
@@ -338,7 +338,7 @@ static int wl_cfgvendor_set_rand_mac_oui(struct wiphy *wiphy,
         goto exit;
     }
     type = nla_type(data);
-    if (type == ANDR_WIFI_ATTRIBUTE_RANDOM_MAC_OUI) {
+    if (type == OHOS_WIFI_ATTRIBUTE_RANDOM_MAC_OUI) {
         if (nla_len(data) != DOT11_OUI_LEN) {
             WL_ERR(("nla_len not matched.\n"));
             goto exit;
@@ -373,7 +373,7 @@ static int wl_cfgvendor_set_nodfs_flag(struct wiphy *wiphy,
     }
 
     type = nla_type(data);
-    if (type == ANDR_WIFI_ATTRIBUTE_NODFS_SET) {
+    if (type == OHOS_WIFI_ATTRIBUTE_NODFS_SET) {
         nodfs = nla_get_u32(data);
         err = dhd_dev_set_nodfs(bcmcfg_to_prmry_ndev(cfg), nodfs);
     }
@@ -396,7 +396,7 @@ static int wl_cfgvendor_set_country(struct wiphy *wiphy,
     {
         type = nla_type(iter);
         switch (type) {
-            case ANDR_WIFI_ATTRIBUTE_COUNTRY:
+            case OHOS_WIFI_ATTRIBUTE_COUNTRY:
                 err = memcpy_s(country_code, WLC_CNTRY_BUF_SZ, nla_data(iter),
                                nla_len(iter));
                 if (err) {
@@ -1488,7 +1488,7 @@ static int wl_cfgvendor_set_tcpack_sup_mode(struct wiphy *wiphy,
     }
 
     type = nla_type(data);
-    if (type == ANDR_WIFI_ATTRIBUTE_TCPACK_SUP_VALUE) {
+    if (type == OHOS_WIFI_ATTRIBUTE_TCPACK_SUP_VALUE) {
         enable = (uint8)nla_get_u32(data);
         err = dhd_dev_set_tcpack_sup_mode_cfg(ndev, enable);
         if (unlikely(err)) {
@@ -1581,9 +1581,9 @@ void wl_cfgvendor_rtt_evt(void *ctx, void *rtt_data)
      defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) ||                     \
     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
         skb = cfg80211_vendor_event_alloc(wiphy, NULL, 0x64,
-                                          GOOGLE_RTT_COMPLETE_EVENT, kflags);
+                                          OHOS_RTT_COMPLETE_EVENT, kflags);
 #else
-        skb = cfg80211_vendor_event_alloc(wiphy, 0x64, GOOGLE_RTT_COMPLETE_EVENT,
+        skb = cfg80211_vendor_event_alloc(wiphy, 0x64, OHOS_RTT_COMPLETE_EVENT,
                                           kflags);
 #endif /* (defined(CONFIG_ARCH_MSM) &&                                         \
           defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
@@ -1610,11 +1610,11 @@ void wl_cfgvendor_rtt_evt(void *ctx, void *rtt_data)
     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
         skb = cfg80211_vendor_event_alloc(wiphy, NULL,
                                           rtt_header->result_tot_len + 0x64,
-                                          GOOGLE_RTT_COMPLETE_EVENT, kflags);
+                                          OHOS_RTT_COMPLETE_EVENT, kflags);
 #else
         skb =
             cfg80211_vendor_event_alloc(wiphy, rtt_header->result_tot_len + 0x64,
-                                        GOOGLE_RTT_COMPLETE_EVENT, kflags);
+                                        OHOS_RTT_COMPLETE_EVENT, kflags);
 #endif /* (defined(CONFIG_ARCH_MSM) &&                                         \
           defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
         /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
@@ -2335,12 +2335,12 @@ exit:
 }
 #endif /* GSCAN_SUPPORT */
 #if defined(GSCAN_SUPPORT) || defined(ROAMEXP_SUPPORT)
-static int wl_cfgvendor_set_bssid_blacklist(struct wiphy *wiphy,
+static int wl_cfgvendor_set_bssid_denylist(struct wiphy *wiphy,
                                             struct wireless_dev *wdev,
                                             const void *data, int len)
 {
     struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-    maclist_t *blacklist = NULL;
+    maclist_t *denylist = NULL;
     int err = 0;
     int type, tmp;
     const struct nlattr *iter;
@@ -2363,23 +2363,23 @@ static int wl_cfgvendor_set_bssid_blacklist(struct wiphy *wiphy,
                     goto exit;
                 }
                 num = nla_get_u32(iter);
-                if (num == 0 || num > MAX_BSSID_BLACKLIST_NUM) {
+                if (num == 0 || num > MAX_BSSID_DENYLIST_NUM) {
                     WL_ERR(("wrong BSSID count:%d\n", num));
                     err = -EINVAL;
                     goto exit;
                 }
-                if (!blacklist) {
+                if (!denylist) {
                     mem_needed = OFFSETOF(maclist_t, ea) +
                                  sizeof(struct ether_addr) * (num);
-                    blacklist = (maclist_t *)MALLOCZ(cfg->osh, mem_needed);
-                    if (!blacklist) {
+                    denylist = (maclist_t *)MALLOCZ(cfg->osh, mem_needed);
+                    if (!denylist) {
                         WL_ERR(("MALLOCZ failed.\n"));
                         err = -ENOMEM;
                         goto exit;
                     }
                 }
                 break;
-            case GSCAN_ATTRIBUTE_BSSID_BLACKLIST_FLUSH:
+            case GSCAN_ATTRIBUTE_BSSID_DENYLIST_FLUSH:
                 if (nla_len(iter) != sizeof(uint32)) {
                     WL_ERR(("not matching nla_len.\n"));
                     err = -EINVAL;
@@ -2392,8 +2392,8 @@ static int wl_cfgvendor_set_bssid_blacklist(struct wiphy *wiphy,
                     goto exit;
                 }
                 break;
-            case GSCAN_ATTRIBUTE_BLACKLIST_BSSID:
-                if (num == 0 || !blacklist) {
+            case GSCAN_ATTRIBUTE_DENYLIST_BSSID:
+                if (num == 0 || !denylist) {
                     WL_ERR(("number of BSSIDs not received.\n"));
                     err = -EINVAL;
                     goto exit;
@@ -2403,15 +2403,15 @@ static int wl_cfgvendor_set_bssid_blacklist(struct wiphy *wiphy,
                     err = -EINVAL;
                     goto exit;
                 }
-                if (blacklist->count >= num) {
+                if (denylist->count >= num) {
                     WL_ERR(("too many BSSIDs than expected:%d\n",
-                            blacklist->count));
+                            denylist->count));
                     err = -EINVAL;
                     goto exit;
                 }
-                memcpy(&(blacklist->ea[blacklist->count]), nla_data(iter),
+                memcpy(&(denylist->ea[denylist->count]), nla_data(iter),
                        ETHER_ADDR_LEN);
-                blacklist->count++;
+                denylist->count++;
                 break;
             default:
                 WL_ERR(("No such attribute:%d\n", type));
@@ -2419,27 +2419,27 @@ static int wl_cfgvendor_set_bssid_blacklist(struct wiphy *wiphy,
         }
     }
 
-    if (blacklist && (blacklist->count != num)) {
+    if (denylist && (denylist->count != num)) {
         WL_ERR(("not matching bssid count:%d to expected:%d\n",
-                blacklist->count, num));
+                denylist->count, num));
         err = -EINVAL;
         goto exit;
     }
 
-    err = dhd_dev_set_blacklist_bssid(bcmcfg_to_prmry_ndev(cfg), blacklist,
+    err = dhd_dev_set_denylist_bssid(bcmcfg_to_prmry_ndev(cfg), denylist,
                                       mem_needed, flush);
 exit:
-    MFREE(cfg->osh, blacklist, mem_needed);
+    MFREE(cfg->osh, denylist, mem_needed);
     return err;
 }
 
-static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
+static int wl_cfgvendor_set_ssid_allowlist(struct wiphy *wiphy,
                                            struct wireless_dev *wdev,
                                            const void *data, int len)
 {
     int err = 0;
     struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-    wl_ssid_whitelist_t *ssid_whitelist = NULL;
+    wl_ssid_allowlist_t *ssid_allowlist = NULL;
     wlc_ssid_t *ssid_elem;
     int tmp, tmp1, mem_needed = 0, type;
     const struct nlattr *iter, *iter1;
@@ -2463,16 +2463,16 @@ static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
                     goto exit;
                 }
                 num = nla_get_u32(iter);
-                if (num == 0 || num > MAX_SSID_WHITELIST_NUM) {
+                if (num == 0 || num > MAX_SSID_ALLOWLIST_NUM) {
                     WL_ERR(("wrong SSID count:%d\n", num));
                     err = -EINVAL;
                     goto exit;
                 }
                 mem_needed =
-                    sizeof(wl_ssid_whitelist_t) + sizeof(wlc_ssid_t) * num;
-                ssid_whitelist =
-                    (wl_ssid_whitelist_t *)MALLOCZ(cfg->osh, mem_needed);
-                if (ssid_whitelist == NULL) {
+                    sizeof(wl_ssid_allowlist_t) + sizeof(wlc_ssid_t) * num;
+                ssid_allowlist =
+                    (wl_ssid_allowlist_t *)MALLOCZ(cfg->osh, mem_needed);
+                if (ssid_allowlist == NULL) {
                     WL_ERR(("failed to alloc mem\n"));
                     err = -ENOMEM;
                     goto exit;
@@ -2491,19 +2491,19 @@ static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
                     goto exit;
                 }
                 break;
-            case GSCAN_ATTRIBUTE_WHITELIST_SSID_ELEM:
-                if (!num || !ssid_whitelist) {
+            case GSCAN_ATTRIBUTE_ALLOWLIST_SSID_ELEM:
+                if (!num || !ssid_allowlist) {
                     WL_ERR(("num ssid is not set!\n"));
                     err = -EINVAL;
                     goto exit;
                 }
-                if (ssid_whitelist->ssid_count >= num) {
-                    WL_ERR(("too many SSIDs:%d\n", ssid_whitelist->ssid_count));
+                if (ssid_allowlist->ssid_count >= num) {
+                    WL_ERR(("too many SSIDs:%d\n", ssid_allowlist->ssid_count));
                     err = -EINVAL;
                     goto exit;
                 }
 
-                ssid_elem = &ssid_whitelist->ssids[ssid_whitelist->ssid_count];
+                ssid_elem = &ssid_allowlist->ssids[ssid_allowlist->ssid_count];
                 ssid_found = 0;
                 nla_for_each_nested(iter1, iter, tmp1)
                 {
@@ -2523,7 +2523,7 @@ static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
                                 goto exit;
                             }
                             break;
-                        case GSCAN_ATTRIBUTE_WHITELIST_SSID:
+                        case GSCAN_ATTRIBUTE_ALLOWLIST_SSID:
                             if (ssid_elem->SSID_len == 0) {
                                 WL_ERR(("SSID_len not received\n"));
                                 err = -EINVAL;
@@ -2540,7 +2540,7 @@ static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
                             break;
                     }
                     if (ssid_found) {
-                        ssid_whitelist->ssid_count++;
+                        ssid_allowlist->ssid_count++;
                         break;
                     }
                 }
@@ -2551,18 +2551,18 @@ static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
         }
     }
 
-    if (ssid_whitelist && (ssid_whitelist->ssid_count != num)) {
+    if (ssid_allowlist && (ssid_allowlist->ssid_count != num)) {
         WL_ERR(("not matching ssid count:%d to expected:%d\n",
-                ssid_whitelist->ssid_count, num));
+                ssid_allowlist->ssid_count, num));
         err = -EINVAL;
         goto exit;
     }
-    err = dhd_dev_set_whitelist_ssid(bcmcfg_to_prmry_ndev(cfg), ssid_whitelist,
+    err = dhd_dev_set_allowlist_ssid(bcmcfg_to_prmry_ndev(cfg), ssid_allowlist,
                                      mem_needed, flush);
     if (err == BCME_UNSUPPORTED) {
         /* If firmware doesn't support feature, ignore the error
-         * Android framework doesn't populate/use whitelist ssids
-         * as of now, but invokes whitelist as part of roam config
+         * framework doesn't populate/use allowlist ssids as of
+         * now, but invokes allowlist as part of roam config
          * API. so this handler cannot be compiled out. but its
          * safe to ignore.
          */
@@ -2570,7 +2570,7 @@ static int wl_cfgvendor_set_ssid_whitelist(struct wiphy *wiphy,
         err = BCME_OK;
     }
 exit:
-    MFREE(cfg->osh, ssid_whitelist, mem_needed);
+    MFREE(cfg->osh, ssid_allowlist, mem_needed);
     return err;
 }
 #endif /* GSCAN_SUPPORT || ROAMEXP_SUPPORT */
@@ -2631,9 +2631,9 @@ static int wl_cfgvendor_fw_roam_get_capability(struct wiphy *wiphy,
     int err = 0;
     wifi_roaming_capabilities_t roaming_capability;
 
-    /* Update max number of blacklist bssids supported */
-    roaming_capability.max_blacklist_size = MAX_BSSID_BLACKLIST_NUM;
-    roaming_capability.max_whitelist_size = MAX_SSID_WHITELIST_NUM;
+    /* Update max number of denylist bssids supported */
+    roaming_capability.max_denylist_size = MAX_BSSID_DENYLIST_NUM;
+    roaming_capability.max_allowlist_size = MAX_SSID_ALLOWLIST_NUM;
     err = wl_cfgvendor_send_cmd_reply(wiphy, &roaming_capability,
                                       sizeof(roaming_capability));
     if (unlikely(err)) {
@@ -2845,7 +2845,7 @@ done:
 
 #ifdef BCM_PRIV_CMD_SUPPORT
 /* strlen("ifname=") + IFNAMESIZE + strlen(" ") + '\0' */
-#define ANDROID_PRIV_CMD_IF_PREFIX_LEN (7 + IFNAMSIZ + 2)
+#define OHOS_PRIV_CMD_IF_PREFIX_LEN (7 + IFNAMSIZ + 2)
 /* Max length for the reply buffer. For BRCM_ATTR_DRIVER_CMD, the reply
  * would be a formatted string and reply buf would be the size of the
  * string.
@@ -2864,13 +2864,13 @@ static int wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
     int bytes_written;
     struct net_device *net = NULL;
     unsigned long int cmd_out = 0;
-#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
+#if defined(WL_OHOS_PRIV_CMD_OVER_NL80211)
     u32 cmd_buf_len = WL_DRIVER_PRIV_CMD_LEN;
-    char cmd_prefix[ANDROID_PRIV_CMD_IF_PREFIX_LEN + 1] = {0};
+    char cmd_prefix[OHOS_PRIV_CMD_IF_PREFIX_LEN + 1] = {0};
     char *cmd_buf = NULL;
     char *current_pos;
     u32 cmd_offset;
-#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
+#endif /* WL_OHOS_PRIV_CMD_OVER_NL80211 */
 
     WL_DBG(("%s: Enter \n", __func__));
 
@@ -2891,10 +2891,10 @@ static int wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
             goto exit;
         }
 
-#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
+#if defined(WL_OHOS_PRIV_CMD_OVER_NL80211)
         if (type == BRCM_ATTR_DRIVER_CMD) {
             if ((cmd_len >= WL_DRIVER_PRIV_CMD_LEN) ||
-                (cmd_len < ANDROID_PRIV_CMD_IF_PREFIX_LEN)) {
+                (cmd_len < OHOS_PRIV_CMD_IF_PREFIX_LEN)) {
                 WL_ERR(("Unexpected command length (%u)."
                         "Ignore the command\n",
                         cmd_len));
@@ -2904,7 +2904,7 @@ static int wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
 
             /* check whether there is any ifname prefix provided */
             if (memcpy_s(cmd_prefix, (sizeof(cmd_prefix) - 1), cmd,
-                         ANDROID_PRIV_CMD_IF_PREFIX_LEN) != BCME_OK) {
+                         OHOS_PRIV_CMD_IF_PREFIX_LEN) != BCME_OK) {
                 WL_ERR(("memcpy failed for cmd buffer. len:%d\n", cmd_len));
                 err = -ENOMEM;
                 goto exit;
@@ -2921,7 +2921,7 @@ static int wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
             current_pos = (char *)cmd_out;
             cmd_offset = current_pos - cmd_prefix;
 
-            if (!current_pos || (cmd_offset) > ANDROID_PRIV_CMD_IF_PREFIX_LEN) {
+            if (!current_pos || (cmd_offset) > OHOS_PRIV_CMD_IF_PREFIX_LEN) {
                 WL_ERR(("Invalid len cmd_offset: %u \n", cmd_offset));
                 err = -EINVAL;
                 goto exit;
@@ -2982,15 +2982,15 @@ static int wl_cfgvendor_priv_bcm_handler(struct wiphy *wiphy,
             }
             break;
         }
-#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
+#endif /* WL_OHOS_PRIV_CMD_OVER_NL80211 */
     }
 
 exit:
-#if defined(WL_ANDROID_PRIV_CMD_OVER_NL80211)
+#if defined(WL_OHOS_PRIV_CMD_OVER_NL80211)
     if (cmd_buf) {
         MFREE(cfg->osh, cmd_buf, cmd_buf_len);
     }
-#endif /* WL_ANDROID_PRIV_CMD_OVER_NL80211 && OEM_ANDROID */
+#endif /* WL_OHOS_PRIV_CMD_OVER_NL80211 */
     net_os_wake_unlock(ndev);
     return err;
 }
@@ -4910,7 +4910,7 @@ static int wl_cfgvendor_nan_svc_terminate_event_filler(
         goto fail;
     }
 
-    if (event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED) {
+    if (event_id == OHOS_NAN_EVENT_SUBSCRIBE_TERMINATED) {
         ret = nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID,
                           event_data->local_inst_id);
         if (unlikely(ret)) {
@@ -5201,9 +5201,9 @@ s32 wl_cfgvendor_send_as_rtt_legacy_event(struct wiphy *wiphy,
      defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) ||                     \
     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
     msg = cfg80211_vendor_event_alloc(wiphy, NULL, 0x64,
-                                      GOOGLE_RTT_COMPLETE_EVENT, kflags);
+                                      OHOS_RTT_COMPLETE_EVENT, kflags);
 #else
-    msg = cfg80211_vendor_event_alloc(wiphy, 0x64, GOOGLE_RTT_COMPLETE_EVENT,
+    msg = cfg80211_vendor_event_alloc(wiphy, 0x64, OHOS_RTT_COMPLETE_EVENT,
                                       kflags);
 #endif /* (defined(CONFIG_ARCH_MSM) &&                                         \
           defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
@@ -5251,7 +5251,7 @@ exit:
     if (msg) {
         dev_kfree_skb_any(msg);
     }
-    WL_ERR(("Failed to send event GOOGLE_RTT_COMPLETE_EVENT,"
+    WL_ERR(("Failed to send event OHOS_RTT_COMPLETE_EVENT,"
             " -- Free skb, ret = %d\n",
             ret));
     if (report) {
@@ -5339,8 +5339,8 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
     }
 
     switch (event_id) {
-        case GOOGLE_NAN_EVENT_DE_EVENT: {
-            WL_INFORM_MEM(("[NAN] GOOGLE_NAN_DE_EVENT cluster id=" MACDBG
+        case OHOS_NAN_EVENT_DE_EVENT: {
+            WL_INFORM_MEM(("[NAN] OHOS_NAN_DE_EVENT cluster id=" MACDBG
                            "nmi= " MACDBG "\n",
                            MAC2STRDBG(event_data->clus_id.octet),
                            MAC2STRDBG(event_data->local_nmi.octet)));
@@ -5351,18 +5351,18 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             }
             break;
         }
-        case GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH:
-        case GOOGLE_NAN_EVENT_FOLLOWUP: {
-            if (event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH) {
-                WL_DBG(("GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH\n"));
+        case OHOS_NAN_EVENT_SUBSCRIBE_MATCH:
+        case OHOS_NAN_EVENT_FOLLOWUP: {
+            if (event_id == OHOS_NAN_EVENT_SUBSCRIBE_MATCH) {
+                WL_DBG(("OHOS_NAN_EVENT_SUBSCRIBE_MATCH\n"));
                 ret = wl_cfgvendor_nan_sub_match_event_filler(msg, event_data);
                 if (unlikely(ret)) {
                     WL_ERR(
                         ("Failed to fill sub match event data, ret=%d\n", ret));
                     goto fail;
                 }
-            } else if (event_id == GOOGLE_NAN_EVENT_FOLLOWUP) {
-                WL_DBG(("GOOGLE_NAN_EVENT_FOLLOWUP\n"));
+            } else if (event_id == OHOS_NAN_EVENT_FOLLOWUP) {
+                WL_DBG(("OHOS_NAN_EVENT_FOLLOWUP\n"));
                 ret =
                     wl_cfgvendor_nan_tx_followup_event_filler(msg, event_data);
                 if (unlikely(ret)) {
@@ -5379,8 +5379,8 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             break;
         }
 
-        case GOOGLE_NAN_EVENT_DISABLED: {
-            WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DISABLED\n"));
+        case OHOS_NAN_EVENT_DISABLED: {
+            WL_INFORM_MEM(("[NAN] OHOS_NAN_EVENT_DISABLED\n"));
             ret = nla_put_u8(msg, NAN_ATTRIBUTE_HANDLE, 0);
             if (unlikely(ret)) {
                 WL_ERR(("Failed to put handle, ret=%d\n", ret));
@@ -5400,9 +5400,9 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             break;
         }
 
-        case GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED:
-        case GOOGLE_NAN_EVENT_PUBLISH_TERMINATED: {
-            WL_DBG(("GOOGLE_NAN_SVC_TERMINATED, %d\n", event_id));
+        case OHOS_NAN_EVENT_SUBSCRIBE_TERMINATED:
+        case OHOS_NAN_EVENT_PUBLISH_TERMINATED: {
+            WL_DBG(("OHOS_NAN_SVC_TERMINATED, %d\n", event_id));
             ret = wl_cfgvendor_nan_svc_terminate_event_filler(
                 msg, cfg, event_id, event_data);
             if (unlikely(ret)) {
@@ -5413,9 +5413,9 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             break;
         }
 
-        case GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND: {
-            WL_DBG(("GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND %d\n",
-                    GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND));
+        case OHOS_NAN_EVENT_TRANSMIT_FOLLOWUP_IND: {
+            WL_DBG(("OHOS_NAN_EVENT_TRANSMIT_FOLLOWUP_IND %d\n",
+                    OHOS_NAN_EVENT_TRANSMIT_FOLLOWUP_IND));
             ret = wl_cfgvendor_nan_tx_followup_ind_event_data_filler(
                 msg, event_data);
             if (unlikely(ret)) {
@@ -5427,8 +5427,8 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             break;
         }
 
-        case GOOGLE_NAN_EVENT_DATA_REQUEST: {
-            WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DATA_REQUEST\n"));
+        case OHOS_NAN_EVENT_DATA_REQUEST: {
+            WL_INFORM_MEM(("[NAN] OHOS_NAN_EVENT_DATA_REQUEST\n"));
             ret = wl_cfgvendor_nan_dp_ind_event_data_filler(msg, event_data);
             if (unlikely(ret)) {
                 WL_ERR(("Failed to fill dp ind event data, ret=%d\n", ret));
@@ -5437,8 +5437,8 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             break;
         }
 
-        case GOOGLE_NAN_EVENT_DATA_CONFIRMATION: {
-            WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DATA_CONFIRMATION\n"));
+        case OHOS_NAN_EVENT_DATA_CONFIRMATION: {
+            WL_INFORM_MEM(("[NAN] OHOS_NAN_EVENT_DATA_CONFIRMATION\n"));
 
             ret = wl_cfgvendor_nan_dp_estb_event_data_filler(msg, event_data);
             if (unlikely(ret)) {
@@ -5448,8 +5448,8 @@ int wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
             break;
         }
 
-        case GOOGLE_NAN_EVENT_DATA_END: {
-            WL_INFORM_MEM(("[NAN] GOOGLE_NAN_EVENT_DATA_END\n"));
+        case OHOS_NAN_EVENT_DATA_END: {
+            WL_INFORM_MEM(("[NAN] OHOS_NAN_EVENT_DATA_END\n"));
             ret = nla_put_u8(msg, NAN_ATTRIBUTE_INST_COUNT, 1);
             if (unlikely(ret)) {
                 WL_ERR(("Failed to put inst count, ret=%d\n", ret));
@@ -7093,9 +7093,9 @@ wl_cfgvendor_dbg_ring_send_evt(void *ctx, const int ring_id, const void *data,
      defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) ||                     \
     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
     skb = cfg80211_vendor_event_alloc(wiphy, NULL, len + 0x64,
-                                      GOOGLE_DEBUG_RING_EVENT, kflags);
+                                      OHOS_DEBUG_RING_EVENT, kflags);
 #else
-    skb = cfg80211_vendor_event_alloc(wiphy, len + 0x64, GOOGLE_DEBUG_RING_EVENT,
+    skb = cfg80211_vendor_event_alloc(wiphy, len + 0x64, OHOS_DEBUG_RING_EVENT,
                                       kflags);
 #endif /* (defined(CONFIG_ARCH_MSM) &&                                         \
           defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
@@ -7410,10 +7410,10 @@ static void wl_cfgvendor_dbg_send_file_dump_evt(void *ctx, const void *data,
     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
     skb = cfg80211_vendor_event_alloc(wiphy, NULL,
                                       len + CFG80211_VENDOR_EVT_SKB_SZ,
-                                      GOOGLE_FILE_DUMP_EVENT, kflags);
+                                      OHOS_FILE_DUMP_EVENT, kflags);
 #else
     skb = cfg80211_vendor_event_alloc(wiphy, len + CFG80211_VENDOR_EVT_SKB_SZ,
-                                      GOOGLE_FILE_DUMP_EVENT, kflags);
+                                      OHOS_FILE_DUMP_EVENT, kflags);
 #endif /* (defined(CONFIG_ARCH_MSM) &&                                         \
           defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
        /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
@@ -7500,7 +7500,7 @@ static int wl_cfgvendor_dbg_get_version(struct wiphy *wiphy,
         goto exit;
     }
     ver += strlen("version ");
-    /* Adjust version format to fit in android sys property */
+    /* Adjust version format */
     for (p = ver; (*p != ' ') && (*p != '\n') && (*p != 0); p++) {
         ;
     }
@@ -7906,7 +7906,7 @@ static int wl_cfgvendor_configure_nd_offload(struct wiphy *wiphy,
     {
         type = nla_type(iter);
         switch (type) {
-            case ANDR_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE:
+            case OHOS_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE:
                 enable = nla_get_u8(iter);
                 break;
             default:
@@ -8043,43 +8043,43 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_set_sae_password},
 #endif /* WL_SAE */
 #ifdef GSCAN_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_GET_CAPABILITIES},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_GET_CAPABILITIES},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_gscan_get_capabilities},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_SET_CONFIG},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_SET_CONFIG},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_scan_cfg},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_SET_SCAN_CONFIG},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_SET_SCAN_CONFIG},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_batch_scan_cfg},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_ENABLE_GSCAN},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_ENABLE_GSCAN},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_initiate_gscan},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_ENABLE_FULL_SCAN_RESULTS},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_ENABLE_FULL_SCAN_RESULTS},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_enable_full_scan_result},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_SET_HOTLIST},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_SET_HOTLIST},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_hotlist_cfg},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_GET_SCAN_RESULTS},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_GET_SCAN_RESULTS},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8087,7 +8087,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_gscan_get_batch_results},
 #endif /* GSCAN_SUPPORT */
 #if defined(GSCAN_SUPPORT) || defined(DHD_GET_VALID_CHANNELS)
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_GET_CHANNEL_LIST},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_GET_CHANNEL_LIST},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8095,78 +8095,78 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_gscan_get_channel_list},
 #endif /* GSCAN_SUPPORT || DHD_GET_VALID_CHANNELS */
 #ifdef RTT_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = RTT_SUBCMD_SET_CONFIG},
+    {{.vendor_id = OUI_OHOS, .subcmd = RTT_SUBCMD_SET_CONFIG},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_rtt_set_config},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = RTT_SUBCMD_CANCEL_CONFIG},
+    {{.vendor_id = OUI_OHOS, .subcmd = RTT_SUBCMD_CANCEL_CONFIG},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_rtt_cancel_config},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = RTT_SUBCMD_GETCAPABILITY},
+    {{.vendor_id = OUI_OHOS, .subcmd = RTT_SUBCMD_GETCAPABILITY},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_rtt_get_capability},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = RTT_SUBCMD_GETAVAILCHANNEL},
+    {{.vendor_id = OUI_OHOS, .subcmd = RTT_SUBCMD_GETAVAILCHANNEL},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_rtt_get_responder_info},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = RTT_SUBCMD_SET_RESPONDER},
+    {{.vendor_id = OUI_OHOS, .subcmd = RTT_SUBCMD_SET_RESPONDER},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_rtt_set_responder},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = RTT_SUBCMD_CANCEL_RESPONDER},
+    {{.vendor_id = OUI_OHOS, .subcmd = RTT_SUBCMD_CANCEL_RESPONDER},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_rtt_cancel_responder},
 #endif /* RTT_SUPPORT */
-    {{.vendor_id = OUI_GOOGLE, .subcmd = ANDR_WIFI_SUBCMD_GET_FEATURE_SET},
+    {{.vendor_id = OUI_OHOS, .subcmd = OHOS_WIFI_SUBCMD_GET_FEATURE_SET},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_get_feature_set},
-    {{.vendor_id = OUI_GOOGLE,
-      .subcmd = ANDR_WIFI_SUBCMD_GET_FEATURE_SET_MATRIX},
+    {{.vendor_id = OUI_OHOS,
+      .subcmd = OHOS_WIFI_SUBCMD_GET_FEATURE_SET_MATRIX},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_get_feature_set_matrix},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = ANDR_WIFI_RANDOM_MAC_OUI},
+    {{.vendor_id = OUI_OHOS, .subcmd = OHOS_WIFI_RANDOM_MAC_OUI},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_rand_mac_oui},
 #ifdef CUSTOM_FORCE_NODFS_FLAG
-    {{.vendor_id = OUI_GOOGLE, .subcmd = ANDR_WIFI_NODFS_CHANNELS},
+    {{.vendor_id = OUI_OHOS, .subcmd = OHOS_WIFI_NODFS_CHANNELS},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_nodfs_flag},
 #endif /* CUSTOM_FORCE_NODFS_FLAG */
-    {{.vendor_id = OUI_GOOGLE, .subcmd = ANDR_WIFI_SET_COUNTRY},
+    {{.vendor_id = OUI_OHOS, .subcmd = OHOS_WIFI_SET_COUNTRY},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_country},
 #ifdef LINKSTAT_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = LSTATS_SUBCMD_GET_INFO},
+    {{.vendor_id = OUI_OHOS, .subcmd = LSTATS_SUBCMD_GET_INFO},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8175,7 +8175,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
 #endif /* LINKSTAT_SUPPORT */
 
 #ifdef GSCAN_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = GSCAN_SUBCMD_SET_EPNO_SSID},
+    {{.vendor_id = OUI_OHOS, .subcmd = GSCAN_SUBCMD_SET_EPNO_SSID},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8183,7 +8183,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_epno_cfg
 
     },
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_SET_LAZY_ROAM_PARAMS},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_SET_LAZY_ROAM_PARAMS},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8191,7 +8191,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_set_lazy_roam_cfg
 
     },
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_ENABLE_LAZY_ROAM},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_ENABLE_LAZY_ROAM},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8199,7 +8199,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_enable_lazy_roam
 
     },
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_SET_BSSID_PREF},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_SET_BSSID_PREF},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8209,43 +8209,43 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
     },
 #endif /* GSCAN_SUPPORT */
 #if defined(GSCAN_SUPPORT) || defined(ROAMEXP_SUPPORT)
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_SET_SSID_WHITELIST},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_SET_SSID_ALLOWLIST},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
-     .doit = wl_cfgvendor_set_ssid_whitelist
+     .doit = wl_cfgvendor_set_ssid_allowlist
 
     },
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_SET_BSSID_BLACKLIST},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_SET_BSSID_DENYLIST},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
-     .doit = wl_cfgvendor_set_bssid_blacklist},
+     .doit = wl_cfgvendor_set_bssid_denylist},
 #endif /* GSCAN_SUPPORT || ROAMEXP_SUPPORT */
 #ifdef ROAMEXP_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_FW_ROAM_POLICY},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_FW_ROAM_POLICY},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_fw_roaming_state},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_ROAM_CAPABILITY},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_ROAM_CAPABILITY},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_fw_roam_get_capability},
 #endif /* ROAMEXP_SUPPORT */
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_VER},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_VER},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_get_version},
 #ifdef DHD_LOG_DUMP
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_FILE_DUMP_BUF},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_FILE_DUMP_BUF},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8254,63 +8254,63 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
 #endif /* DHD_LOG_DUMP */
 
 #ifdef DEBUGABILITY
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_TRIGGER_MEM_DUMP},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_TRIGGER_MEM_DUMP},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_trigger_mem_dump},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_MEM_DUMP},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_MEM_DUMP},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_get_mem_dump},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_START_LOGGING},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_START_LOGGING},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_start_logging},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_RESET_LOGGING},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_RESET_LOGGING},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_reset_logging},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_RING_STATUS},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_RING_STATUS},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_get_ring_status},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_RING_DATA},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_RING_DATA},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_get_ring_data},
 #endif /* DEBUGABILITY */
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_FEATURE},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_FEATURE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_get_feature},
 #ifdef DBG_PKT_MON
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_START_PKT_FATE_MONITORING},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_START_PKT_FATE_MONITORING},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_start_pkt_fate_monitoring},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_TX_PKT_FATES},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_TX_PKT_FATES},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_dbg_get_tx_pkt_fates},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_RX_PKT_FATES},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_RX_PKT_FATES},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8318,13 +8318,13 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_dbg_get_rx_pkt_fates},
 #endif /* DBG_PKT_MON */
 #ifdef KEEP_ALIVE
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_OFFLOAD_SUBCMD_START_MKEEP_ALIVE},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_OFFLOAD_SUBCMD_START_MKEEP_ALIVE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_start_mkeep_alive},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_OFFLOAD_SUBCMD_STOP_MKEEP_ALIVE},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_OFFLOAD_SUBCMD_STOP_MKEEP_ALIVE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8332,102 +8332,102 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_stop_mkeep_alive},
 #endif /* KEEP_ALIVE */
 #ifdef WL_NAN
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_ENABLE},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_ENABLE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_start_handler},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_DISABLE},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_DISABLE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_stop_handler},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_CONFIG},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_CONFIG},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_config_handler},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_REQUEST_PUBLISH},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_REQUEST_PUBLISH},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_req_publish},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_req_subscribe},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_CANCEL_PUBLISH},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_CANCEL_PUBLISH},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_cancel_publish},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_cancel_subscribe},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_TRANSMIT},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_TRANSMIT},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_transmit},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_GET_CAPABILITIES},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_GET_CAPABILITIES},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_get_capablities},
 
-    {{.vendor_id = OUI_GOOGLE,
+    {{.vendor_id = OUI_OHOS,
       .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_data_path_iface_create},
-    {{.vendor_id = OUI_GOOGLE,
+    {{.vendor_id = OUI_OHOS,
       .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_data_path_iface_delete},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_REQUEST},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_REQUEST},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_data_path_request},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_data_path_response},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_END},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_END},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_data_path_end},
 #ifdef WL_NAN_DISC_CACHE
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_nan_data_path_sec_info},
 #endif /* WL_NAN_DISC_CACHE */
-    {{.vendor_id = OUI_GOOGLE, .subcmd = NAN_WIFI_SUBCMD_VERSION_INFO},
+    {{.vendor_id = OUI_OHOS, .subcmd = NAN_WIFI_SUBCMD_VERSION_INFO},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8435,14 +8435,14 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_nan_version_info},
 #endif /* WL_NAN */
 #if defined(PKT_FILTER_SUPPORT) && defined(APF)
-    {{.vendor_id = OUI_GOOGLE, .subcmd = APF_SUBCMD_GET_CAPABILITIES},
+    {{.vendor_id = OUI_OHOS, .subcmd = APF_SUBCMD_GET_CAPABILITIES},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_apf_get_capabilities},
 
-    {{.vendor_id = OUI_GOOGLE, .subcmd = APF_SUBCMD_SET_FILTER},
+    {{.vendor_id = OUI_OHOS, .subcmd = APF_SUBCMD_SET_FILTER},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8450,7 +8450,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_apf_set_filter},
 #endif /* PKT_FILTER_SUPPORT && APF */
 #ifdef NDO_CONFIG_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_CONFIG_ND_OFFLOAD},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_CONFIG_ND_OFFLOAD},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8458,7 +8458,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_configure_nd_offload},
 #endif /* NDO_CONFIG_SUPPORT */
 #ifdef RSSI_MONITOR_SUPPORT
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_SET_RSSI_MONITOR},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_SET_RSSI_MONITOR},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8466,7 +8466,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_set_rssi_monitor},
 #endif /* RSSI_MONITOR_SUPPORT */
 #ifdef DHD_WAKE_STATUS
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_GET_WAKE_REASON_STATS},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_GET_WAKE_REASON_STATS},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8474,7 +8474,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_get_wake_reason_stats},
 #endif /* DHD_WAKE_STATUS */
 #ifdef DHDTCPACK_SUPPRESS
-    {{.vendor_id = OUI_GOOGLE, .subcmd = WIFI_SUBCMD_CONFIG_TCPACK_SUP},
+    {{.vendor_id = OUI_OHOS, .subcmd = WIFI_SUBCMD_CONFIG_TCPACK_SUP},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8496,7 +8496,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
 #endif
      .doit = wl_cfgvendor_get_driver_feature},
 #if defined(WL_CFG80211) && defined(DHD_FILE_DUMP_EVENT)
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_FILE_DUMP_DONE_IND},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_FILE_DUMP_DONE_IND},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8504,13 +8504,13 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
      .doit = wl_cfgvendor_notify_dump_completion},
 #endif /* WL_CFG80211 && DHD_FILE_DUMP_EVENT */
 #if defined(WL_CFG80211)
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_SET_HAL_START},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_SET_HAL_START},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
 #endif
      .doit = wl_cfgvendor_set_hal_started},
-    {{.vendor_id = OUI_GOOGLE, .subcmd = DEBUG_SET_HAL_STOP},
+    {{.vendor_id = OUI_OHOS, .subcmd = DEBUG_SET_HAL_STOP},
      .flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
      .policy = VENDOR_CMD_RAW_DATA,
@@ -8522,45 +8522,45 @@ static const struct wiphy_vendor_command wl_vendor_cmds[] = {
 static const struct nl80211_vendor_cmd_info wl_vendor_events[] = {
     {OUI_BRCM, BRCM_VENDOR_EVENT_UNSPEC},
     {OUI_BRCM, BRCM_VENDOR_EVENT_PRIV_STR},
-    {OUI_GOOGLE, GOOGLE_GSCAN_SIGNIFICANT_EVENT},
-    {OUI_GOOGLE, GOOGLE_GSCAN_GEOFENCE_FOUND_EVENT},
-    {OUI_GOOGLE, GOOGLE_GSCAN_BATCH_SCAN_EVENT},
-    {OUI_GOOGLE, GOOGLE_SCAN_FULL_RESULTS_EVENT},
-    {OUI_GOOGLE, GOOGLE_RTT_COMPLETE_EVENT},
-    {OUI_GOOGLE, GOOGLE_SCAN_COMPLETE_EVENT},
-    {OUI_GOOGLE, GOOGLE_GSCAN_GEOFENCE_LOST_EVENT},
-    {OUI_GOOGLE, GOOGLE_SCAN_EPNO_EVENT},
-    {OUI_GOOGLE, GOOGLE_DEBUG_RING_EVENT},
-    {OUI_GOOGLE, GOOGLE_FW_DUMP_EVENT},
-    {OUI_GOOGLE, GOOGLE_PNO_HOTSPOT_FOUND_EVENT},
-    {OUI_GOOGLE, GOOGLE_RSSI_MONITOR_EVENT},
-    {OUI_GOOGLE, GOOGLE_MKEEP_ALIVE_EVENT},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_ENABLED},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_DISABLED},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_REPLIED},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_PUBLISH_TERMINATED},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_TERMINATED},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_DE_EVENT},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_FOLLOWUP},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_TRANSMIT_FOLLOWUP_IND},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_REQUEST},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_CONFIRMATION},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_DATA_END},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_BEACON},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_SDF},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_TCA},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_SUBSCRIBE_UNMATCH},
-    {OUI_GOOGLE, GOOGLE_NAN_EVENT_UNKNOWN},
-    {OUI_GOOGLE, GOOGLE_ROAM_EVENT_START},
+    {OUI_OHOS, OHOS_GSCAN_SIGNIFICANT_EVENT},
+    {OUI_OHOS, OHOS_GSCAN_GEOFENCE_FOUND_EVENT},
+    {OUI_OHOS, OHOS_GSCAN_BATCH_SCAN_EVENT},
+    {OUI_OHOS, OHOS_SCAN_FULL_RESULTS_EVENT},
+    {OUI_OHOS, OHOS_RTT_COMPLETE_EVENT},
+    {OUI_OHOS, OHOS_SCAN_COMPLETE_EVENT},
+    {OUI_OHOS, OHOS_GSCAN_GEOFENCE_LOST_EVENT},
+    {OUI_OHOS, OHOS_SCAN_EPNO_EVENT},
+    {OUI_OHOS, OHOS_DEBUG_RING_EVENT},
+    {OUI_OHOS, OHOS_FW_DUMP_EVENT},
+    {OUI_OHOS, OHOS_PNO_HOTSPOT_FOUND_EVENT},
+    {OUI_OHOS, OHOS_RSSI_MONITOR_EVENT},
+    {OUI_OHOS, OHOS_MKEEP_ALIVE_EVENT},
+    {OUI_OHOS, OHOS_NAN_EVENT_ENABLED},
+    {OUI_OHOS, OHOS_NAN_EVENT_DISABLED},
+    {OUI_OHOS, OHOS_NAN_EVENT_SUBSCRIBE_MATCH},
+    {OUI_OHOS, OHOS_NAN_EVENT_REPLIED},
+    {OUI_OHOS, OHOS_NAN_EVENT_PUBLISH_TERMINATED},
+    {OUI_OHOS, OHOS_NAN_EVENT_SUBSCRIBE_TERMINATED},
+    {OUI_OHOS, OHOS_NAN_EVENT_DE_EVENT},
+    {OUI_OHOS, OHOS_NAN_EVENT_FOLLOWUP},
+    {OUI_OHOS, OHOS_NAN_EVENT_TRANSMIT_FOLLOWUP_IND},
+    {OUI_OHOS, OHOS_NAN_EVENT_DATA_REQUEST},
+    {OUI_OHOS, OHOS_NAN_EVENT_DATA_CONFIRMATION},
+    {OUI_OHOS, OHOS_NAN_EVENT_DATA_END},
+    {OUI_OHOS, OHOS_NAN_EVENT_BEACON},
+    {OUI_OHOS, OHOS_NAN_EVENT_SDF},
+    {OUI_OHOS, OHOS_NAN_EVENT_TCA},
+    {OUI_OHOS, OHOS_NAN_EVENT_SUBSCRIBE_UNMATCH},
+    {OUI_OHOS, OHOS_NAN_EVENT_UNKNOWN},
+    {OUI_OHOS, OHOS_ROAM_EVENT_START},
     {OUI_BRCM, BRCM_VENDOR_EVENT_HANGED},
     {OUI_BRCM, BRCM_VENDOR_EVENT_SAE_KEY},
     {OUI_BRCM, BRCM_VENDOR_EVENT_BEACON_RECV},
     {OUI_BRCM, BRCM_VENDOR_EVENT_PORT_AUTHORIZED},
-    {OUI_GOOGLE, GOOGLE_FILE_DUMP_EVENT},
+    {OUI_OHOS, OHOS_FILE_DUMP_EVENT},
     {OUI_BRCM, BRCM_VENDOR_EVENT_CU},
     {OUI_BRCM, BRCM_VENDOR_EVENT_WIPS},
-    {OUI_GOOGLE, NAN_ASYNC_RESPONSE_DISABLED}};
+    {OUI_OHOS, NAN_ASYNC_RESPONSE_DISABLED}};
 
 int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd)
 {

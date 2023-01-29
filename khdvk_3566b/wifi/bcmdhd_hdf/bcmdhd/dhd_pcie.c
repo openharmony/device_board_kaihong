@@ -1821,8 +1821,6 @@ static void dhdpcie_bus_remove_prep(dhd_bus_t *bus)
             dhd_bus_pcie_pwr_req_reload_war(bus);
         }
 
-        /* Has insmod fails after rmmod issue in Brix Android */
-
         /* if the pcie link is down, watchdog reset
          * should not be done, as it may hang
          */

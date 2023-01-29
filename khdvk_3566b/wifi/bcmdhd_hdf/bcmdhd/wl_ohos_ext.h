@@ -1,6 +1,6 @@
+#ifndef _wl_ohos_ext_
+#define _wl_ohos_ext_
 
-#ifndef _wl_android_ext_
-#define _wl_android_ext_
 typedef struct bcol_gtk_para {
     int enable;
     int ptk_len;
@@ -10,7 +10,7 @@ typedef struct bcol_gtk_para {
 #define ACS_FW_BIT (1 << 0)
 #define ACS_DRV_BIT (1 << 1)
 int wl_ext_autochannel(struct net_device *dev, uint acs, uint32 band);
-int wl_android_ext_priv_cmd(struct net_device *net, char *command,
+int wl_ohos_ext_priv_cmd(struct net_device *net, char *command,
                             int total_len, int *bytes_written);
 void wl_ext_get_sec(struct net_device *dev, int ifmode, char *sec,
                     int total_len, bool dump);
