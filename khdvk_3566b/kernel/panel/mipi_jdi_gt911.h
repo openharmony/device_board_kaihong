@@ -29,6 +29,7 @@ struct panel_hw_delay {
 };
 
 struct panel_jdi_gt911_dev {
+    bool prepared;
     bool power_invert;
     struct PanelData panel;
     struct mipi_dsi_device *dsiDev;

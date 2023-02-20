@@ -109,6 +109,10 @@ static int32_t PanelPrepare(struct PanelData *panel)
     HDF_LOGI("%s enter", __func__);
 
     panel_dev = ToPanelSimpleDev(panel);
+    if (panel_dev->prepared) {
+        return 0;
+    }
+
     ret = regulator_enable(panel_dev->supply);
     if (ret < 0) {
         HDF_LOGE("failed to enable supply: %d\n", ret);
@@ -142,6 +146,8 @@ static int32_t PanelPrepare(struct PanelData *panel)
         OsalMSleep(panel_dev->hw_delay.init_delay);
     }
 
+    panel_dev->prepared = true;
+
     return HDF_SUCCESS;
 }
 
@@ -151,6 +157,10 @@ static int32_t PanelUnprepare(struct PanelData *panel)
     struct panel_jdi_gt911_dev *panel_dev = NULL;
     HDF_LOGI("%s enter", __func__);
     panel_dev = ToPanelSimpleDev(panel);
+
+    if (!panel_dev->prepared) {
+        return 0;
+    }
 
     ret = PanelSendCmds(panel_dev->dsiDev, g_panelOffCode,
                         sizeof(g_panelOffCode) / sizeof(g_panelOffCode[0]));
@@ -166,12 +176,19 @@ static int32_t PanelUnprepare(struct PanelData *panel)
         OsalMSleep(panel_dev->hw_delay.unprepare_delay);
     }
 
+    panel_dev->prepared = false;
+
     return HDF_SUCCESS;
 }
 
 static int32_t PanelInit(struct PanelData *panel)
 {
+    struct panel_jdi_gt911_dev *panel_dev = NULL;
+
     HDF_LOGI("%s enter", __func__);
+
+    panel_dev = ToPanelSimpleDev(panel);
+    panel_dev->prepared = false;
     return 0;
 }
 
