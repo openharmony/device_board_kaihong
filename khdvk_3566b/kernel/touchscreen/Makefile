@@ -48,5 +48,9 @@ ccflags-y +=-I$(srctree)/drivers/hdf/framework/model/input/driver \
             -I$(srctree)/drivers/hdf/framework/core/shared/include \
             -I$(srctree)/drivers/hdf/framework/utils/include \
             -I$(srctree)/drivers/hdf/khdf/osal/include
+            -I$(srctree)/drivers/hdf/inner_api/osal/shared \
+            -I$(srctree)/drivers/hdf/inner_api/host/shared \
+            -I$(srctree)/drivers/hdf/inner_api/utils \
+            -I$(srctree)/drivers/hdf/inner_api/core \
 ccflags-y +=-I$(srctree)/bounds_checking_function/include \
             -I$(srctree)/drivers/hdf/evdev
