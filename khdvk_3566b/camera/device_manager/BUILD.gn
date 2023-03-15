@@ -68,8 +68,6 @@ ohos_shared_library("camera_device_manager") {
     "$camera_path/adapter/platform/v4l2/src/device_manager/include",
     "$camera_path/adapter/platform/v4l2/src/driver_adapter/include/",
     "//commonlibrary/c_utils/base/include",
-    "//drivers/hdf_core/framework/include/utils",
-    "//drivers/hdf_core/adapter/uhdf2/osal/include",
   ]
 
   deps = [
@@ -79,6 +77,7 @@ ohos_shared_library("camera_device_manager") {
   if (is_standard_system) {
     external_deps = [
       "c_utils:utils",
+      "hdf_core:libhdf_utils",
       "hiviewdfx_hilog_native:libhilog",
     ]
   } else {
