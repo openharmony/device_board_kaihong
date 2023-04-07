@@ -894,6 +894,8 @@ void hw_lpm_ctrl_cback(void *p_mem)
     HC_BT_HDR *p_evt_buf = (HC_BT_HDR *)p_mem;
     bt_op_result_t status = BTC_OP_RESULT_FAIL;
 
+    (void) status;
+
     if (*((uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_STATUS_RET_BYTE) == 0) {
         status = BTC_OP_RESULT_SUCCESS;
     }
