@@ -200,6 +200,9 @@ int userial_vendor_open(tUSERIAL_CFG *p_cfg)
     uint16_t parity;
     uint8_t stop_bits;
 
+    (void) data_bits;
+    (void) parity;
+
     vnd_userial.fd = -1;
 
     if (!userial_to_tcio_baud(p_cfg->baud, &baud)) {
