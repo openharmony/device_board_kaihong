@@ -25,6 +25,8 @@ group("khdvk_3566b_group") {
     "updater:updater_files",
     "wifi:ap6xxx",
     "//device/soc/rockchip/rk3566/hardware:hardware_group",
+    "//device/soc/rockchip/rk3566/hardware/display:display_buffer_model",
+    "//device/soc/rockchip/rk3566/hardware/display:display_composer_model",
   ]
 }
 
