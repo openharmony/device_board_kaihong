@@ -12,7 +12,7 @@
 # limitations under the License.
 import("//build/ohos.gni")
 import("//drivers/hdf_core/adapter/uhdf2/uhdf.gni")
-import("//drivers/peripheral/camera/hal/camera.gni")
+import("//drivers/peripheral/camera/camera.gni")
 import("$hdf_framework_path/tools/hc-gen/hc_gen.gni")
 
 hc_gen("build_camera_host_config") {
@@ -108,7 +108,7 @@ group("chipset_build") {
     ":ipp_algo_config.hcb",
     ":params.c",
     "$board_camera_path/pipeline_core:camera_ipp_algo_example",
-    "//drivers/peripheral/camera/hal/adapter/platform/v4l2/src/driver_adapter:camera_v4l2_adapter",
-    "//drivers/peripheral/camera/hal/adapter/platform/v4l2/src/driver_adapter/main_test:v4l2_main",
+    "$camera_path/adapter/platform/v4l2/src/driver_adapter:camera_v4l2_adapter",
+    "$camera_path/adapter/platform/v4l2/src/driver_adapter/main_test:v4l2_main",
   ]
 }

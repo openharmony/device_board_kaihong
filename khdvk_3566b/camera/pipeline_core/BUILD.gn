@@ -12,7 +12,7 @@
 # limitations under the License.
 import("//build/ohos.gni")
 import("//drivers/hdf_core/adapter/uhdf2/uhdf.gni")
-import("//drivers/peripheral/camera/hal/camera.gni")
+import("//drivers/peripheral/camera/camera.gni")
 
 config("pipe_config") {
   visibility = [ ":*" ]
@@ -77,15 +77,15 @@ ohos_shared_library("camera_pipeline_core") {
   include_dirs = [
     "//commonlibrary/c_utils/base/include",
     "//base/hiviewdfx/interfaces/innerkits/libhilog/include",
-    "//drivers/peripheral/camera/hal/utils/exif",
+    "$camera_path/utils/exif",
     "$camera_path/../interfaces/include",
     "$camera_path/../interfaces/hdi_ipc",
     "$camera_path/include",
-    "$camera_path/hdi_impl",
-    "$camera_path/hdi_impl/camera_host/include",
-    "$camera_path/hdi_impl/camera_device/include",
-    "$camera_path/hdi_impl/stream_operator/include",
-    "$camera_path/hdi_impl/include",
+    "$camera_path/../v4l2",
+    "$camera_path/../v4l2/camera_host/include",
+    "$camera_path/../v4l2/camera_device/include",
+    "$camera_path/../v4l2/stream_operator/include",
+    "$camera_path/../v4l2/include",
     "$camera_path/device_manager",
     "$camera_path/device_manager/include",
     "$camera_path/metadata_manager/include",
@@ -114,7 +114,7 @@ ohos_shared_library("camera_pipeline_core") {
     "../device_manager/include",
     "$camera_path/adapter/platform/v4l2/src/pipeline_core/nodes/v4l2_source_node",
     "$camera_path/adapter/platform/v4l2/src/pipeline_core/nodes/uvc_node",
-    "//drivers/peripheral/camera/hal/adapter/platform/v4l2/src/driver_adapter/include/",
+    "$camera_path/adapter/platform/v4l2/src/driver_adapter/include/",
     "//foundation/communication/ipc/ipc/native/src/core/include",
     "//commonlibrary/c_utils/base/include",
     "src/node",
@@ -132,10 +132,10 @@ ohos_shared_library("camera_pipeline_core") {
     "$camera_path/buffer_manager:camera_buffer_manager",
     "$camera_path/device_manager:camera_device_manager",
     "$camera_path/metadata_manager:camera_metadata_manager",
+    "$camera_path/utils:camera_utils",
     "//device/soc/rockchip/common/hardware/rga:librga",
     "//device/soc/rockchip/rk3566/hardware/mpp:libmpp",
     "//drivers/interface/camera/v1_0:libcamera_stub_1.0",
-    "//drivers/peripheral/camera/hal/utils:camera_utils",
     "//third_party/libjpeg-turbo:turbojpeg_static",
   ]
 
