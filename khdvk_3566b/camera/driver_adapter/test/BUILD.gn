@@ -13,7 +13,7 @@
 
 import("//build/test.gni")
 import("//drivers/hdf_core/adapter/uhdf2/uhdf.gni")
-import("//drivers/peripheral/camera/hal/camera.gni")
+import("//drivers/peripheral/camera/camera.gni")
 
 module_output_path = "hdf/v4l2_adapter_test"
 
