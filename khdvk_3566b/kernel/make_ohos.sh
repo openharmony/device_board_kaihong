@@ -74,6 +74,7 @@ function make_kernel_image()
 	dtb=$3
 
 	config_base="arch/${arch}/configs/${conf}"
+	chmod u+x ./scripts/kconfig/merge_config.sh
 	ARCH=${arch} ./scripts/kconfig/merge_config.sh ${config_base}
 
 	if [ $? -ne 0 ]; then
