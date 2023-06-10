@@ -1,5 +1,5 @@
 {
-    "name": "@ohos/kaihong_khdvk_3566b",
+    "name": "@ohos/kaihong_products",
     "version": "3.1",
     "license": "Apache License 2.0",
     "private": false,
@@ -16,7 +16,12 @@
       },
       "build": {
         "sub_component": [
-            "//device/board/kaihong/khdvk_3566b:khdvk_3566b_group"
+            "//device/board/kaihong/khdvk_3566b:khdvk_3566b_group",
+            "//device/board/kaihong/khdvk_3566b/camera:chipset_build",
+            "//device/board/kaihong/khdvk_3566b/camera:camera_host_vdi_impl_1.0"
+        ],
+        "test": [
+          "//device/board/kaihong/khdvk_3566b/camera:camera_board_test"
         ]
       }
     }

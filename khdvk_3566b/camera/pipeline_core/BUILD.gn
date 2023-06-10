@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import("//build/ohos.gni")
+import("//device/board/${product_company}/${device_name}/device.gni")
 import("//drivers/hdf_core/adapter/uhdf2/uhdf.gni")
 import("//drivers/peripheral/camera/camera.gni")
 
@@ -129,12 +130,12 @@ ohos_shared_library("camera_pipeline_core") {
   deps = [
     "$board_camera_path:config.c",
     "$board_camera_path:params.c",
+    "$board_camera_path/device_manager:camera_device_manager",
+    "$board_camera_path/metadata_manager:camera_metadata_manager",
     "$camera_path/buffer_manager:camera_buffer_manager",
-    "$camera_path/device_manager:camera_device_manager",
-    "$camera_path/metadata_manager:camera_metadata_manager",
     "$camera_path/utils:camera_utils",
-    "//device/soc/rockchip/common/hardware/rga:librga",
     "//device/soc/rockchip/rk3566/hardware/mpp:libmpp",
+    "//device/soc/rockchip/rk3566/hardware/rga:librga",
     "//drivers/interface/camera/v1_0:libcamera_stub_1.0",
     "//third_party/libjpeg-turbo:turbojpeg_static",
   ]
@@ -155,8 +156,8 @@ ohos_shared_library("camera_pipeline_core") {
 
   public_configs = [ ":pipe_config" ]
   install_images = [ chipset_base_dir ]
-  subsystem_name = "hdf"
-  part_name = "drivers_peripheral_camera"
+  subsystem_name = "kaihong_products"
+  part_name = "kaihong_products"
 }
 
 config("example_config") {
@@ -179,6 +180,6 @@ ohos_shared_library("camera_ipp_algo_example") {
   external_deps = [ "c_utils:utils" ]
   public_configs = [ ":example_config" ]
   install_images = [ chipset_base_dir ]
-  subsystem_name = "hdf"
-  part_name = "drivers_peripheral_camera"
+  subsystem_name = "kaihong_products"
+  part_name = "kaihong_products"
 }
