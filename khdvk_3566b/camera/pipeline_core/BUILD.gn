@@ -143,7 +143,7 @@ ohos_shared_library("camera_pipeline_core") {
   if (is_standard_system) {
     external_deps = [
       "hdf_core:libhdf_utils",
-      "hiviewdfx_hilog_native:libhilog",
+      "hilog:libhilog",
     ]
   } else {
     external_deps = [ "hilog:libhilog" ]

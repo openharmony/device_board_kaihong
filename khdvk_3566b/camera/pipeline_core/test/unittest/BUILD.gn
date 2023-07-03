@@ -92,7 +92,7 @@ ohos_unittest("camera_pipeline_core_test_ut") {
       "drivers_interface_camera:libcamera_stub_1.0",
       "graphic_chipsetsdk:surface",
       "hdf_core:libhdf_utils",
-      "hiviewdfx_hilog_native:libhilog",
+      "hilog:libhilog",
       "samgr:samgr_proxy",
     ]
   } else {
