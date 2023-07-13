@@ -222,7 +222,7 @@ ohos_shared_library("camera_host_vdi_impl_1.0") {
     external_deps = [ "hilog:libhilog" ]
   }
   external_deps += [
-    "drivers_interface_camera:libcamera_stub_1.0",
+    "drivers_interface_camera:libbuffer_producer_sequenceable_1.0",
     "drivers_interface_camera:metadata",
     "hitrace:hitrace_meter",
     "ipc:ipc_single",
@@ -272,7 +272,7 @@ ohos_static_library("camera_host_vdi_impl_1.0_static") {
     external_deps = [ "hilog:libhilog" ]
   }
   external_deps += [
-    "drivers_interface_camera:libcamera_stub_1.0",
+    "drivers_interface_camera:libbuffer_producer_sequenceable_1.0",
     "drivers_interface_camera:metadata",
     "hitrace:hitrace_meter",
     "ipc:ipc_single",

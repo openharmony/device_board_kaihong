@@ -82,6 +82,7 @@ ohos_shared_library("camera_pipeline_core") {
     "$camera_path/../interfaces/include",
     "$camera_path/../interfaces/hdi_ipc",
     "$camera_path/include",
+    "$camera_path/../interfaces",
     "$camera_path/../v4l2",
     "$camera_path/../v4l2/camera_host/include",
     "$camera_path/../v4l2/camera_device/include",
