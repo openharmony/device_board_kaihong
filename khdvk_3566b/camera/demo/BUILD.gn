@@ -92,6 +92,7 @@ ohos_executable("ohos_camera_demo") {
   external_deps += [
     "drivers_interface_camera:libcamera_proxy_1.0",
     "drivers_interface_camera:metadata",
+    "drivers_interface_display:libdisplay_composer_proxy_1.0",
     "ipc:ipc_single",
     "samgr:samgr_proxy",
   ]

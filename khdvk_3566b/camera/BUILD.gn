@@ -224,6 +224,7 @@ ohos_shared_library("camera_host_vdi_impl_1.0") {
   external_deps += [
     "drivers_interface_camera:libbuffer_producer_sequenceable_1.0",
     "drivers_interface_camera:metadata",
+    "drivers_interface_display:libdisplay_composer_proxy_1.0",
     "hitrace:hitrace_meter",
     "ipc:ipc_single",
   ]
@@ -274,6 +275,7 @@ ohos_static_library("camera_host_vdi_impl_1.0_static") {
   external_deps += [
     "drivers_interface_camera:libbuffer_producer_sequenceable_1.0",
     "drivers_interface_camera:metadata",
+    "drivers_interface_display:libdisplay_composer_proxy_1.0",
     "hitrace:hitrace_meter",
     "ipc:ipc_single",
   ]
