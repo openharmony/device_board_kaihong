@@ -1,0 +1,130 @@
+if DRIVERS_HDF
+menu "User Driver"
+
+config DRIVERS_HDF_USER_LCD
+      bool "Enable Lcd Driver"
+      default n
+      depends on DRIVERS
+      help
+        Answer Y to enable lcd driver.
+
+config DRIVERS_HDF_USER_I2C
+        bool "Enable hdf I2C driver"
+        default n
+        depends on DRIVERS_HDF_PLATFORM_I2C
+        help
+        Answer Y to enable hdf I2C driver.
+
+config DRIVERS_HDF_USER_I2C_TEST
+    bool "Enable hdf I2C driver test"
+    default n
+    depends on DRIVERS_HDF_USER_I2C
+    help
+    Answer Y to enable hdf I2C driver test.
+
+config DRIVERS_HDF_USER_PWM
+    bool "Enable hdf PWM driver"
+    default n
+    depends on DRIVERS_HDF_PLATFORM_PWM
+    help
+    Answer Y to enable hdf PWM driver.
+
+config DRIVERS_HDF_USER_PWM_TEST
+        bool "Enable hdf PWM driver test"
+        default n
+        depends on DRIVERS_HDF_USER_PWM
+        help
+        Answer Y to enable hdf PWM driver test.
+
+config DRIVERS_HDF_USER_UART
+        bool "Enable hdf UART driver"
+        default y
+        depends on DRIVERS_HDF_PLATFORM_UART
+        help
+        Answer Y to enable hdf UART driver.
+
+config  RECV_USART_SPECIFIC_DATA_THEN_RESET
+        bool "Enable RECEIVE USART specific data THEN RESET"
+        default n
+        depends on DRIVERS_HDF_USER_UART
+        help
+        Answer Y to enable RECV_USART_SPECIFIC_DATA_then_RESET
+
+config DRIVERS_HDF_USER_UART_TEST
+        bool "Enable hdf UART driver test"
+        default n
+        depends on DRIVERS_HDF_USER_UART
+        help
+        Answer Y to enable hdf UART driver test.
+
+config DRIVERS_HDF_USER_GPIO
+        bool "Enable hdf GPIO driver"
+        default n
+        depends on DRIVERS_HDF_PLATFORM_GPIO
+        help
+        Answer Y to enable hdf GPIO driver.
+
+config DRIVERS_HDF_USER_GPIO_TEST
+        bool "Enable hdf GPIO driver TEST"
+        default n
+        depends on DRIVERS_HDF_USER_GPIO
+        help
+        Answer Y to enable hdf GPIO driver TEST
+        
+config DRIVERS_HDF_USER_SPI
+        bool "Enable hdf SPI driver"
+        default n
+        depends on DRIVERS_HDF_PLATFORM_SPI
+        help
+        Answer Y to enable hdf SPI driver.
+    
+config DRIVERS_HDF_USER_SPI_TEST
+        bool "Enable hdf SPI driver test"
+        default n
+        depends on DRIVERS_HDF_USER_SPI
+        help
+        Answer Y to enable hdf SPI driver test.
+
+config DRIVERS_HDF_USER_DAC
+        bool "Enable hdf DAC driver"
+        default n
+        help
+        Answer Y to enable hdf DAC driver.
+
+config DRIVERS_HDF_USER_DAC_TEST
+        bool "Enable hdf DAC driver TEST"
+        default n
+        depends on DRIVERS_HDF_USER_DAC
+        help
+        Answer Y to enable hdf DAC driver TEST 
+
+config DRIVERS_HDF_USER_ADC
+        bool "Enable hdf ADC driver"
+        default n
+        depends on DRIVERS_HDF_PLATFORM_ADC
+        help
+        Answer Y to enable hdf I2C driver.
+
+config DRIVERS_HDF_USER_ADC_TEST
+        bool "Enable hdf ADC driver test"
+        default n
+        depends on DRIVERS_HDF_USER_ADC
+        help
+        Answer Y to enable hdf ADC driver test.
+
+config DRIVERS_USER_KEY_INPUT
+        bool "Enable KEY INPUT driver"
+        default n
+        depends on DRIVERS_HDF_USER_GPIO
+        help
+        Answer Y to enable KEY INPUT driver. 
+
+config DRIVERS_USER_KEY_INPUT_TEST
+        bool "Enable KEY INPUT driver TEST"
+        default n
+        depends on DRIVERS_USER_KEY_INPUT
+        help
+        Answer Y to enable KEY INPUT driver TEST
+endmenu
+
+endif
