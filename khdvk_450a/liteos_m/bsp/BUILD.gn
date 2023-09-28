@@ -73,7 +73,6 @@ config("public") {
     defines = [
       "CONFIG_I2C_SUPPORT",
       "CONFIG_PWM_SUPPORT",
-      "STARTUP_INIT_TEST",
     ]
   }
 
