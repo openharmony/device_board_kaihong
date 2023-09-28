@@ -1,0 +1,10 @@
+root {
+    platform {
+        lcd_config {
+            lcd_config1 {
+                match_attr = "GD_LCD_MODULE_HDF_CONFIG";
+                lcd_version = "V1.4";
+            }
+        }
+    }
+}

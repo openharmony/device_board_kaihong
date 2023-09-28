@@ -1,0 +1,115 @@
+# Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//kernel/liteos_m/liteos.gni")
+
+config("public") {
+  lib_dirs = [ "$root_out_dir/libs" ]
+
+  ldflags = [ "-Wl,-T" + rebase_path("startup/gd32f4xx_flash.ld") ]
+
+  include_dirs = [
+    "startup",
+    "sdram",
+    "../key_input",
+    "../ui",
+    "//commonlibrary/utils_lite/include/",
+    "//drivers/hdf_core/framework/include/osal",
+    "//drivers/hdf_core/framework/include/utils",
+    "//drivers/hdf_core/adapter/khdf/liteos_m/osal/include",
+    "//drivers/hdf_core/framework/include/platform",
+    "//base/hiviewdfx/hilog_lite/interfaces/native/innerkits",
+    "//device/board/kaihong/khdvk_450a/liteos_m/logo/logo_src/",
+  ]
+  ldflags += [
+    "-Wl,--whole-archive",
+    "-lbootstrap",
+    "-lbroadcast",
+    "-lparam_client_lite",
+  ]
+
+  if (build_xts) {
+    ldflags += [
+      "-lhctest",
+      
+      # 公共基础库
+      "-lmodule_ActsUtilsFileTest",
+      # "-lmodule_ActsKvStoreTest",
+
+      "-lmodule_ActsWifiIotTest",
+
+      # DFX
+      "-lmodule_ActsDfxFuncTest",
+      "-lmodule_ActsHieventLiteTest",
+
+      # 启动恢复
+      "-lmodule_ActsBootstrapTest",
+      "-lmodule_ActsParameterTest",
+
+      # 分布式任务调度
+      "-lmodule_ActsSamgrTest",
+
+      # 安全
+      "-lmodule_ActsHuksHalFunctionTest",
+      "-lhuks_test_common",
+      
+      # 升级
+      "-lmodule_ActsUpdaterFuncTest",
+
+      # LwIP
+      "-lmodule_ActsLwipTest",
+    ]
+    defines = [
+      "CONFIG_I2C_SUPPORT",
+      "CONFIG_PWM_SUPPORT",
+    ]
+  }
+
+  ldflags += force_lib_flag
+  ldflags += [ "-Wl,--no-whole-archive" ]
+
+  libs = [
+    "c",
+    "m",
+    "stdc++",
+    "nosys",
+  ]
+}
+module_name = "bsp"
+kernel_module(module_name) {
+  sources = [
+    "platform/hm_sys.c",
+    "platform/printf.c",
+    "sdram/exmc_sdram.c",
+    "startup/gd32f4xx_it.c",
+    "startup/gd32f4xx_systick.c",
+    "startup/main.c",
+    "startup/startup_gd32f4xx.s",
+    "usart/usart.c",
+  ]
+
+  if (defined(LOSCFG_RECV_USART_SPECIFIC_DATA_THEN_RESET)) {
+    sources += [ "bootloader_reset/bootloader_reset.c" ]
+  }
+
+  if (defined(LOSCFG_DRIVERS_USER_KEY_INPUT)) {
+    sources += [ "key_input/key_input_gd32f450.c" ]
+  }
+
+  include_dirs = [ "usart" ]
+
+  deps = [
+    "$ohos_board_adapter_dir/hals/iot_hardware/wifiiot_lite:hal_iothardware",
+    "//base/startup/syspara_lite/frameworks/parameter/src:sysparam",
+  ]
+}

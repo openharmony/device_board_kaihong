@@ -1,0 +1,122 @@
+root {
+    device_info {
+        match_attr = "hdf_manager";
+        template host {
+            hostName = "";
+            priority = 100;
+            template device {
+                template deviceNode {
+                    policy = 0;
+                    priority = 100;
+                    preload = 0;
+                    permission = 0664;
+                    moduleName = "";
+                    serviceName = "";
+                    deviceMatchAttr = "";
+                }
+            }
+        }
+        platform :: host {
+            hostName = "platform_host";
+            priority = 50;
+            device_i2c :: device {
+                i2c_manager :: deviceNode {
+                    policy = 2;
+                    priority = 50;
+                    moduleName = "HDF_PLATFORM_I2C_MANAGER";
+                    serviceName = "HDF_PLATFORM_I2C_MANAGER";
+                }
+                i2c0 :: deviceNode {
+                    policy = 0;
+                    priority = 100;
+                    moduleName = "GD_I2C_MODULE_HDF";
+                    serviceName = "";
+                    deviceMatchAttr = "i2c0_config";
+                }
+            }
+            device_pwm1 :: device {
+                pwm1 :: deviceNode { // pwm config
+                    policy = 1;
+                    priority = 100;
+                    moduleName = "GD_PWM_MODULE_HDF";
+                    serviceName = "HDF_PLATFORM_PWM_1";
+                    deviceMatchAttr = "pwm1_config";
+                }
+            }
+            device_spi :: device {
+                device0 :: deviceNode {
+                    policy = 2;
+                    priority = 100;
+                    preload = 1;
+                    permission = 0664;
+                    moduleName = "GD_SPI_MODULE_HDF";
+                    serviceName = "HDF_PLATFORM_SPI_5";
+                    deviceMatchAttr = "spi0_config";
+                }
+            }
+            device_gpio :: device {
+                device0 :: deviceNode {
+                    policy = 0; 
+                    priority = 10;
+                    permission = 0644;
+                    moduleName = "GD_GPIO_MODULE_HDF";
+                    deviceMatchAttr = "GD_GPIO_MODULE_HDF_CONFIG";
+                }
+            }
+            device_lcd :: device {
+                lcd0 :: deviceNode {
+                    policy = 0; 
+                    priority = 10;
+                    permission = 0644;
+                    moduleName = "GD_LCD_MODULE_HDF";
+                    deviceMatchAttr = "GD_LCD_MODULE_HDF_CONFIG";
+                }
+            }
+            device_uart0 :: device {
+		        uart0 :: deviceNode {
+                    policy = 1;
+                    priority = 40;
+                    preload = 1;
+                    permission = 0664;
+                    moduleName = "GD_UART_MODULE_HDF";
+                    serviceName = "HDF_PLATFORM_UART_0";
+                    deviceMatchAttr = "uart0_config";
+                }
+            }
+            device_adc :: device {
+                adc_manager :: deviceNode {
+                    policy = 0;
+                    priority = 50;
+                    permission = 0644;
+                    moduleName = "HDF_PLATFORM_ADC_MANAGER";
+                    serviceName = "HDF_PLATFORM_ADC_MANAGER";
+                }
+                device0 :: deviceNode {
+                    policy = 0;
+                    priority = 150;
+                    permission = 0644;
+                    moduleName = "GD_ADC_MODULE_HDF";
+                    serviceName = "";
+                    deviceMatchAttr = "GD_ADC_MODULE_HDF_CONFIG_0";
+                }
+            }
+            device_dac :: device {
+                device0 :: deviceNode {
+                    policy = 0;
+                    priority = 52;
+                    permission = 0644;
+                    serviceName = "HDF_PLATFORM_DAC_MANAGER";
+                    moduleName = "HDF_PLATFORM_DAC_MANAGER";
+                }
+                dac_virtual :: deviceNode {
+                    policy = 0;
+                    priority = 56;
+                    permission = 0644;
+                    moduleName = "GD_DAC_MODULE_HDF";
+                    serviceName = "VIRTUAL_DAC_DRIVER";
+                    deviceMatchAttr = "GD_DAC_MODULE_HDF_CONFIG";
+                }  
+            }
+        }
+    }
+}
