@@ -10,23 +10,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-executable("mklfs") {  
-    sources = [ 
-       "mklfs.c",
-       "../../../../third_party/littlefs/lfs.c",
-       "../../../../third_party/littlefs/lfs_util.c" 
-    ]
-    
-    include_dirs = [
-        ".",
-        "lfs",
-        "../../../../third_party/littlefs"
-    ]
+executable("mklfs") {
+  sources = [
+    "../../../../third_party/littlefs/lfs.c",
+    "../../../../third_party/littlefs/lfs_util.c",
+    "mklfs.c",
+  ]
 
-    cflags = [
-        "-std=gnu99",
-        "-Os", 
-        "-Wall",
-        "-D__NO_INLINE__"
-    ]  
-} 
+  include_dirs = [
+    ".",
+    "lfs",
+    "../../../../third_party/littlefs",
+  ]
+
+  cflags = [
+    "-std=gnu99",
+    "-Os",
+    "-Wall",
+    "-D__NO_INLINE__",
+  ]
+}
