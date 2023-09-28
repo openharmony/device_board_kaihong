@@ -41,9 +41,10 @@ config("public") {
   if (build_xts) {
     ldflags += [
       "-lhctest",
-      
+
       # 公共基础库
       "-lmodule_ActsUtilsFileTest",
+
       # "-lmodule_ActsKvStoreTest",
 
       "-lmodule_ActsWifiIotTest",
@@ -62,7 +63,7 @@ config("public") {
       # 安全
       "-lmodule_ActsHuksHalFunctionTest",
       "-lhuks_test_common",
-      
+
       # 升级
       "-lmodule_ActsUpdaterFuncTest",
 
@@ -72,6 +73,7 @@ config("public") {
     defines = [
       "CONFIG_I2C_SUPPORT",
       "CONFIG_PWM_SUPPORT",
+      "STARTUP_INIT_TEST",
     ]
   }
 
