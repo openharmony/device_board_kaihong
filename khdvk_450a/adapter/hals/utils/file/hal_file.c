@@ -68,8 +68,8 @@
 #define DEVICE_SDRAM_NAME EXMC_SDRAM_DEVICE0        
 #define SDRAM_OFFSET_ADDRESS  0x01000000    
 #define SDRAM_BLOCK_ADDRESS   0xC0000000  
-#define SDRAM_READ_SIZE 1 //128   /* 最小读取字节数，所有的读取操作字节数必须是它的倍数（影响内存消耗） */
-#define SDRAM_PROG_SIZE 1 //128   /* 最小写入字节数，所有的写入操作字节数必须是它的倍数（影响内存消耗） */
+#define SDRAM_READ_SIZE 1 // 128   /* 最小读取字节数，所有的读取操作字节数必须是它的倍数（影响内存消耗）*/
+#define SDRAM_PROG_SIZE 1 // 128   /* 最小写入字节数，所有的写入操作字节数必须是它的倍数（影响内存消耗）*/
 #define SDRAM_BLOCK_COUNT 2048      
 #define SDRAM_BLOCK_SIZE  256     /* 擦除块字节数，不会影响内存消耗，每个文件至少占用一个块，必须是READ_SIZE/PROG_SIZE的倍数 */
 #define SDRAM_CACHE_SIZE  128     /* 块缓存的大小，缓存越大磁盘访问越小，性能越高，必须是READ_SIZE/PROG_SIZE的倍数，且是BLOCK_SIZE的因数 */
@@ -90,7 +90,7 @@ struct fs_cfg {
 };
 static struct fs_cfg fs[LOSCFG_LFS_MAX_MOUNT_SIZE] = {0};
 
-static struct PartitionCfg part_cfg[LOSCFG_LFS_MAX_MOUNT_SIZE] ={ 
+static struct PartitionCfg part_cfg[LOSCFG_LFS_MAX_MOUNT_SIZE] = { 
     {
         .readFunc = NULL,
         .writeFunc = NULL,
@@ -157,7 +157,8 @@ int littlefs_block_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t
     switch (partNum) {
         case 1:
             addr =
-                ((uint32_t)((uint32_t)block * GD32F450ZIT6_FLASH_SECTOR_SIZE) + GD32F450ZIT6_FLASH_BANK1_SECTOR17_ADDR + off);
+                (uint32_t)((uint32_t)block * GD32F450ZIT6_FLASH_SECTOR_SIZE) 
+                + GD32F450ZIT6_FLASH_BANK1_SECTOR17_ADDR + off;
             fmc_read_8bit_data(addr, size, buffer);
             break;
         case 2:
@@ -189,7 +190,8 @@ int littlefs_block_write(const struct lfs_config *c, lfs_block_t block, lfs_off_
     switch (partNum) {
         case 1:
             addr =
-                ((uint32_t)((uint32_t)block * GD32F450ZIT6_FLASH_SECTOR_SIZE) + GD32F450ZIT6_FLASH_BANK1_SECTOR17_ADDR + off);
+                (uint32_t)((uint32_t)block * GD32F450ZIT6_FLASH_SECTOR_SIZE)
+                + GD32F450ZIT6_FLASH_BANK1_SECTOR17_ADDR + off;
             fmc_write_8bit_data(addr, size, buffer);
             break;
         case 2:
@@ -226,7 +228,7 @@ int littlefs_block_erase(const struct lfs_config *c, lfs_block_t block)
         case 2:
             addr = 
                 ((uint32_t)((uint32_t)block * SDRAM_BLOCK_SIZE) + SDRAM_OFFSET_ADDRESS + SDRAM_BLOCK_ADDRESS);
-            int ret = memset_s((void *)addr,SDRAM_BLOCK_SIZE , 0xff, SDRAM_BLOCK_SIZE);
+            int ret = memset_s((void *)addr,SDRAM_BLOCK_SIZE, 0xff, SDRAM_BLOCK_SIZE);
             if (ret != 0) {
                 printf("The earse sdram address 0x%x is failed ret = %d",addr,ret);
                 LOS_IntRestore(intlock);
@@ -414,7 +416,7 @@ int HalFileDelete(const char *path)
 
     ret = unlink(file_path);
     free(file_path);
-    LOS_MDelay(0x0A);        
+    LOS_MDelay(0x0A);
     return ret;
 }
 

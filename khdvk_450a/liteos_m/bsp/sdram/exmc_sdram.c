@@ -45,8 +45,8 @@ void clean_bss(void)
     volatile unsigned int *start = (volatile unsigned int *)&__bss_start__;
     volatile unsigned int *end = (volatile unsigned int *)&__bss_end__;
 
-    printf("bss start is %p %p\n", __bss_start__, &__bss_start__);
-    printf("bss end is %p %p\n", __bss_end__, &__bss_end__);
+    printf("bss start is 0x%x %p\n", __bss_start__, &__bss_start__);
+    printf("bss end is 0x%x %p\n", __bss_end__, &__bss_end__);
     while (start <= end) {
         *start++ = 0;
     }

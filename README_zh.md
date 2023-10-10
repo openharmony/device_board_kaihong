@@ -23,7 +23,7 @@ device/board/kaihong
 ├── figures                          # 插图
 ├── khdvk_3566b                      # khdvk_3566b开发板
 ├── khdvk_450a                       # KHDVK-450A开发板
-├── xxx                              # 其他开发板持续开发中
+├── xxx                              # 其它开发板持续开发中
 ```
 
 ## 使用说明
