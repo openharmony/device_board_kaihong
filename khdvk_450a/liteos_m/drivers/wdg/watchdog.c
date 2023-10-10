@@ -262,8 +262,7 @@ static struct WatchdogMethod g_gd450_iwdg_ops = {.feed = GD450wdgFeed,
                                                  .releasePriv = GD450wdgReleasePriv,
                                                  .setTimeout = GD450wdgSetTimeout,
                                                  .start = GD450wdgStart,
-
-                                                 // stm32mp1的iwdg不支持软件停止
+                                                 // iwdg不支持软件停止
                                                  .stop = NULL};
 
 static int32_t GD450wdgReadDrs(struct GD450wdg *iwdg, const struct DeviceResourceNode *node)

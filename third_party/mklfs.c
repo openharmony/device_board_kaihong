@@ -88,7 +88,6 @@ static void create_dir(char *src)
 
     path = strchr(src, '/');
     if (path) {
-    
         int ret;
         fprintf(stdout, "%s\r\n", path);
 
@@ -179,9 +178,9 @@ static void skip_direct(char *curr_path, struct dirent *ent, char *src)
 }
 void usage(void)
 {
-    fprintf(stdout,
-                  "usage: mklfs -c <pack-dir> -b <block-size> -r <read-size> -p <prog-size> -s <filesystem-size> -n "
-                  "<context> -l <lookahead_size> -e <cache_size> -k <block_cycles> -i <image-file-path>\r\n");
+    (void)fprintf(stdout,
+            "usage: mklfs -c <pack-dir> -b <block-size> -r <read-size> -p <prog-size> -s <filesystem-size> -n "
+            "<context> -l <lookahead_size> -e <cache_size> -k <block_cycles> -i <image-file-path>\r\n");
 }
 
 static int is_number(const char *s)
@@ -330,7 +329,7 @@ int main(int argc, char **argv)
         return -1;
     }
     
-    char * last_dir = strrchr(src, '/');
+    char *last_dir = strrchr(src, '/');
     if (last_dir) {
         last_dir++;
         compact(last_dir);
@@ -347,12 +346,12 @@ int main(int argc, char **argv)
 
     int ret;
     ret = fwrite(data, 1, fs_size, img);
-    if(ret < 0) {
+    if (ret < 0) {
         fprintf(stderr, "fwrite(data, 1, fs_size, img): errno=%d (%s)\r\n", errno, strerror(errno));
     }
 
     ret = fclose(img);
-    if(ret < 0) {
+    if (ret < 0) {
         fprintf(stderr, "fclose(img): errno=%d (%s)\r\n", errno, strerror(errno));
         return -1;
     }

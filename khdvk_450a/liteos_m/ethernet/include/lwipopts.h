@@ -23,10 +23,4 @@
 
 #define LWIP_SOCKET_SELECT_FUNC 1
 
-// #ifdef LWIP_IPV6
-// #undef LWIP_IPV6
-// #endif
-// #define LWIP_IPV6 1
-
-
 #endif /* GD_PORT_LWIPOPTS_H */
