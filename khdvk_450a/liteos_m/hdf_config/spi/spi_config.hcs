@@ -1,0 +1,21 @@
+root {
+    platform {
+        spi_config {
+            spi_config1 {
+                match_attr = "spi0_config";
+                num = 5;
+                speed = 815200;
+                dataSize = 8;
+                transMode = 0;
+                mode = 12;
+                csSoft = 0;
+                clkPin = 109;
+                mosiPin = 110;
+                misoPin = 108;
+                csPin = 105;
+                afPin = 5;
+                enableQuad = 1;
+            }
+        }
+    }
+}

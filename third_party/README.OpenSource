@@ -1,0 +1,11 @@
+[
+    {
+        "Name"                  : "mklfs",
+        "License"               : "BSD 3-Clause License",
+        "License File"          : "LICENSE",
+        "Version Number"        : "V1.0",
+        "Owner"                 : "wangzhongjin@kaihong.com",
+        "Upstream URL"          : "https://github.com/whitecatboard/Lua-RTOS-ESP32/tree/master/components/mklfs/src",
+        "Description"           : "File image maker for the little fail-safe filesystem"
+    }
+]
