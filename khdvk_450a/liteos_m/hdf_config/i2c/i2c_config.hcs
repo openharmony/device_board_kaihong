@@ -1,0 +1,17 @@
+root {
+    platform {
+        i2c_config {
+            i2c0 {
+                match_attr = "i2c0_config";
+                //support:  0   1    2
+                bus = 0;
+                //baud: 100,400,3500 K
+                speed = 100000;
+                // SCL/SDA - I2C0 = PB6/PB7
+                // GPIO PORT: 0~140
+                scl = 22;
+                sda = 23;
+            }
+        }
+    }
+}

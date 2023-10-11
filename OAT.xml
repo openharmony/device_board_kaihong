@@ -32,6 +32,14 @@
 				<policyitem type="license" name="EndUserLicenseAgreement" path=".*" desc="EULA file"/>
 				<policyitem type="license" name="GPL" path=".*" desc="linux kernel adapter codes"/>
 				<policyitem type="license" name="MIT" path=".*" desc=""/>
+				<policyitem type="license" name="BSD-3" path=".*" desc="GigaDevice codes"/>
+				<policyitem type="copyright" name="GigaDevice Semiconductor Inc." path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By GigaDevice"/>
+				<policyitem type="copyright" name="IBEROXARXA SERVICIOS INTEGRALES, S.L." path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By IBEROXARXA SERVICIOS"/>
+				<policyitem type="copyright" name="Jaume Olivé Petrus (jolive@whitecatboard.org)" path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By Jaume Olivé Petrus"/>
+				<policyitem type="copyright" name="PALANDesign Hannover, Germany" path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed By PALANDesign Hannover"/>
+                <!--policyitem type="compatibility" name="GPL-2.0+" path="abc/.*" desc="Process that runs independently, invoked by the X process."/-->
+                <!--policyitem type="license" name="LGPL" path="abc/.*" desc="Dynamically linked by module X"/-->
+                <!--policyitem type="copyright" name="xxx" path="abc/.*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed by X Company"/-->
             </policy>
         </policylist>
         <filefilterlist>
@@ -45,6 +53,7 @@
 				<filteritem type="filepath" name="khdvk_3566b/kernel/bluetooth/BCM4345C5.hcd" desc="AP6256 bluetooth firmware"/>
                 <filteritem type="filepath" name="khdvk_3566b/wifi/proc/sys/net/ipv4/ping_group_range" desc="project configuration file"/>
 				<filteritem type="filepath" name="khdvk_3566b/wifi/ap6xxx/*" desc="mirror image file"/>
+				<filteritem type="filepath" name="khdvk_450a/pack_tools/gd32_uart_bootloader.bin" desc="bootloader file"/>
                 <!--filteritem type="filename" name="*.uvwxyz" desc="Describe the reason for filtering scan results"/-->
                 <!--filteritem type="filepath" name="abcdefg/.*.uvwxyz" desc="Describe the reason for filtering scan results"/-->
                 <!--filteritem type="filepath" name="projectroot/[a-zA-Z0-9]{20,}.sh" desc="Temp files"/-->
@@ -77,7 +86,7 @@
             <filefilter name="binaryFileTypePolicyFilter" desc="Filters for binary file policies">
 				<filteritem type="filepath" name="khdvk_3566b/loader/*" desc="rk3566 uboot image"/>
 				<filteritem type="filepath" name="khdvk_3566b/updater/config/rsa_private_key2048.pem" desc="Certificate file in PEM format"/>
-				<filteritem type="filename" name="*.png|*.bmp" desc="png and bmp file"/>
+				<filteritem type="filename" name="*.png|*.bmp|*.jpg" desc="png、bmp and jpg file"/>
                 <!--filteritem type="filename" name="*.uvwxyz" desc="Describe the reason for filtering scan results"/-->
                 <!--filteritem type="filepath" name="abcdefg/.*.uvwxyz" desc="Describe the reason for filtering scan results"/-->
                 <!--filteritem type="filepath" name="projectroot/[a-zA-Z0-9]{20,}.sh" desc="Temp files"/-->

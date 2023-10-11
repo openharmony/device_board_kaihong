@@ -1,0 +1,15 @@
+root {
+    platform {
+        pwm_config {
+            pwm1_config {
+                match_attr = "pwm1_config"; // default use pwm1
+                pwm_ch = 0x0002; // timer chanel: ch0 ch1 ch2 ch3
+                pwm_id = 0x0001;
+                // channel 2's gpio: PB10
+                // GPIO PORT: A~I=0~8
+                ch_gpio = [1, 10];
+                timer_id = 1; // timer 1
+            }
+        }
+    }
+}

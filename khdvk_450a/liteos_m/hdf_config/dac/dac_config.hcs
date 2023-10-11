@@ -1,0 +1,18 @@
+root {
+    platform {
+        dac_config {
+            match_attr = "GD_DAC_MODULE_HDF_CONFIG";    
+            template dac_device {
+                deviceNum = 0;   
+                validChannel = 0x1;
+                rate = 20000;
+            }
+            device_0 :: dac_device {
+                deviceNum = 0;     
+                validChannel = 0x0;
+                outputPinNum = 4;
+                alignment = 0;
+            }
+        }
+    }
+}

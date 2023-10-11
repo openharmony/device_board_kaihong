@@ -1,0 +1,11 @@
+root {
+    platform {
+        gpio_config {
+            gpio_config1 {
+                match_attr = "GD_GPIO_MODULE_HDF_CONFIG";
+                start = 0; 
+                count = 140;
+            }
+        }
+    }
+}

@@ -1,0 +1,17 @@
+root {
+    platform {
+        controller_0x40011000 {
+            uart0_config {
+                match_attr = "uart0_config";
+                num = 0;
+                baudrate = 115200;
+                mode = 0;
+                interrupt = 37;
+                fifo_size = 256;
+                af = 7;
+                tx_pin = 9;
+                rx_pin = 10;
+            }
+        }
+    }
+}

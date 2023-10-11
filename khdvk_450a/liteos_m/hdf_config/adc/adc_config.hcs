@@ -1,0 +1,13 @@
+root {
+    platform {
+        adc_config{
+            adc_0 {
+                deviceNum = 2;          // 设备号
+                channelNums = 1;        // 有效通道数量
+                validChannels = [4];     // 有效通道号,[4,7]代表4通道和7通道
+                outputPinNums = [86];    // 有效通道对应gpio号
+                match_attr = "GD_ADC_MODULE_HDF_CONFIG_0";
+            }
+        }
+    }
+}
